@@ -29,3 +29,12 @@ Branches werden nicht einfach willy-nilly benannt und auch die bisher verwendete
 
 **Anmerkung**:
 Branches werden Feature-basierend erstellt. Also jeder Branch beinhaltet nur **eine** zusammenhängende Änderung! 
+
+# About Us
+
+Die RZWEI KICKERS wurden in den Covid-Zeiten im Jahr 2020 gegründet und begannen mit wenigen Robotern und einem Mini-Feld im Labor der Hochschule. Seitdem hat das Team stetig Fortschritte gemacht, bis hin zweifachen Vizeweltmeister in der SPL Challenger League 2023 und 2024.
+In diesem Repository wird nun unsere Codebasis für die BoosterRobotics K1 Roboter leben, welche unsere neusten Anstregungen zur Forschung festgehalten werden.
+
+## Contact Us
+
+**Discord**: [Link]
