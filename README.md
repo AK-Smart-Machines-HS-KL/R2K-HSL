@@ -7,7 +7,25 @@ Working code repository for the RoboCup-HSL team R-ZWEI KICKERS from UAS Kaisers
 
 Branches werden nicht einfach willy-nilly benannt und auch die bisher verwendeten Namensschemen in früheren Projekten wurden nicht immer eingehalten. Daher nun folgende Anwweisung:
 
-- Feature Branches heißen `feature/name`, wobei `name` die Benennung des Feature in einem oder wenigen Worten ist. Die Konvention für Worttrennung soll hierbei CamelCase sein, also jedes Wort im Namen beginnt mit einem Großbuchstaben, aber wir lassen keine Leerzeichen (Beispiel: `feature/SuperAwesomeRobotKick`)
-- Branches, die sich nur mit Dokumentation beschäftigen, bekommen ebenfalls ein Präfix, hier `docs/` (z.B. `docs/TeamDescriptionPaper2027`)
-- ... `bug/BugName`
-- ... `refactor/FeatureName`
+- Folgende Namensstruktur soll verwendet werden: `prefix/name`
+  
+**Prefix**: Wir unterscheiden zwischen den folgenden Fällen:
+- `feature`:  Beschreibt **neue** Funktionalität
+- `bugfix`:   Beschreibt **Fehlerbehebung** 
+- `refactor`: Beschreibt die **Überarbeitung** von funktionierendem Code
+- `docs`:     Beschreibt das Arbeiten an der Dokumentation
+
+**Name**:
+- Soll kurz die Aufgabe des aktuellen Branches beschreiben
+- Soll CamelCase befolgen (d.h. jedes Wort im Namen beginnt mit einem Großbuchstaben, aber wir lassen keine Leerzeichen)
+- Soll keine Sonderzeichen oder Umlaute beinhalten (z.B ä -> ae)
+- Soll in Englisch gehalten werden
+
+**Beispiele**:
+- `feature/RobotKick`
+- `bugfix/FixedLeftDriftOfKick`
+- `refactor/ChangedKickMovement`
+- `docs/AddedDescriptionOfKick`
+
+**Anmerkung**:
+Branches werden Feature-basierend erstellt. Also jeder Branch beinhaltet nur **eine** zusammenhängende Änderung! 
