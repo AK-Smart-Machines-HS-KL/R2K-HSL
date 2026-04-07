@@ -14,26 +14,28 @@ Branches werden nicht einfach willy-nilly benannt und auch die bisher verwendete
 - `bugfix`:   Beschreibt **Fehlerbehebung** 
 - `refactor`: Beschreibt die **Überarbeitung** von funktionierendem Code
 - `docs`:     Beschreibt das Arbeiten an der Dokumentation
+- `projects`: Für Studierendenprojekte (später leichter zu filtern für Löschung oder Intergration)
 
 **Name**:
 - Soll kurz die Aufgabe des aktuellen Branches beschreiben
 - Soll CamelCase befolgen (d.h. jedes Wort im Namen beginnt mit einem Großbuchstaben, aber wir lassen keine Leerzeichen)
 - Soll keine Sonderzeichen oder Umlaute beinhalten (z.B ä -> ae)
-- Soll in Englisch gehalten werden
+- Soll in Englisch gehalten werden (Sprach-Handhabung wird im Team noch diskutiert)
+- Präsenz verwenden, Vergangenheitsform ist beim Vollenden für die Commit-Message
 
 **Beispiele**:
 - `feature/RobotKick`
-- `bugfix/FixedLeftDriftOfKick`
-- `refactor/ChangedKickMovement`
-- `docs/AddedDescriptionOfKick`
+- `bugfix/FixLeftDriftOfKick`
+- `refactor/ChangeKickMovement`
+- `docs/AddDescriptionOfKick`
 
 **Anmerkung**:
 Branches werden Feature-basierend erstellt. Also jeder Branch beinhaltet nur **eine** zusammenhängende Änderung! 
 
 # About Us
 
-Die RZWEI KICKERS wurden in den Covid-Zeiten im Jahr 2020 gegründet und begannen mit wenigen Robotern und einem Mini-Feld im Labor der Hochschule. Seitdem hat das Team stetig Fortschritte gemacht, bis hin zweifachen Vizeweltmeister in der SPL Challenger League 2023 und 2024.
-In diesem Repository wird nun unsere Codebasis für die BoosterRobotics K1 Roboter leben, welche unsere neusten Anstregungen zur Forschung festgehalten werden.
+Die R-ZWEI KICKERS wurden in den Covid-Zeiten im Jahr 2020 gegründet und begannen mit wenigen Robotern und einem Mini-Feld im Labor der Hochschule. Seitdem hat das Team stetig Fortschritte gemacht, bis hin zweifachen Vizeweltmeister in der Standard Platform League (SPL) -- Challenge Shield Division (CSD) 2023 und 2024.
+In diesem Repository wird nun unsere Codebasis für die neu formierte Humanoid Soccer League (HSL) leben, in welcher wir in der Small Division bei der German Open 2026 bereits angetreten sind und wo wir mit den BoosterRobotics K1 Robotern als neue Plattfrom demnächst in die Middle Size Division einsteigen möchten. Dieses Repository hält somit unsere neuesten Anstregungen zur Forschung in der humanoiden Robotik und intelligenten Verhaltenssteuerung fest.
 
 ## Contact Us
 
