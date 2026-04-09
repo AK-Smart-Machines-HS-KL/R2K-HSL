@@ -32,6 +32,16 @@ Branches werden nicht einfach willy-nilly benannt und auch die bisher verwendete
 **Anmerkung**:
 Branches werden Feature-basierend erstellt. Also jeder Branch beinhaltet nur **eine** zusammenhängende Änderung! 
 
+# Sprache
+
+Sämtliche Codedokumentation soll auf Englisch gehalten werden (dazu zählt: Codevariablen und Codekommentare, Commitmessages und Branches)
+Teamspezifische Sachen sollen auf deutsch formuliert werden (dazu zählt: Projektarbeiten, Teaminterne Infos)
+
+**Sonderfälle**
+- Testcases werden auf Deutsch gehalten, um nachvollziehbarer sind
+- KI-Prompts sind englisch, wenn diese innerhalb des Codes leben
+- KI-Prompts sind deutsch, wenn diese das Team nutzen
+
 # About Us
 
 Die R-ZWEI KICKERS wurden in den Covid-Zeiten im Jahr 2020 gegründet und begannen mit wenigen Robotern und einem Mini-Feld im Labor der Hochschule. Seitdem hat das Team stetig Fortschritte gemacht, bis hin zweifachen Vizeweltmeister in der Standard Platform League (SPL) -- Challenge Shield Division (CSD) 2023 und 2024.
