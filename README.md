@@ -48,7 +48,6 @@ Die R-ZWEI KICKERS wurden in den Covid-Zeiten im Jahr 2020 gegründet und begann
 In diesem Repository wird nun unsere Codebasis für die neu formierte Humanoid Soccer League (HSL) leben, in welcher wir in der Small Division bei der German Open 2026 bereits angetreten sind und wo wir mit den BoosterRobotics K1 Robotern als neue Plattfrom demnächst in die Middle Size Division einsteigen möchten. Dieses Repository hält somit unsere neuesten Anstregungen zur Forschung in der humanoiden Robotik und intelligenten Verhaltenssteuerung fest.
 
 ## Contact Us
-
-**Discord**:     https://discord.gg/ddbK8UpCj3
-**Webpage**:     https://smart-machines.hs-kl.de/
-**Instagramm**:  https://www.instagram.com/r2_kickers/
+- **Discord**:     https://discord.gg/ddbK8UpCj3
+- **Webpage**:     https://smart-machines.hs-kl.de/
+- **Instagramm**:  https://www.instagram.com/r2_kickers/
