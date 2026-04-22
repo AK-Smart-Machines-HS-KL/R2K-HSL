@@ -50,4 +50,4 @@ In diesem Repository wird nun unsere Codebasis für die neu formierte Humanoid S
 ## Contact Us
 - **Discord**:     https://discord.gg/ddbK8UpCj3
 - **Webpage**:     https://smart-machines.hs-kl.de/
-- **Instagramm**:  https://www.instagram.com/r2_kickers/
+- **Instagram**:  https://www.instagram.com/r2_kickers/
