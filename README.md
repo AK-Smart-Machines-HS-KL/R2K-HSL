@@ -10,7 +10,8 @@ Branches werden nicht einfach willy-nilly benannt und auch die bisher verwendete
 - Folgende Namensstruktur soll verwendet werden: `prefix/name`
   
 **Prefix**: Wir unterscheiden zwischen den folgenden Fällen:
-- `feature`:  Beschreibt **neue** Funktionalität
+- `feature`:  Beschreibt **neue** Funktionalität für das Kernsystem
+- `tools`: Beschreibt **neue** Funktionalität außerhalb des Kernsystems
 - `bugfix`:   Beschreibt **Fehlerbehebung** 
 - `refactor`: Beschreibt die **Überarbeitung** von funktionierendem Code
 - `docs`:     Beschreibt das Arbeiten an der Dokumentation
