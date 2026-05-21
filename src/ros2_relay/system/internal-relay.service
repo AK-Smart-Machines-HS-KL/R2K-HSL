@@ -1,0 +1,25 @@
+[Unit]
+Description=Booster Robot Internal DDS Relay
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=booster
+WorkingDirectory=/home/booster/Workspace/ros2_relay
+
+# 1. Enforce the FastDDS profile strictly through Systemd
+Environment="FASTRTPS_DEFAULT_PROFILES_FILE=/opt/booster/BoosterRos2/fastdds_profile.xml"
+
+# 2. Force FastDDS as the middleware (just in case the system defaults to CycloneDDS)
+Environment="RMW_IMPLEMENTATION=rmw_fastrtps_cpp"
+
+# 3. Simplify ExecStart now that variables are handled above
+ExecStartPre=/bin/sleep 15
+ExecStart=/bin/bash -c "source /opt/booster/BoosterRos2/install/local_setup.bash && source /opt/booster/BoosterRos2Interface/install/setup.bash && /usr/bin/python3 internal_relay.py"
+
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
