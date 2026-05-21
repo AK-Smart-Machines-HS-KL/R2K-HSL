@@ -74,24 +74,31 @@ echo "Deploying Relay System to ${ROBOT_NAME} at ${ROBOT_IP}"
 echo "Auto-Start enabled: ${AUTO_START}"
 echo "========================================================"
 
+# Define a temporary socket file for SSH multiplexing
+SSH_SOCKET="/tmp/booster_ssh_mux_${ROBOT_IP}"
+
+echo "[0/4] Opening master SSH connection (Please enter password once)..."
+# -M creates the master socket, -f puts it in background, -N says don't run a command yet
+ssh -M -S "${SSH_SOCKET}" -f -N ${ROBOT_USER}@${ROBOT_IP}
+
 # 1. Create the remote workspace directory if it doesn't exist
 echo "[1/4] Creating workspace directory on the robot..."
-ssh ${ROBOT_USER}@${ROBOT_IP} "mkdir -p ${REMOTE_DIR}"
+ssh -S "${SSH_SOCKET}" ${ROBOT_USER}@${ROBOT_IP} "mkdir -p ${REMOTE_DIR}"
 
 # 2. Copy the Python relay scripts directly to the workspace
 echo "[2/4] Copying Python relay files..."
-scp ./internal_relay.py ./external_relay.py ${ROBOT_USER}@${ROBOT_IP}:${REMOTE_DIR}/
+scp -o "ControlPath=${SSH_SOCKET}" ./internal_relay.py ./external_relay.py ${ROBOT_USER}@${ROBOT_IP}:${REMOTE_DIR}/
 
-# 3. Copy the service files to the robot's /tmp folder first (since /etc requires sudo)
+# 3. Copy the service files to the robot's /tmp folder
 echo "[3/4] Copying systemd service files..."
-scp ./system/internal-relay.service ./system/external-relay.service ${ROBOT_USER}@${ROBOT_IP}:/tmp/
+scp -o "ControlPath=${SSH_SOCKET}" ./system/internal-relay.service ./system/external-relay.service ${ROBOT_USER}@${ROBOT_IP}:/tmp/
 
 # 4. Execute remote commands to finalize setup
-echo "[4/4] Configuring systemd (may ask for robot's sudo password)..."
-ssh -t ${ROBOT_USER}@${ROBOT_IP} "
+echo "[4/4] Configuring systemd (Will prompt for sudo password)..."
+ssh -S "${SSH_SOCKET}" -t ${ROBOT_USER}@${ROBOT_IP} "
     echo '-> Updating robot name to ${ROBOT_NAME} in service file...'
-    # Replaces the new <Robot_Name> placeholder in the ExecStart line
     sed -i 's/<Robot_Name>/${ROBOT_NAME}/g' /tmp/external-relay.service
+    sed -i 's/bot1/${ROBOT_NAME}/g' /tmp/external-relay.service
 
     echo '-> Moving service files to /etc/systemd/system/...'
     sudo mv /tmp/internal-relay.service /etc/systemd/system/
@@ -110,18 +117,16 @@ ssh -t ${ROBOT_USER}@${ROBOT_IP} "
         echo '-> Enabling services to start automatically on boot...'
         sudo systemctl enable internal-relay.service
         sudo systemctl enable external-relay.service
-    else
-        echo '-> Skipping auto-start configuration (--no_auto_start flag used).'
     fi
 
     echo '-> Starting services now...'
     sudo systemctl restart internal-relay.service
     sudo systemctl restart external-relay.service
-
-    echo '-> Checking status...'
-    sudo systemctl is-active internal-relay.service
-    sudo systemctl is-active external-relay.service
 "
+
+# 5. Clean up the Master Connection
+echo "Cleaning up SSH connection..."
+ssh -S "${SSH_SOCKET}" -O exit ${ROBOT_USER}@${ROBOT_IP}
 
 echo "========================================================"
 echo "Deployment Complete! The relays are now running."
