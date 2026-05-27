@@ -1,0 +1,16 @@
+[Unit]
+Description=Booster Robot External DDS Relay (<Robot_Name>)
+After=network-online.target internal-relay.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=booster
+WorkingDirectory=/home/booster/Workspace/ros2_relay
+ExecStartPre=/bin/sleep 20
+ExecStart=/bin/bash -c "source /opt/booster/BoosterRos2/install/local_setup.bash && source /opt/booster/BoosterRos2Interface/install/setup.bash && export FASTRTPS_DEFAULT_PROFILES_FILE=\"\" && /usr/bin/python3 external_relay.py <Robot_Name>"
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
