@@ -1,0 +1,8 @@
+R2K-Orakel (Strategie)
+STRATEGIE: FAST_BREAK
+
+Prio 1: Sofortiger, vertikaler Pass von D2 auf den startenden A3.
+
+Prio 2: A3 nimmt Ball an und dribbelt auf das Tor zu.
+
+Prio 3: G1 sichert ab.

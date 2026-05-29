@@ -1,0 +1,8 @@
+R2K-Orakel (Strategie)
+STRATEGIE: DEFEND_LEAD (Sub-Taktik: Mittelfeld-Block)
+
+Prio 1: Positionen halten. D2 und A3 blockieren die Passwege auf die gegnerischen Flügel (R2, R3).
+
+Prio 2: Den Gegner zwingen, einen schwierigen Pass zu spielen oder einen Weitschuss zu riskieren.
+
+Prio 3: G1 bleibt zentral.

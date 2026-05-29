@@ -1,0 +1,12 @@
+R2K-Captain (Anweisungen)
+# Attacker (A3) dribbelt aufs Tor
+ros2 action send_goal /robot_A3/execute_skill r2k_interfaces/action/ExecuteSkill "{
+  skill_name: 'DRIBBLE_TOWARDS',
+  target_pose: {position: {x: 88.0, y: 30.0, z: 0.0}}
+}"
+
+# Defender (D2) rückt auf
+ros2 action send_goal /robot_D2/execute_skill r2k_interfaces/action/ExecuteSkill "{
+  skill_name: 'MOVE_TO_POSITION_AGGRESSIVE',
+  target_pose: {position: {x: 60.0, y: 20.0, z: 0.0}}
+}"

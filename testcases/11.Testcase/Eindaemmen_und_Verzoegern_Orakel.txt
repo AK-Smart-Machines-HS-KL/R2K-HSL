@@ -1,0 +1,8 @@
+R2K-Orakel (Strategie)
+STRATEGIE: RECOVER_DEFENSIVE_SHAPE
+
+Prio 1: D2 soll den Gegner (R1) nur eindämmen (MAINTAIN_POSITION_DEFENSIVE) und ihn zur Außenlinie drängen, nicht attackieren (PRESS_BALL_CARRIER).
+
+Prio 2: A3 muss den Passweg ins Zentrum blockieren.
+
+Prio 3: Ziel ist es, den Angriff zu verlangsamen, bis die Defensive wieder voll formiert ist.

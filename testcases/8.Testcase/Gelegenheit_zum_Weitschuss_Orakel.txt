@@ -1,0 +1,6 @@
+R2K-Orakel (Strategie)
+STRATEGIE: FAST_BREAK (Sub-Taktik: Weitschuss)
+
+Prio 1: D2 führt sofortigen Torschuss aus (SHOOT_AT_GOAL) und zielt auf das lange Eck (z.B. x=900, y=350).
+
+Prio 2: A3 läuft Richtung Strafraum für einen möglichen Abpraller.

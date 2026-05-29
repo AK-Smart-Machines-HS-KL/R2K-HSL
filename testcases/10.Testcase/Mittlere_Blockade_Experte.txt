@@ -1,0 +1,6 @@
+R2K-Expert (Analyse)
+SCORE: -1.5. UNTER DRUCK.
+
+Gegner (R1) hat Ballbesitz im zentralen Mittelfeld. Die eigenen Roboter (D2, A3) sind zurückgefallen und bilden eine kompakte "mittlere Blockade" vor dem eigenen Strafraum.
+
+Die Defensive Dichte ist gut (G1, D2, A3 blockieren alle), aber der Gegner kontrolliert das Mittelfeld, was zu negativem Ballbesitz-Score führt.

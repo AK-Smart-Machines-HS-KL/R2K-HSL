@@ -1,0 +1,18 @@
+R2K-Captain (Anweisungen)
+# Goalie (G1) greift den Ball an
+ros2 action send_goal /robot_G1/execute_skill r2k_interfaces/action/ExecuteSkill "{
+  skill_name: 'INTERCEPT_BALL',
+  target_pose: {position: {x: 21.0, y: 26.5, z: 0.0}}
+}"
+
+# Defender (D2) kehrt zur Verteidigung zurück
+ros2 action send_goal /robot_D2/execute_skill r2k_interfaces/action/ExecuteSkill "{
+  skill_name: 'MOVE_TO_POSITION_DEFENSIVE',
+  target_pose: {position: {x: 20.0, y: 35.0, z: 0.0}}
+}"
+
+# Attacker (A3) lässt sich ins Mittelfeld fallen
+ros2 action send_goal /robot_A3/execute_skill r2k_interfaces/action/ExecuteSkill "{
+  skill_name: 'FALL_BACK',
+  target_pose: {position: {x: 45.0, y: 40.0, z: 0.0}}
+}"

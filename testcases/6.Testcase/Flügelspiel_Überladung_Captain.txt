@@ -1,0 +1,13 @@
+R2K-Captain (Anweisungen)
+# Attacker (A3) spielt Rückpass auf D2
+ros2 action send_goal /robot_A3/execute_skill r2k_interfaces/action/ExecuteSkill "{
+  skill_name: 'PASS_TO_TARGET',
+  target_pose: {position: {x: 60.0, y: 35.0, z: 0.0}}
+}"
+
+# Defender (D2) bereitet sich auf Schuss vor (empfängt Pass)
+ros2 action send_goal /robot_D2/execute_skill r2k_interfaces/action/ExecuteSkill "{
+  skill_name: 'RECEIVE_PASS_AT',
+  target_pose: {position: {x: 60.0, y: 35.0, z: 0.0}}
+}"
+# (Direkt gefolgt von SHOOT_AT_GOAL durch den Behavior Tree von D2)

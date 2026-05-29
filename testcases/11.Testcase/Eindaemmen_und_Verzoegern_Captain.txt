@@ -1,0 +1,12 @@
+R2K-Captain (Anweisungen)
+# Defender (D2) stellt den Gegner, ohne anzugreifen
+ros2 action send_goal /robot_D2/execute_skill r2k_interfaces/action/ExecuteSkill "{
+  skill_name: 'MOVE_TO_POSITION_DEFENSIVE',
+  target_pose: {position: {x: 28.0, y: 45.0, z: 0.0}}
+}"
+
+# Attacker (A3) fällt zurück, um Passweg zu blockieren
+ros2 action send_goal /robot_A3/execute_skill r2k_interfaces/action/ExecuteSkill "{
+  skill_name: 'FALL_BACK',
+  target_pose: {position: {x: 48.0, y: 39.0, z: 0.0}}
+}"

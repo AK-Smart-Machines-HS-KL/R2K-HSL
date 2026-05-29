@@ -1,0 +1,8 @@
+R2K-Orakel (Strategie)
+STRATEGIE: AGGRESSIVE_PRESSING
+
+Prio 1: A3 übt direkten Druck auf den Ballführer (R2) aus.
+
+Prio 2: D2 rückt nach, um den nahen Passweg zu R3 zu blockieren.
+
+Prio 3: G1 rückt leicht auf (bis x=100), um als Libero zu agieren.

@@ -1,0 +1,8 @@
+R2K-Orakel (Strategie)
+STRATEGIE: ORGANIZED_OFFENSE (Sub-Taktik: Rückpass)
+
+Prio 1: A3 spielt sofortigen Rückpass auf D2.
+
+Prio 2: D2 führt direkten Torschuss aus (SHOOT_AT_GOAL).
+
+Prio 3: G1 sichert ab.

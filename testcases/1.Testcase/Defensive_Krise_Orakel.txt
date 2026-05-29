@@ -1,0 +1,8 @@
+R2K-Orakel (Strategie)
+STRATEGIE: RECOVER_DEFENSIVE_SHAPE
+
+Prio 1: Direkte Torgefahr durch G1 abwenden.
+
+Prio 2: D2 muss sofort in den Strafraum zurückkehren.
+
+Prio 3: A3 sichert Mittelfeld ab.

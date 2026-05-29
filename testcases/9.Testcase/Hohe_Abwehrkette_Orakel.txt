@@ -1,0 +1,6 @@
+R2K-Orakel (Strategie)
+STRATEGIE: FAST_BREAK
+
+Prio 1: D2 spielt einen sofortigen, langen Pass (PASS_TO_TARGET) in den freien Raum hinter die Abwehrkette (z.B. x=700, y=400).
+
+Prio 2: A3 startet (RECEIVE_PASS_AT) in diesen Raum, um den Ball vor dem Goalie zu erreichen.

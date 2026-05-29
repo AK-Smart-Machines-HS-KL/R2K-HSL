@@ -1,0 +1,8 @@
+R2K-Orakel (Strategie)
+STRATEGIE: ORGANIZED_OFFENSE
+
+Prio 1: Ballsicherung hat Priorität. D2 spielt sicheren Pass auf A3.
+
+Prio 2: A3 dribbelt zur Grundlinie, um die Abwehr auseinanderzuziehen.
+
+Prio 3: D2 rückt als Anspielstation nach.

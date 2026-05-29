@@ -1,0 +1,8 @@
+R2K-Orakel (Strategie)
+STRATEGIE: DEFEND_LEAD
+
+Prio 1: Positionen halten. Kein Roboter darf aus der Kette ausbrechen.
+
+Prio 2: D2 und A3 blockieren Passwege, G1 sichert das Tor.
+
+Prio 3: Kein aggressives Pressing. Auf Ballgewinn warten und klären.

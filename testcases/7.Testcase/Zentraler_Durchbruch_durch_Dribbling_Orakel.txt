@@ -1,0 +1,6 @@
+R2K-Orakel (Strategie)
+STRATEGIE: ORGANIZED_OFFENSE (Sub-Taktik: Dribbling)
+
+Prio 1: A3 nutzt die Lücke für ein aggressives Dribbling (DRIBBLE_TOWARDS) auf das Tor.
+
+Prio 2: D2 rückt leicht auf, um eine Passoption zu bieten, falls A3 gestoppt wird.

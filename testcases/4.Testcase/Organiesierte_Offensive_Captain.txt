@@ -1,0 +1,18 @@
+R2K-Captain (Anweisungen)
+# Defender (D2) spielt sicheren Pass auf A3
+ros2 action send_goal /robot_D2/execute_skill r2k_interfaces/action/ExecuteSkill "{
+  skill_name: 'PASS_TO_TARGET',
+  target_pose: {position: {x: 50.0, y: 45.0, z: 0.0}}
+}"
+
+# Attacker (A3) empfängt Ball
+ros2 action send_goal /robot_A3/execute_skill r2k_interfaces/action/ExecuteSkill "{
+  skill_name: 'RECEIVE_PASS_AT',
+  target_pose: {position: {x: 50.0, y: 45.0, z: 0.0}}
+}"
+
+# Goalie (G1) sichert ab
+ros2 action send_goal /robot_G1/execute_skill r2k_interfaces/action/ExecuteSkill "{
+  skill_name: 'MAINTAIN_POSITION_GOALIE',
+  target_pose: {}
+}"

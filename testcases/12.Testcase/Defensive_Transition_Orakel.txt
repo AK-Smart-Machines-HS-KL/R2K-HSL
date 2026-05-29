@@ -1,0 +1,8 @@
+R2K-Orakel (Strategie)
+STRATEGIE: RECOVER_DEFENSIVE_SHAPE
+
+Prio 1: Alle Roboter müssen sofort zurückfallen (FALL_BACK).
+
+Prio 2: D2 muss diagonal zurücklaufen, um das Zentrum zu decken.
+
+Prio 3: A3 muss versuchen, R1 von hinten zu stören, um den Konter zu verlangsamen.

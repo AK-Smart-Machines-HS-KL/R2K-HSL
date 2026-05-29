@@ -1,0 +1,12 @@
+R2K-Captain (Anweisungen)
+# Defender (D2) schießt aufs Tor
+ros2 action send_goal /robot_D2/execute_skill r2k_interfaces/action/ExecuteSkill "{
+  skill_name: 'SHOOT_AT_GOAL',
+  target_pose: {position: {x: 90.0, y: 35.0, z: 0.0}}
+}"
+
+# Attacker (A3) rückt nach
+ros2 action send_goal /robot_A3/execute_skill r2k_interfaces/action/ExecuteSkill "{
+  skill_name: 'MOVE_TO_POSITION_AGGRESSIVE',
+  target_pose: {position: {x: 75.0, y: 40.0, z: 0.0}}
+}"

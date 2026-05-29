@@ -1,0 +1,12 @@
+R2K-Captain (Anweisungen)
+# Defender (D2) fällt diagonal zurück
+ros2 action send_goal /robot_D2/execute_skill r2k_interfaces/action/ExecuteSkill "{
+  skill_name: 'FALL_BACK',
+  target_pose: {position: {x: 30.0, y: 25.0, z: 0.0}}
+}"
+
+# Attacker (A3) setzt nach, um zu stören
+ros2 action send_goal /robot_A3/execute_skill r2k_interfaces/action/ExecuteSkill "{
+  skill_name: 'PRESS_BALL_CARRIER',
+  target_pose: {}
+}"
