@@ -26,7 +26,9 @@ class WorldState:
 # The testcase will use the smallest possible size, therefore: 6x9m, with 1 unit = 1 m
 
 # === Testcase 2: Schneller_Gegenangriff ===
-# = Blue Defender prepares counter attack from own half  =
+# = Blue Defender prepares counter attack from own half =
+
+# Blue Team
 # G1:             ~ Infront of the goal, facing left
 # D2: (with ball) ~ Inside penalty area, facing down right
 # A3:             ~ On half way line, facing right
@@ -37,7 +39,7 @@ position_team: List[RobotPose] = [
     (0.0, -2.0, 270.0),
 ]
 
-# Red team (enemies)
+# Red team
 # G1:              ~ Far out on right center circle, facing left
 # D2:              ~ Close to left penalty area, facing left
 # A3:              ~ On top of left penalty area lines, facing left

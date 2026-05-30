@@ -38,7 +38,7 @@ position_team: List[RobotPose] = [
     (0.5, -2.0, 270.0),
 ]
 
-# Red team (enemies)
+# Red team
 # G1             ~ Far out, on left center circle, facing left 
 # D2             ~ Right wing attacker, facing right
 # A3 (with ball) ~ Inside penalty area, facing left
