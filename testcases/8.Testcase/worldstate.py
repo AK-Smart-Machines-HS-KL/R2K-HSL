@@ -29,29 +29,30 @@ class WorldState:
 # = Blue D2 attempts a long range shot from the penalty area =
 
 # Blue team
-# G1: (~10,55), stationary, facing right (270°)
-# D2: (~50,50), taking the shot, facing right (270°), velocity ~0.4 m/s (approaching ball)
-# A3: (~60,70), supporting, facing right (270°), stationary
+# G1             ~ Further out of defaul goalie position, facing right
+# D2 (with ball) ~ Right on the middle point, facing right
+# A3             ~ Right wing attacker, facing right
 position_team: List[RobotPose] = [
     (-4.0, 0.0, 270.0),
     (0.0, 0.0, 270.0),
     (3.3, -2.0, 270.0),
 ]
 
-# Red team positions
-# R1: (~90,50), positioned too far left, acting as goalie
-# R2: (~75,60), midfield cover
-# R3: (~85,35), defensive left
+# Red team
+# G1             ~ Defending the top corner of the goal, facing left
+# D2             ~ Defending the right wing, facing left
+# A3             ~ Defending the left wing, facing left
 position_enemie: List[RobotPose] = [
     (6.0, 1.0, 90.0),
     (4.5, -1.3, 90.0),
     (4.5, 2.0, 90.0),
 ]
 
-# Ball vector: at D2 (~50,50), directed toward goal (~90,50), heading 270°, velocity ~5.5 m/s
+# Ball vector
+# Heading towards the goal, high speed, high belief
 ball_vector: Ball_Vector_TUPLE = (0.0, 0.0, 270, 5.5, 90)
 
-# Ball possession: R2K (own team controls ball)
+# Ball possession: R2K
 ball_possession: BallPossession_ENUM = 'R2K'
 
 # Robot states: all active
