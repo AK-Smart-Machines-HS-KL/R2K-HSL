@@ -1,13 +1,16 @@
-
 from dataclasses import dataclass
 from typing import List, Tuple, Literal
 
 # === Enums & Type Aliases ===
-BallPossession_ENUM = Literal['R2K','ENEMIE','NONE','UNKOWN']
+BallPossession_ENUM = Literal['R2K','ENEMY','NONE','UNKOWN']
 State_Robot_ENUM = Literal['INIT','ACTIVE','PENALIZED','BROKEN','UNKNOWN']
 
-RobotPose = Tuple[int, int, float, float]  # (x, y, theta, velocity)
-Ball_Vector_TUPLE = Tuple[int, int, int, float, int]  # (x, y, theta, velocity[m/s], prob[%])
+# Pose in 2D incl. rotation (theta)
+# theta counts counter clockwise: 0° up, 90° left, 180° down, 270° right
+RobotPose = Tuple[int, int, float]
+
+# Ball vector (x,y,theta,velocity[m/s],prob[%])
+Ball_Vector_TUPLE = Tuple[int, int, int, float, int]
 
 @dataclass(frozen=True)
 class WorldState:
@@ -18,18 +21,21 @@ class WorldState:
     State_Robot: List[State_Robot_ENUM]
     Score: int
 
-# === Scene 8 Analysis ===
-# Context: D2 attempts a long-range shot ("Weitschuss D2") from midfield.
-# Red goalie (R1) is positioned incorrectly; potential goal threat from distance.
+# === Field normalization note ===
+# The field size in the mid-divison approximated to be: -width: 6-9m; -height: 9-14m
+# The testcase will use the smallest possible size, therefore: 6x9m, with 1 unit = 1 m
 
-# Blue team positions
+# === Testcase 8: Gelegenheit_zum_Weitschuss ===
+# = Blue D2 attempts a long range shot from the penalty area =
+
+# Blue team
 # G1: (~10,55), stationary, facing right (270°)
 # D2: (~50,50), taking the shot, facing right (270°), velocity ~0.4 m/s (approaching ball)
 # A3: (~60,70), supporting, facing right (270°), stationary
 position_team: List[RobotPose] = [
-    (10, 55, 270.0, 0.0),
-    (50, 50, 270.0, 40.0),
-    (60, 70, 270.0, 0.0),
+    (-4.0, 0.0, 270.0),
+    (0.0, 0.0, 270.0),
+    (3.3, -2.0, 270.0),
 ]
 
 # Red team positions
@@ -37,13 +43,13 @@ position_team: List[RobotPose] = [
 # R2: (~75,60), midfield cover
 # R3: (~85,35), defensive left
 position_enemie: List[RobotPose] = [
-    (90, 50, 270.0, 0.0),
-    (75, 60, 270.0, 0.0),
-    (85, 35, 270.0, 0.0),
+    (6.0, 1.0, 90.0),
+    (4.5, -1.3, 90.0),
+    (4.5, 2.0, 90.0),
 ]
 
 # Ball vector: at D2 (~50,50), directed toward goal (~90,50), heading 270°, velocity ~5.5 m/s
-ball_vector: Ball_Vector_TUPLE = (50, 50, 270, 5.5, 90)
+ball_vector: Ball_Vector_TUPLE = (0.0, 0.0, 270, 5.5, 90)
 
 # Ball possession: R2K (own team controls ball)
 ball_possession: BallPossession_ENUM = 'R2K'
