@@ -24,6 +24,8 @@ class WorldState:
 # === Field normalization note ===
 # The field size in the mid-divison approximated to be: -width: 6-9m; -height: 9-14m
 # The testcase will use the smallest possible size, therefore: 6x9m, with 1 unit = 1 m
+#
+# originally made by Luis Burgard, added by Tim Simon
 
 # === Testcase 12: Defensive_Transition ===
 # = Blue team lost the ball and is now at risk of an attack =
