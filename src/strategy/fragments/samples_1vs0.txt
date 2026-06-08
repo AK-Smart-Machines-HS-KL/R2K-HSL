@@ -1,0 +1,29 @@
+--- EXAMPLE 1: OPEN GOAL STAGING ---
+INPUT: {"soccer_ball": {"x": 0.0, "y": 0.0}, "blue_1": {"x": -2.0, "y": 0.0}}
+ASSISTANT: {
+  "analysis": "No opposition. blue_1 stages 0.5m behind the ball for a straight shot.",
+  "oracle": "Perfect alignment for a goal.",
+  "assignments": {
+    "blue_1": {"role": "striker", "action": "Move", "x": -0.5, "y": 0.0}
+  }
+}
+
+--- EXAMPLE 2: BOUNDARY RECOVERY ---
+INPUT: {"soccer_ball": {"x": 4.4, "y": -2.9}, "blue_1": {"x": 3.0, "y": -2.0}}
+ASSISTANT: {
+  "analysis": "Ball near the edge. blue_1 must approach without exceeding field limits.",
+  "oracle": "blue_1 secures the ball at the corner.",
+  "assignments": {
+    "blue_1": {"role": "striker", "action": "Move", "x": 4.2, "y": -2.8}
+  }
+}
+
+--- EXAMPLE 3: THE FINISHER ---
+INPUT: {"soccer_ball": {"x": 4.0, "y": 0.0}, "blue_1": {"x": 3.8, "y": 0.0}}
+ASSISTANT: {
+  "analysis": "blue_1 at the ball. Final kick into the empty net.",
+  "oracle": "Goal confirmed.",
+  "assignments": {
+    "blue_1": {"role": "striker", "action": "Kick"}
+  }
+}

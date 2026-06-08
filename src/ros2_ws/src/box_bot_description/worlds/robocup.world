@@ -1,0 +1,145 @@
+<?xml version="1.0" ?>
+<sdf version="1.6">
+  <world name="robocup_field">
+    <include><uri>model://sun</uri></include>
+
+    <plugin name="gazebo_ros_state" filename="libgazebo_ros_state.so">
+      <ros>
+        <namespace>/gazebo</namespace>
+        <argument>model_states:=model_states</argument>
+      </ros>
+      <update_rate>50.0</update_rate>
+    </plugin>
+
+    <model name="dark_green_floor">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry><plane><normal>0 0 1</normal><size>12 9</size></plane></geometry>
+          <surface>
+            <friction>
+              <ode>
+                <mu>0.3</mu>
+                <mu2>0.3</mu2>
+              </ode>
+            </friction>
+          </surface>
+        </collision>
+        <visual name="visual">
+          <geometry><plane><normal>0 0 1</normal><size>12 9</size></plane></geometry>
+          <material>
+            <ambient>0.0 0.3 0.0 1</ambient> <diffuse>0.0 0.4 0.0 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="center_circle_white">
+      <static>true</static><pose>0 0 0.002 0 0 0</pose>
+      <link name="link"><visual name="visual"><geometry><cylinder><radius>0.75</radius><length>0.002</length></cylinder></geometry><material><ambient>1 1 1 1</ambient></material></visual></link>
+    </model>
+    <model name="center_circle_mask">
+      <static>true</static><pose>0 0 0.003 0 0 0</pose>
+      <link name="link"><visual name="visual"><geometry><cylinder><radius>0.70</radius><length>0.002</length></cylinder></geometry><material><ambient>0.0 0.3 0.0 1</ambient></material></visual></link>
+    </model>
+    <model name="center_x_1">
+      <static>true</static> <pose>0 0 0.004 0 0 0.785</pose>
+      <link name="l"><visual name="v"><geometry><box><size>0.2 0.05 0.001</size></box></geometry><material><ambient>1 1 1 1</ambient></material></visual></link>
+    </model>
+    <model name="center_x_2">
+      <static>true</static> <pose>0 0 0.004 0 0 -0.785</pose>
+      <link name="l"><visual name="v"><geometry><box><size>0.2 0.05 0.001</size></box></geometry><material><ambient>1 1 1 1</ambient></material></visual></link>
+    </model>
+    <model name="line_top">
+      <static>true</static><pose>0 3.0 0.001 0 0 0</pose>
+      <link name="l"><visual name="v"><geometry><box><size>9.0 0.05 0.001</size></box></geometry><material><ambient>1 1 1 1</ambient></material></visual></link>
+    </model>
+    <model name="line_bottom">
+      <static>true</static><pose>0 -3.0 0.001 0 0 0</pose>
+      <link name="l"><visual name="v"><geometry><box><size>9.0 0.05 0.001</size></box></geometry><material><ambient>1 1 1 1</ambient></material></visual></link>
+    </model>
+    <model name="line_left">
+      <static>true</static><pose>-4.5 0 0.001 0 0 0</pose>
+      <link name="l"><visual name="v"><geometry><box><size>0.05 6.0 0.001</size></box></geometry><material><ambient>1 1 1 1</ambient></material></visual></link>
+    </model>
+    <model name="line_right">
+      <static>true</static><pose>4.5 0 0.001 0 0 0</pose>
+      <link name="l"><visual name="v"><geometry><box><size>0.05 6.0 0.001</size></box></geometry><material><ambient>1 1 1 1</ambient></material></visual></link>
+    </model>
+    <model name="line_center">
+      <static>true</static><pose>0 0 0.001 0 0 0</pose>
+      <link name="l"><visual name="v"><geometry><box><size>0.05 6.0 0.001</size></box></geometry><material><ambient>1 1 1 1</ambient></material></visual></link>
+    </model>
+
+    <model name="goal_left">
+      <static>true</static><pose>-4.5 0 0 0 0 0</pose>
+      <link name="posts">
+        <visual name="lp"><pose>0 0.75 0.3 0 0 0</pose><geometry><cylinder><radius>0.05</radius><length>0.6</length></cylinder></geometry><material><ambient>1 1 0 1</ambient></material></visual>
+        <visual name="rp"><pose>0 -0.75 0.3 0 0 0</pose><geometry><cylinder><radius>0.05</radius><length>0.6</length></cylinder></geometry><material><ambient>1 1 0 1</ambient></material></visual>
+        <visual name="cb"><pose>0 0 0.6 1.5707 0 0</pose><geometry><cylinder><radius>0.05</radius><length>1.5</length></cylinder></geometry><material><ambient>1 1 0 1</ambient></material></visual>
+      </link>
+    </model>
+    <model name="goal_right">
+      <static>true</static><pose>4.5 0 0 0 0 0</pose>
+      <link name="posts">
+        <visual name="lp"><pose>0 0.75 0.3 0 0 0</pose><geometry><cylinder><radius>0.05</radius><length>0.6</length></cylinder></geometry><material><ambient>0 0 1 1</ambient></material></visual>
+        <visual name="rp"><pose>0 -0.75 0.3 0 0 0</pose><geometry><cylinder><radius>0.05</radius><length>0.6</length></cylinder></geometry><material><ambient>0 0 1 1</ambient></material></visual>
+        <visual name="cb"><pose>0 0 0.6 1.5707 0 0</pose><geometry><cylinder><radius>0.05</radius><length>1.5</length></cylinder></geometry><material><ambient>0 0 1 1</ambient></material></visual>
+      </link>
+    </model>
+
+    <model name="soccer_ball">
+      <static>false</static>
+      <pose>0 0 0.2 0 0 0</pose>
+      <link name="link">
+        
+        <velocity_decay>
+          <linear>0.002</linear>
+          <angular>0.002</angular>
+        </velocity_decay>
+
+        <inertial>
+          <mass>0.4</mass> 
+          <inertia>
+            <ixx>0.002</ixx><ixy>0</ixy><ixz>0</ixz>
+            <iyy>0.002</iyy><iyz>0</iyz><izz>0.002</izz>
+          </inertia>
+        </inertial>
+
+        <collision name="ball_collision">
+          <geometry>
+            <sphere><radius>0.11</radius></sphere>
+          </geometry> 
+          <surface>
+            <contact>
+              <ode>
+                <kp>50000.0</kp> 
+                <kd>1.0</kd>
+                <max_vel>20.0</max_vel>
+                <min_depth>0.01</min_depth>
+              </ode>
+              <collide_bitmask>0xffff</collide_bitmask>
+            </contact>
+            <bounce>
+              <restitution_coefficient>1.0</restitution_coefficient> 
+              <threshold>0.0</threshold>
+            </bounce>
+            <friction>
+              <ode>
+                <mu>0.01</mu>
+                <mu2>0.01</mu2>
+              </ode>
+            </friction>
+          </surface>
+        </collision>
+
+        <visual name="visual">
+          <geometry><sphere><radius>0.11</radius></sphere></geometry>
+          <material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+  </world>
+</sdf>

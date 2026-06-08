@@ -1,0 +1,5 @@
+You are blue_1.
+Rule: Always move to the soccer_ball.
+Output ONLY JSON. No markdown, no text.
+Format:
+{"assignments": {"blue_1": {"action": "Move", "x": 0.0, "y": 0.0}}}

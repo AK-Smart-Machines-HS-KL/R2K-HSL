@@ -1,0 +1,47 @@
+<?xml version="1.0"?>
+<robot name="soccer_ball">
+  <link name="ball_link">
+    <inertial>
+      <mass value="0.43"/>
+      <origin xyz="0 0 0"/>
+      <inertia ixx="0.003" ixy="0.0" ixz="0.0" iyy="0.003" iyz="0.0" izz="0.003"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <sphere radius="0.11"/>
+      </geometry>
+      <material name="orange">
+        <color rgba="1.0 0.5 0.0 1.0"/>
+      </material>
+    </visual>
+    <collision>
+      <geometry>
+        <sphere radius="0.11"/>
+      </geometry>
+      <surface>
+        <bounce>
+          <restitution_coefficient>0.8</restitution_coefficient>
+          <threshold>0.01</threshold>
+        </bounce>
+        <friction>
+          <ode>
+            <mu>0.5</mu>
+            <mu2>0.5</mu2>
+          </ode>
+        </friction>
+      </surface>
+    </collision>
+  </link>
+  <gazebo reference="ball_link">
+    <material>Gazebo/Orange</material>
+  </gazebo>
+  <gazebo>
+    <plugin name="ball_drive" filename="libgazebo_ros_planar_move.so">
+      <ros><namespace>/ball</namespace></ros>
+      <command_topic>cmd_vel</command_topic>
+      <odometry_topic>odom</odometry_topic>
+      <odometry_frame>odom</odometry_frame>
+      <robot_base_frame>ball_link</robot_base_frame>
+    </plugin>
+  </gazebo>
+</robot>
