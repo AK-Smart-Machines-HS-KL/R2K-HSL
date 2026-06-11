@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import List, Tuple, Literal
 
 # === Enums & Type Aliases ===
-BallPossession_ENUM = Literal['R2K','ENEMY','NONE','UNKOWN']
+BallPossession_ENUM = Literal['R2K','ENEMY','NONE','UNKNOWN']
 State_Robot_ENUM = Literal['INIT','ACTIVE','PENALIZED','BROKEN','UNKNOWN']
 
 # Pose in 2D incl. rotation (theta)
