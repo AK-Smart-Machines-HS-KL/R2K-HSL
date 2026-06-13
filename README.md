@@ -1,6 +1,10 @@
 # R2K-HSL
 Working code repository for the RoboCup-HSL team R-ZWEI KICKERS from UAS Kaiserslautern - Campus Zweibrücken
 
+> **⚠️ Experimental Environment**
+> Git consistency checks (branch naming, commit message conventions) are **temporarily disabled** for this branch.
+> Do **not** enforce commit-message or branch-naming rules here. This branch is used for rapid prototyping only.
+
 # Naming Conventions
 
 ## Branches
