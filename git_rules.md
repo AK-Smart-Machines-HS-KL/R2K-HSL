@@ -1,6 +1,6 @@
-# Naming Conventions
+# Code of Conduct
 
-## Branches
+## Branch Namen
 
 Branches werden nicht einfach willy-nilly benannt und auch die bisher verwendeten Namensschemen in früheren Projekten wurden nicht immer eingehalten. Daher nun folgende Anwweisung:
 
