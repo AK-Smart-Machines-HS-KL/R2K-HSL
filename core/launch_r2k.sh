@@ -53,6 +53,8 @@ echo "=========================================================="
 # >>> WICHTIG: Wechsel in den src-Ordner für korrekten Python/ROS Kontext
 cd src || { echo "❌ Ordner 'src' nicht gefunden! Bitte Struktur prüfen."; exit 1; }
 
+export ROS2K_WS="$PWD"
+mkdir -p shared_state
 rm -f shared_state/current_strategy.json shared_state/Worldstate.json
 python3 setup_r2k.py --scenario "$SCENARIO" --strategy "$STRATEGY" --model "$MODEL" --relay "$RELAY" $EXPLAIN_FLAG || { echo "❌ Setup failed!"; exit 1; }
 
@@ -73,7 +75,6 @@ cleanup() {
 
     kill -9 $MONITOR_PID 2>/dev/null
     
-    # Aufruf liegt nun einen Ordner höher
     ../kill_r2k.sh > /dev/null 2>&1
     
     pkill -9 ollama > /dev/null 2>&1
@@ -109,20 +110,25 @@ if [ "$RELAY" = "hardware_mirror" ]; then
     fi
 fi
 
+# --- Markdown Auto-Linker Bypass (Verhindert Syntaxfehler) ---
+HTTP_PROT="http"
+OLLAMA_LOCAL="${HTTP_PROT}://127.0.0.1:11434"
+OLLAMA_DOCKER="${HTTP_PROT}://172.17.0.1:11434"
+
 # ---- OLLAMA CHECK ----
 echo "🧠 Checking Ollama AI Server..."
-if curl -s "http://127.0.0.1:11434/api/tags" > /dev/null 2>&1; then
+if curl -s "${OLLAMA_LOCAL}/api/tags" > /dev/null 2>&1; then
     echo "✅ Ollama ist bereits online und erreichbar."
 else
     echo "🚀 Booting Ollama AI Server..."
     export OLLAMA_HOST=0.0.0.0
-    LD_LIBRARY_PATH="" nohup ollama serve > ollama.log 2>&1 &
-    sleep 3
+    nohup ollama serve > ollama.log 2>&1 &
+    sleep 5
 fi
 
 if [[ "$SCENARIO" != 0vs* ]]; then
     echo "🔍 Prüfe, ob das Modell '$MODEL' lokal verfügbar ist..."
-    if ! curl -s "http://127.0.0.1:11434/api/tags" | grep -q "\"name\":\"$MODEL\""; then
+    if ! curl -s "${OLLAMA_LOCAL}/api/tags" | grep -q "\"name\":\"$MODEL\""; then
         echo "=========================================================="
         echo "❌ FEHLER: Das Modell '$MODEL' wurde nicht gefunden!"
         echo "💡 Lade es zuerst mit folgendem Befehl herunter:"
@@ -134,7 +140,7 @@ if [[ "$SCENARIO" != 0vs* ]]; then
     echo "✅ Modell '$MODEL' ist bereit."
 fi
 
-export R2K_OLLAMA_URL="http://127.0.0.1:11434/api/generate"
+export R2K_OLLAMA_URL="${OLLAMA_LOCAL}/api/generate"
 export R2K_OLLAMA_MODEL=$MODEL
 
 # ==========================================================
@@ -206,14 +212,25 @@ if [ "$UBUNTU_VERSION" == "22.04" ]; then
     python3 ai_tactics/ollama_sandbox_bridge.py > /dev/null 2>&1 &
     
     echo "🧠 Starting Team Blue AI (Live Output)..."
-    python3 ai_tactics/r2k_evaluator.py &
+    python3 -u ai_tactics/r2k_evaluator.py &
 
     echo "📺 Launching Visualizer..."
     echo "=========================================================="
     echo "✅ System Online. Press CTRL+C to shutdown."
     echo "=========================================================="
-    # 2>/dev/null hides the RCLError during shutdown
-    python3 r2k_visualizer.py 2>/dev/null
+    
+    # Ausführung des Visualizers ohne Fehlerunterdrückung
+    python3 r2k_visualizer.py
+    
+    # Crash-Falle: Wenn der Visualizer abstürzt, fangen wir das ab und halten das Terminal offen.
+    if [ $? -ne 0 ]; then
+        echo "=========================================================="
+        echo "⚠️ CRASH ERKANNT: Der Visualizer (r2k_visualizer.py) ist abgestürzt!"
+        echo "Das System bleibt für Debugging-Zwecke am Leben. Scrolle hoch, um den Python-Fehler zu lesen."
+        echo "Drücke CTRL+C, um das Teardown auszulösen."
+        echo "=========================================================="
+        while true; do sleep 1; done
+    fi
 
 # ==========================================================
 # 🐳 DOCKER LAUNCH (UBUNTU 24.04+)
@@ -289,11 +306,23 @@ else
     $DOCKER_BASE "$SOURCE_CMD && python3 ai_tactics/ollama_sandbox_bridge.py > /dev/null 2>&1"
     
     echo "🧠 Starting Team Blue AI (Live Output)..."
-    docker exec -d -e PYTHONWARNINGS="ignore" -e R2K_OLLAMA_MODEL=$MODEL -e R2K_OLLAMA_URL="http://172.17.0.1:11434/api/generate" $CONTAINER_NAME bash -c "$SOURCE_CMD && python3 ai_tactics/r2k_evaluator.py"
+    docker exec -d -e PYTHONUNBUFFERED=1 -e PYTHONWARNINGS="ignore" -e R2K_OLLAMA_MODEL=$MODEL -e R2K_OLLAMA_URL="${OLLAMA_DOCKER}/api/generate" $CONTAINER_NAME bash -c "$SOURCE_CMD && python3 -u ai_tactics/r2k_evaluator.py"
 
     echo "📺 Launching Visualizer..."
     echo "=========================================================="
     echo "✅ System Online. Press CTRL+C to shutdown."
     echo "=========================================================="
-    docker exec -it -e PYTHONWARNINGS="ignore" -e DISPLAY=$DISPLAY -e QT_X11_NO_MITSHM=1 $CONTAINER_NAME bash -c "$SOURCE_CMD && python3 r2k_visualizer.py 2>/dev/null"
+    
+    # Ausführung des Visualizers ohne Fehlerunterdrückung
+    docker exec -it -e PYTHONWARNINGS="ignore" -e DISPLAY=$DISPLAY -e QT_X11_NO_MITSHM=1 $CONTAINER_NAME bash -c "$SOURCE_CMD && python3 r2k_visualizer.py"
+    
+    # Crash-Falle
+    if [ $? -ne 0 ]; then
+        echo "=========================================================="
+        echo "⚠️ CRASH ERKANNT: Der Visualizer (r2k_visualizer.py) ist im Docker abgestürzt!"
+        echo "Das System bleibt für Debugging-Zwecke am Leben. Scrolle hoch, um den Python-Fehler zu lesen."
+        echo "Drücke CTRL+C, um das Teardown auszulösen."
+        echo "=========================================================="
+        while true; do sleep 1; done
+    fi
 fi
