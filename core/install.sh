@@ -2,6 +2,13 @@
 UBUNTU_VERSION=$(lsb_release -rs)
 echo "🚀 ROS2K Setup gestartet (System: Ubuntu $UBUNTU_VERSION)"
 
+# 1. Projektnamen dynamisch aus dem Root-Verzeichnis generieren (für Docker)
+export SAFE_DIR_NAME=$(basename "$PWD" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9_-')
+echo "⚙️ Setze Projektname dynamisch: $SAFE_DIR_NAME"
+
+# 2. In den src-Ordner wechseln, da dort ros2_ws, uros_ws und docker-compose.yml verwaltet werden
+cd src || { echo "❌ Ordner 'src' nicht gefunden! Bitte Struktur prüfen."; exit 1; }
+
 if [ "$UBUNTU_VERSION" == "22.04" ]; then
     echo "🟢 Nativer Modus (Ubuntu 22.04): Richte ROS 2 Repositories ein..."
     sudo apt update && sudo apt install -y curl gnupg2 lsb-release
@@ -52,8 +59,7 @@ elif [[ "$UBUNTU_VERSION" == 24.* ]]; then
     sudo usermod -aG docker $USER
     
     # --- DYNAMISCHER PROJEKTNAME ---
-    SAFE_DIR_NAME=$(basename "$PWD" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9_-')
-    echo "⚙️ Setze Projektname dynamisch auf Ordnername: $SAFE_DIR_NAME"
+    # .env wird in src/ geschrieben, damit docker-compose.yml ihn aufgreifen kann
     echo "COMPOSE_PROJECT_NAME=$SAFE_DIR_NAME" > .env
     echo "PROJECT_NAME=$SAFE_DIR_NAME" >> .env
     
@@ -65,7 +71,7 @@ elif [[ "$UBUNTU_VERSION" == 24.* ]]; then
     docker compose down
     
     echo "✅ Docker installiert und Workspace kompiliert!"
-    echo "nun: ROS2K mit './launch_r2k.sh' starten."
+    echo "Nun kannst du das System mit './launch_r2k.sh' aus dem Hauptverzeichnis starten."
 else
     echo "❌ Fehler: System $UBUNTU_VERSION wird nicht unterstützt."
     exit 1

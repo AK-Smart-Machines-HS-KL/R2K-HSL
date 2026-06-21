@@ -50,6 +50,9 @@ echo "=========================================================="
 echo "🚀 FAST BOOT: R2K Launch Sequence... ($SCENARIO | Relay: $RELAY)"
 echo "=========================================================="
 
+# >>> WICHTIG: Wechsel in den src-Ordner für korrekten Python/ROS Kontext
+cd src || { echo "❌ Ordner 'src' nicht gefunden! Bitte Struktur prüfen."; exit 1; }
+
 rm -f shared_state/current_strategy.json shared_state/Worldstate.json
 python3 setup_r2k.py --scenario "$SCENARIO" --strategy "$STRATEGY" --model "$MODEL" --relay "$RELAY" $EXPLAIN_FLAG || { echo "❌ Setup failed!"; exit 1; }
 
@@ -69,7 +72,10 @@ cleanup() {
     fi
 
     kill -9 $MONITOR_PID 2>/dev/null
-    ./kill_r2k.sh > /dev/null 2>&1
+    
+    # Aufruf liegt nun einen Ordner höher
+    ../kill_r2k.sh > /dev/null 2>&1
+    
     pkill -9 ollama > /dev/null 2>&1
     
     if [ "$UBUNTU_VERSION" == "22.04" ]; then
@@ -105,7 +111,7 @@ fi
 
 # ---- OLLAMA CHECK ----
 echo "🧠 Checking Ollama AI Server..."
-if curl -s http://127.0.0.1:11434/api/tags > /dev/null 2>&1; then
+if curl -s "http://127.0.0.1:11434/api/tags" > /dev/null 2>&1; then
     echo "✅ Ollama ist bereits online und erreichbar."
 else
     echo "🚀 Booting Ollama AI Server..."
@@ -116,7 +122,7 @@ fi
 
 if [[ "$SCENARIO" != 0vs* ]]; then
     echo "🔍 Prüfe, ob das Modell '$MODEL' lokal verfügbar ist..."
-    if ! curl -s http://127.0.0.1:11434/api/tags | grep -q "\"name\":\"$MODEL\""; then
+    if ! curl -s "http://127.0.0.1:11434/api/tags" | grep -q "\"name\":\"$MODEL\""; then
         echo "=========================================================="
         echo "❌ FEHLER: Das Modell '$MODEL' wurde nicht gefunden!"
         echo "💡 Lade es zuerst mit folgendem Befehl herunter:"
