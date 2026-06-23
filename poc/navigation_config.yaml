@@ -1,0 +1,166 @@
+#####################################################################################
+#                            @Author: Tim Simon                                     #
+#                            @Date: 22.01.26                                        #
+#                            @Description:                                          #
+#       The controller_navigation.py file is used to controll movement of a K1      #
+#       It uses the given checkpoint (config in .yaml file) and calculates the      #
+#       path to the next waypoint (either random or set via .yaml).                 #
+#       There are three modes implemented: RANDOM, FIXED and LOOP                   #
+#       RANDOM: Walks to random waypoints which spread out with time                #
+#       FIXED: Walks along a set list of waypoints. After finish -> RANDOM          #
+#       LOOP: Walks along a set list of waypoints. After finish -> Starts new       #
+#                                                                                   #
+#####################################################################################
+
+import isaacgym
+import torch
+import numpy as np
+import math
+import random
+import sys
+import yaml
+import argparse
+from utils.runner import Runner
+
+# load config
+def load_yaml_config(file_path="navigation_config.yaml"):
+    with open(file_path, 'r') as f:
+        return yaml.safe_load(f)
+
+# helper classes
+def get_euler_xyz(quat):
+    q_x, q_y, q_z, q_w = quat[:, 0], quat[:, 1], quat[:, 2], quat[:, 3]
+    sinr_cosp = 2.0 * (q_w * q_x + q_y * q_z)
+    cosr_cosp = 1.0 - 2.0 * (q_x * q_x + q_y * q_y)
+    roll = torch.atan2(sinr_cosp, cosr_cosp)
+    sinp = 2.0 * (q_w * q_y - q_z * q_x)
+    pitch = torch.where(torch.abs(sinp) >= 1, torch.sign(sinp) * math.pi / 2, torch.asin(sinp))
+    siny_cosp = 2.0 * (q_w * q_z + q_x * q_y)
+    cosy_cosp = 1.0 - 2.0 * (q_y * q_y + q_z * q_z)
+    yaw = torch.atan2(siny_cosp, cosy_cosp)
+    return torch.stack([roll, pitch, yaw], dim=-1)
+
+def normalize_angle(angle):
+    while angle > math.pi: angle -= 2 * math.pi
+    while angle < -math.pi: angle += 2 * math.pi
+    return angle
+
+def get_random_target(robot_x, robot_y, radius):
+    angle = random.uniform(-math.pi, math.pi)
+    t_x = robot_x + radius * math.cos(angle)
+    t_y = robot_y + radius * math.sin(angle)
+    return [t_x, t_y]
+
+# navi runner
+
+class NavigationRunner(Runner):
+    def __init__(self, nav_config):
+        self.nav_cfg = nav_config
+        super().__init__(test=True)
+
+    def play(self):
+        obs, infos = self.env.reset()
+        obs = obs.to(self.device)
+        
+        mode = self.nav_cfg['navigation']['mode']
+        waypoints = self.nav_cfg['waypoints']
+        max_speed = self.nav_cfg['navigation']['max_speed']
+        turn_speed = self.nav_cfg['navigation']['turn_speed']
+        dist_thresh = self.nav_cfg['navigation']['dist_threshold']
+        
+        print(f"\nStart Controller | Mode: {mode.upper()}")
+        print(f"{len(waypoints)} Waypoints loaded.\n")
+
+        current_wp_idx = 0
+        points_collected = 0
+        current_random_radius = 2.0
+        
+        active_mode = "RANDOM" if mode == "random" else "LIST"
+        
+        if active_mode == "LIST":
+            if not waypoints:
+                active_mode = "RANDOM"
+                target = get_random_target(0, 0, current_random_radius)
+            else:
+                target = waypoints[current_wp_idx]
+        else:
+            target = get_random_target(0, 0, current_random_radius)
+
+        print(f"Start-Goal: {target}")
+
+        while True:
+            # 1. State Reading
+            root_state = self.env.root_states[0, :]
+            pos_x, pos_y = root_state[0], root_state[1]
+            quat = root_state[3:7].unsqueeze(0)
+            euler = get_euler_xyz(quat)
+            current_yaw = euler[0, 2].item()
+
+            # 2. Mistake Calc
+            dx = target[0] - pos_x
+            dy = target[1] - pos_y
+            distance = math.sqrt(dx**2 + dy**2)
+            angle_error = normalize_angle(math.atan2(dy, dx) - current_yaw)
+
+            # 3. Reached Goal
+            if distance < dist_thresh:
+                points_collected += 1
+                print(f"Reached Goal! ({points_collected} total)")
+                self.env.commands[:, :] = 0.0
+
+                if active_mode == "LIST":
+                    current_wp_idx += 1
+                    
+                    if current_wp_idx >= len(waypoints):
+                        if mode == "loop":
+                            current_wp_idx = 0
+                            print("-- Loop --")
+                        else: # fixed
+                            print("List done -> Random.")
+                            active_mode = "RANDOM"
+                    
+                    if active_mode == "LIST":
+                        target = waypoints[current_wp_idx]
+                        print(f"Goal: {target}")
+
+                if active_mode == "RANDOM":
+                    if current_random_radius < 8.0: current_random_radius += 0.5
+                    target = get_random_target(pos_x.item(), pos_y.item(), current_random_radius)
+                    print(f"Goal (Random): [{target[0]:.1f}, {target[1]:.1f}]")
+                
+                continue
+
+            # 4. Controller
+            cmd_vx = 0.0
+            cmd_yaw = max(min(angle_error * turn_speed, 1.5), -1.5)
+
+            if abs(angle_error) < 0.8:
+                speed_factor = max(0, 1.0 - (abs(angle_error) / 0.8))
+                dist_factor = min(distance, 1.0)
+                cmd_vx = max_speed * speed_factor * dist_factor
+
+            # 5. Apply
+            self.env.commands[:, 0] = cmd_vx
+            self.env.commands[:, 1] = 0.0
+            self.env.commands[:, 2] = cmd_yaw
+            
+            # 6. Step
+            with torch.no_grad():
+                dist = self.model.act(obs)
+                act = dist.loc
+                obs, rew, done, infos = self.env.step(act)
+                obs, rew, done = obs.to(self.device), rew.to(self.device), done.to(self.device)
+
+if __name__ == "__main__":
+    cfg = load_yaml_config("navigation_config.yaml")
+    sys.argv = [sys.argv[0]]
+    sys.argv.append(f"--task={cfg['sim']['task']}")
+    sys.argv.append(f"--num_envs={cfg['sim']['num_envs']}")
+    sys.argv.append(f"--checkpoint={cfg['sim']['checkpoint']}")
+    
+    if cfg['sim']['headless']:
+        sys.argv.append("--headless=True")
+    
+    print(f"Loading Task: {cfg['sim']['task']} ... Checkpoint: {cfg['sim']['checkpoint']}")
+    runner = NavigationRunner(cfg)
+    runner.play()

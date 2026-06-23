@@ -1,0 +1,30 @@
+#####################################################################################
+#                            @Author: Tim Simon                                     #
+#                            @Date: 22.01.26                                        #
+#                            @Description:                                          #
+#       The navigation_config.yaml file implements the config of                    #
+#       controller_navigation.py                                                    #
+#       It allowes to modify:                                                       #
+#       - task and checkpoint location                                              #
+#       - different modes and number of envs                                        #
+#       - adding more and changing existing waypoints                               #
+#                                                                                   #
+#####################################################################################
+
+sim:
+  task: "K1/ParameterWalk"
+  checkpoint: "logs/K1/K1/ParameterWalk/2026-01-19-21-05-28/nn/model_10000.pth" #PATH TO LAST MODELL, MIGHT BE DIFFERENT
+  num_envs: 1
+  headless: false
+navigation:
+  mode: "fixed"          # "loop", "fixed", "random"
+  max_speed: 1.0
+  turn_speed: 2.5
+  dist_threshold: 0.5
+waypoints:
+  - [3.0, 0.0]
+  - [3.0, 3.0]
+  - [0.0, 3.0]
+  - [0.0, 0.0]
+  # add more waypoints like this:
+  # - [5.0, 5.0]
