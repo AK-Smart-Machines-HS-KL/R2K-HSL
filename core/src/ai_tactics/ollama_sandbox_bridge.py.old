@@ -1,0 +1,97 @@
+import rclpy
+import json
+import os
+import math
+from rclpy.node import Node
+from geometry_msgs.msg import Twist
+from gazebo_msgs.msg import ModelStates
+
+def get_yaw(q):
+    siny_cosp = 2 * (q.w * q.z + q.x * q.y)
+    cosy_cosp = 1 - 2 * (q.y * q.y + q.z * q.z)
+    return math.atan2(siny_cosp, cosy_cosp)
+
+class HalBridge(Node):
+    def __init__(self):
+        super().__init__('hal_bridge')
+        self.pubs = {}
+        self.targets = {} 
+        self.strategy_file = '/root/ros2k_v4/ai_tactics/current_strategy.json'
+        self.ball_pos = None
+        
+        self.create_subscription(ModelStates, '/gazebo/model_states', self.state_cb, 10)
+        self.create_timer(0.5, self.read_llm_strategy)
+        self.get_logger().info("⚙️ HAL Bridge (Smart Edition) Online!")
+
+    def read_llm_strategy(self):
+        if not os.path.exists(self.strategy_file):
+            return
+        try:
+            with open(self.strategy_file, 'r') as f:
+                data = json.load(f)
+                assignments = data.get('assignments', {})
+                
+                for bot, task in assignments.items():
+                    if not bot.startswith('blue_'): 
+                        continue
+                    
+                    # 1. Fall: LLM gibt exakte Koordinaten
+                    if 'x' in task and 'y' in task:
+                        self.targets[bot] = {'x': float(task['x']), 'y': float(task['y'])}
+                    
+                    # 2. Smarter Fallback: LLM sagt "Kick", vergisst aber Koordinaten
+                    elif task.get('action', '').lower() in ['kick', 'intercept', 'attack', 'striker']:
+                        if self.ball_pos:
+                            self.targets[bot] = {'x': self.ball_pos.x, 'y': self.ball_pos.y}
+        except Exception:
+            pass
+
+    def state_cb(self, msg):
+        try:
+            # Ball-Position immer aktualisieren für den Smart-Fallback
+            ball_idx = next((i for i, name in enumerate(msg.name) if 'ball' in name.lower()), None)
+            if ball_idx is not None:
+                self.ball_pos = msg.pose[ball_idx].position
+
+            for bot_name, target in self.targets.items():
+                if bot_name not in self.pubs:
+                    self.pubs[bot_name] = self.create_publisher(Twist, f'/{bot_name}/cmd_vel', 10)
+                
+                bot_idx = next((i for i, name in enumerate(msg.name) if bot_name in name.lower()), None)
+                if bot_idx is None:
+                    continue
+                    
+                bot_pose = msg.pose[bot_idx]
+                dx = target['x'] - bot_pose.position.x
+                dy = target['y'] - bot_pose.position.y
+                distance = math.hypot(dx, dy)
+                
+                target_yaw = math.atan2(dy, dx)
+                current_yaw = get_yaw(bot_pose.orientation)
+                
+                angle_diff = target_yaw - current_yaw
+                while angle_diff > math.pi: angle_diff -= 2 * math.pi
+                while angle_diff < -math.pi: angle_diff += 2 * math.pi
+                
+                t = Twist()
+                if distance > 0.3: 
+                    t.angular.z = max(min(angle_diff * 2.5, 2.0), -2.0)
+                    if abs(angle_diff) < 0.5:
+                        t.linear.x = 1.0 
+                    else:
+                        t.linear.x = 0.2
+                else:
+                    t.linear.x = 0.0
+                    t.angular.z = 0.0
+                    
+                self.pubs[bot_name].publish(t)
+        except Exception as e:
+            self.get_logger().error(f"Bridge Fehler: {e}")
+
+def main():
+    rclpy.init()
+    rclpy.spin(HalBridge())
+    rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()

@@ -1,0 +1,2 @@
+Example:
+{"assignments": {"blue_1": {"action": "Move", "x": -4.2, "y": 0.5}, "blue_2": {"action": "Move", "x": -1.5, "y": 0.0}, "blue_3": {"action": "Move", "x": 2.2, "y": 0.0}}}

@@ -1,49 +1,27 @@
 # R2K-HSL
-Working code repository for the RoboCup-HSL team R-ZWEI KICKERS from UAS Kaiserslautern - Campus Zweibrücken
+Repository des RoboCup-HSL Teams R-ZWEI KICKERS der Hochschule Kaiserslautern - Campus Zweibrücken.
 
-# Naming Conventions
+# Installation / Get on board
 
-## Branches
+## Prerequisites
 
-Branches werden nicht einfach willy-nilly benannt und auch die bisher verwendeten Namensschemen in früheren Projekten wurden nicht immer eingehalten. Daher nun folgende Anwweisung:
+TODO: Was man vorher installieren sollte, damit unser Code baut!
 
-- Folgende Namensstruktur soll verwendet werden: `prefix/name`
-  
-**Prefix**: Wir unterscheiden zwischen den folgenden Fällen:
-- `feature`:  Beschreibt **neue** Funktionalität für das Kernsystem
-- `tools`: Beschreibt **neue** Funktionalität außerhalb des Kernsystems
-- `bugfix`:   Beschreibt **Fehlerbehebung** 
-- `refactor`: Beschreibt die **Überarbeitung** von funktionierendem Code
-- `docs`:     Beschreibt das Arbeiten an der Dokumentation
-- `projects`: Für Studierendenprojekte (später leichter zu filtern für Löschung oder Intergration)
+## How to clone
+Mit `git clone git@github.com:AK-Smart-Machines-HS-KL/R2K-HSL.git` kann man zunächst eine lokale Kopie des Repository erstellen.
+Mit dem sehr wahrscheinlich baldigen Integrieren von Submodulen wird zusätzlich notwendig werden das Flag `--recursive` hinzuzufügen, also z.B. zum Klonen mit SSH
+```
+git clone --recursive git@github.com:AK-Smart-Machines-HS-KL/R2K-HSL.git
+```
 
-**Name**:
-- Soll kurz die Aufgabe des aktuellen Branches beschreiben
-- Soll CamelCase befolgen (d.h. jedes Wort im Namen beginnt mit einem Großbuchstaben, aber wir lassen keine Leerzeichen)
-- Soll keine Sonderzeichen oder Umlaute beinhalten (z.B ä -> ae)
-- Soll in Englisch gehalten werden (Sprach-Handhabung wird im Team noch diskutiert)
-- Präsenz verwenden, Vergangenheitsform ist beim Vollenden für die Commit-Message
+## Einstieg
+%TODO: Beschreibe Installation und erste Code-Ausführung
 
-**Beispiele**:
-- `feature/RobotKick`
-- `bugfix/FixLeftDriftOfKick`
-- `refactor/ChangeKickMovement`
-- `docs/AddDescriptionOfKick`
+# Lizenzen
 
-**Anmerkung**:
-Branches werden Feature-basierend erstellt. Also jeder Branch beinhaltet nur **eine** zusammenhängende Änderung! 
+Licenses used for this repository are listed here, but are further explained in explicit license.md files
 
-# Sprache
-
-Sämtliche Codedokumentation soll auf Englisch gehalten werden (dazu zählt: Codevariablen und Codekommentare, Commitmessages und Branches)
-Teamspezifische Sachen sollen auf deutsch formuliert werden (dazu zählt: Projektarbeiten, Teaminterne Infos)
-
-**Sonderfälle**
-- Testcases werden auf Deutsch gehalten, um nachvollziehbarer sind
-- KI-Prompts sind englisch, wenn diese innerhalb des Codes leben
-- KI-Prompts sind deutsch, wenn diese das Team nutzen
-
-# About Us
+# Über uns
 
 Die R-ZWEI KICKERS wurden in den Covid-Zeiten im Jahr 2020 gegründet und begannen mit wenigen Robotern und einem Mini-Feld in einem Labor der Hochschule. Seitdem hat das Team stetig Fortschritte gemacht, bis hin zweifachen Vizeweltmeister in der Standard Platform League (SPL) -- Challenge Shield Division (CSD) 2023 und 2024.
 In diesem Repository wird nun unsere Codebasis für die neu formierte Humanoid Soccer League (HSL) leben, in welcher wir in der Small Division bei der German Open 2026 bereits angetreten sind und wo wir mit den BoosterRobotics K1 Robotern als neue Plattfrom demnächst in die Middle Size Division einsteigen möchten. Dieses Repository hält somit unsere neuesten Anstregungen zur Forschung in der humanoiden Robotik und intelligenten Verhaltenssteuerung fest.

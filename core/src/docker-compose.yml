@@ -1,0 +1,21 @@
+services:
+  gazebo_sim:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: ${PROJECT_NAME}_gazebo
+    network_mode: host
+    ipc: host
+    privileged: true
+    environment:
+      - DISPLAY=${DISPLAY}
+      - QT_X11_NO_MITSHM=1
+      - LIBGL_ALWAYS_SOFTWARE=1
+      - ROS_DOMAIN_ID=0
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      # Spiegelt den aktuellen Ordner. Aggregator und Visualizer sind sicher drin.
+      - ./:/workspace:rw
+    entrypoint: /bin/bash
+    stdin_open: true
+    tty: true

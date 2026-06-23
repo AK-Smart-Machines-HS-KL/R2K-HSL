@@ -1,0 +1,41 @@
+import rclpy
+from rclpy.node import Node
+from gazebo_msgs.msg import ModelStates
+import json
+import os
+
+class TeamListSync(Node):
+    def __init__(self):
+        super().__init__('team_list_sync')
+        self.team_state = {}
+        base_dir = os.getenv('ROS2K_WS', os.getcwd())
+        self.state_file = os.path.join(base_dir, 'shared_state', 'team_list.json')
+        
+        self.create_subscription(ModelStates, '/gazebo/model_states', self.gazebo_cb, 10)
+        self.create_timer(0.1, self.publish_state)
+        self.get_logger().info("🧠 CABSL Team List Sync (Single Source of Truth) Online!")
+
+    def gazebo_cb(self, msg):
+        for i, name in enumerate(msg.name):
+            if 'blue_' in name or 'red_' in name or 'ball' in name.lower():
+                if name not in self.team_state:
+                    self.team_state[name] = {'cabsl_state': 'IDLE', 'role': 'unassigned'}
+                self.team_state[name]['x'] = round(msg.pose[i].position.x, 3)
+                self.team_state[name]['y'] = round(msg.pose[i].position.y, 3)
+
+    def publish_state(self):
+        temp_path = self.state_file + ".tmp"
+        try:
+            with open(temp_path, 'w') as f:
+                json.dump(self.team_state, f)
+            os.replace(temp_path, self.state_file)
+        except Exception as e:
+            self.get_logger().error(f"Sync IO Error: {e}")
+
+def main():
+    rclpy.init()
+    rclpy.spin(TeamListSync())
+    rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()

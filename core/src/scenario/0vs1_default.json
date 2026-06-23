@@ -1,0 +1,8 @@
+{
+  "scene_type": "0vs1",
+  "label": "default",
+  "entities": {
+    "soccer_ball": {"x": 0.0, "y": 0.0},
+    "red_1": {"x": 2.0, "y": 0.0}
+  }
+}
