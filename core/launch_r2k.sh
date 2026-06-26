@@ -67,7 +67,7 @@ cleanup() {
     if [ "$RELAY" = "hardware_mirror" ]; then
         if [ "$UBUNTU_VERSION" == "22.04" ]; then
             timeout 1 ros2 topic pub --once /bot1/cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.0, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.0}}" > /dev/null 2>&1 || true
-            timeout 1 ros2 topic pub --once /bot1/LocoApiTopicReq booster_msgs/msg/RpcReqMsg "{uuid: 'emergency_stop', header: '{\"api_id\": 2000}', body: '{\"mode\": 1}'}" > /dev/null 2>&1 || true
+            timeout 1 ros2 topic pub --once /Kev1n/LocoApiTopicReq booster_msgs/msg/RpcReqMsg "{uuid: 'emergency_stop', header: '{\"api_id\": 2000}', body: '{\"mode\": 1}'}" > /dev/null 2>&1 || true
         else
             docker exec -i $CONTAINER_NAME bash -c "source /opt/ros/humble/setup.bash && timeout 1 ros2 topic pub --once /bot1/cmd_vel geometry_msgs/msg/Twist \"{linear: {x: 0.0, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.0}}\"" > /dev/null 2>&1 || true
         fi
@@ -94,7 +94,7 @@ trap cleanup SIGINT SIGTERM EXIT
 # ---- HARDWARE HOTSPOT ----
 if [ "$RELAY" = "hardware_mirror" ]; then
     echo "📶 Starting Wi-Fi Hotspot (maker4)..."
-    nmcli device wifi hotspot ssid maker4 password nao12345
+#    nmcli device wifi hotspot ssid maker4 password nao12345
     
     echo "⏳ Warte auf Netzwerk-Routing (3s)..."
     sleep 3 
@@ -190,7 +190,7 @@ if [ "$UBUNTU_VERSION" == "22.04" ]; then
             fi
             if [ "$K1_READY" = false ] && ros2 topic list 2>/dev/null | grep -q "/bot1/odometer_state"; then
                 echo "⚙️ K1-INTERFACE ERKANNT! Führe DDS Warm-Up durch..."
-                ros2 topic echo --once /bot1/LocoApiTopicResp > /dev/null 2>&1 &
+                ros2 topic echo --once /Kev1n/LocoApiTopicResp > /dev/null 2>&1 &
                 echo "✅ K1 BEREIT!"
                 K1_READY=true
             fi
@@ -282,9 +282,9 @@ else
                 echo "✅ YAHBOOM BEREIT!"
                 YAHBOOM_READY=true
             fi
-            if [ "$K1_READY" = false ] && docker exec $CONTAINER_NAME bash -c "$SOURCE_CMD && ros2 topic list 2>/dev/null" | grep -q "/bot1/odometer_state"; then
+            if [ "$K1_READY" = false ] && docker exec $CONTAINER_NAME bash -c "$SOURCE_CMD && ros2 topic list 2>/dev/null" | grep -q "/Kev1n/odometer_state"; then
                 echo "⚙️ K1-INTERFACE ERKANNT! Führe DDS Warm-Up durch..."
-                docker exec -i $CONTAINER_NAME bash -c "$SOURCE_CMD && ros2 topic echo --once /bot1/LocoApiTopicResp > /dev/null 2>&1" &
+                docker exec -i $CONTAINER_NAME bash -c "$SOURCE_CMD && ros2 topic echo --once /Kev1n/LocoApiTopicResp > /dev/null 2>&1" &
                 echo "✅ K1 BEREIT!"
                 K1_READY=true
             fi
