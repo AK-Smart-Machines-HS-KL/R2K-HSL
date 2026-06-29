@@ -19,7 +19,7 @@ class GoToBallAndKickNode(Node):
         super().__init__('go_to_ball_and_kick_node')
         
         # 1. Parameter for the robot prefix (e.g., 'Kev1n')
-        self.declare_parameter('robot_prefix', 'Kev1n')
+        self.declare_parameter('robot_prefix', 'Booster')
         robot_prefix = self.get_parameter('robot_prefix').get_parameter_value().string_value
         
         # 2. State Variables
