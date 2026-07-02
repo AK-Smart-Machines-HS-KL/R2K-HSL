@@ -1,74 +1,71 @@
-##!/usr/bin/env python3
+#!/usr/bin/env python3
 
 import rclpy
 from rclpy.node import Node
 import math
 import json
 import uuid
+import time
 
 # Import the vision and kicking messages
 from detection.msg import DetectionMsgs
 from brain.msg import Kick
 from brain.msg import GoToBallAndKickCmd 
+from std_msgs.msg import Empty  # Built-in message for the manual stop button
 
-# Import the RPC message needed to start the vision service
+# Import the RPC message needed to control services
 from booster_msgs.msg import RpcReqMsg
 
 class GoToBallAndKickNode(Node):
     def __init__(self):
         super().__init__('go_to_ball_and_kick_node')
         
-        # 1. Parameter for the robot prefix (e.g., 'Kev1n')
+        # 1. Parameters & State Variables
         self.declare_parameter('robot_prefix', 'Booster')
-        robot_prefix = self.get_parameter('robot_prefix').get_parameter_value().string_value
+        self.robot_prefix = self.get_parameter('robot_prefix').get_parameter_value().string_value
         
-        # 2. State Variables
         self.is_active = False
         self.target_x = 0.0
         self.target_y = 0.0
         self.is_goalshot = False
         
-        # 3. Subscriptions
-        # Subscribe to the high-level command trigger
-        cmd_topic = f'/{robot_prefix}/GoToBallAndKick'
+        # Tracking states for the automatic stop mechanism
+        self.has_reached_ball = False
+        self.last_time_ball_seen = 0.0
+        
+        # 2. Subscriptions
+        cmd_topic = f'/{self.robot_prefix}/GoToBallAndKick'
         self.cmd_sub = self.create_subscription(
-            GoToBallAndKickCmd,
-            cmd_topic,
-            self.command_callback,
-            10
+            GoToBallAndKickCmd, cmd_topic, self.command_callback, 10
         )
-        self.get_logger().info(f"Listening for commands on: {cmd_topic}")
         
-        # Subscribe to the continuous YOLO visual feed
+        # Manual cancel topic (uses built-in Empty message to avoid compile overhead)
+        cancel_topic = f'/{self.robot_prefix}/CancelKick'
+        self.cancel_sub = self.create_subscription(
+            Empty, cancel_topic, self.manual_cancel_callback, 10
+        )
+        
         self.vision_sub = self.create_subscription(
-            DetectionMsgs,
-            '/yolo_detection_server/detection_results',
-            self.vision_callback,
-            10  # Keep QoS history small so we only use fresh frames
+            DetectionMsgs, '/yolo_detection_server/detection_results', self.vision_callback, 10  
         )
         
-        # 4. Publishers
+        # 3. Publishers
         self.kick_pub = self.create_publisher(Kick, '/kick_ball', 10)
-        
-        # Publisher to send the vision activation request
         self.vision_req_pub = self.create_publisher(RpcReqMsg, '/VisionApiTopicReq', 10)
+        self.loco_req_pub = self.create_publisher(RpcReqMsg, f'/LocoApiTopicReq', 10)
         
-        # 5. Startup Routine
-        # Use a 1-second timer to ensure the publisher is registered with the ROS network 
-        # before we try to send the activation command.
+        self.get_logger().info(f"Node ready. Commands: {cmd_topic} | Manual Cancel: {cancel_topic}")
+        
+        # 4. Startup Routine
         self.startup_timer = self.create_timer(1.0, self.activate_yolo_network)
 
     def activate_yolo_network(self):
-        """Sends the RPC request to start the YOLO vision service on startup."""
-        
-        # 1. Check if the YOLO server is actually listening yet
+        """Polls for connection and handles YOLO activation."""
         if self.vision_req_pub.get_subscription_count() == 0:
             self.get_logger().warn("YOLO server not yet connected to our publisher. Waiting...")
-            return # Let the timer trigger this function again in 1 second
+            return
             
-        # 2. Once connected, cancel the timer so it only executes exactly once
         self.startup_timer.cancel()
-        
         self.get_logger().info("Sending request to activate YOLO Vision Service...")
         
         req_msg = RpcReqMsg()
@@ -84,64 +81,105 @@ class GoToBallAndKickNode(Node):
         self.get_logger().info("✅ YOLO Vision Service activation request sent!")
 
     def command_callback(self, msg):
-        """Activates the kicking loop and updates the target parameters."""
+        """Activates the node and resets tracking milestones."""
         self.target_x = msg.target_x
         self.target_y = msg.target_y
         self.is_goalshot = msg.is_goalshot
+        
+        # Reset tracking flags for the new kick
+        self.has_reached_ball = False
+        self.last_time_ball_seen = time.time()
         self.is_active = True
         
         mode = "GOALSHOT" if self.is_goalshot else "PASS"
-        self.get_logger().info(
-            f"Command Received! Mode: {mode} | Target: ({self.target_x}, {self.target_y}). "
-            "Engaging visual tracking..."
-        )
+        self.get_logger().info(f"Command Received! Mode: {mode} -> Target: ({self.target_x}, {self.target_y})")
+
+    def manual_cancel_callback(self, msg):
+        """Hhalts tracking immediately and sends an abort to the leg hardware."""
+        if not self.is_active:
+            return
+            
+        self.is_active = False
+        self.get_logger().warn("🛑 Manual cancel received! Halting stream...")
+        
+        # API ID 2038 with start: false terminates an active kick motion on the robot
+        abort_msg = RpcReqMsg()
+        abort_msg.uuid = str(uuid.uuid4())
+        abort_msg.header = json.dumps({"api_id": 2038})
+        abort_msg.body = json.dumps({"start": False, "version": 0})
+        self.loco_req_pub.publish(abort_msg)
+        self.get_logger().warn("🛑 Hardware leg swing abort request sent.")
 
     def vision_callback(self, msg):
-        """Processes YOLO data and publishes to /kick_ball continuously IF active."""
+        """Streams targets to /kick_ball and handles automatic completion tracking."""
         if not self.is_active:
-            return # Ignore visual data if we haven't been commanded to kick
+            return
             
+        ball_found_this_frame = False
+        current_time = time.time()
+        
         for obj in msg.objects:
             if obj.tag == 'sports ball':
+
+                sound_msg = RpcReqMsg()
+                sound_msg.uuid = str(uuid.uuid4())
+                sound_msg.header = json.dumps({"api_id": 2020})
+                sound_msg.body = json.dumps({"sound_file_path": "/home/booster/Workspace/sounds/kicking.wav"})
+                self.loco_req_pub.publish(sound_msg)
+
+                ball_found_this_frame = True
+                self.last_time_ball_seen = current_time
                 
-                # Extract ball coordinates relative to the robot
                 ball_x = float(obj.position[0])
                 ball_y = float(obj.position[1])
+                ball_range = math.sqrt(ball_x**2 + ball_y**2)
                 
-                # Construct the continuous kick message
+                # --- AUTOMATIC STOP LOGIC ---
+                # Milestone 1: Has the robot successfully arrived at the ball?
+                if ball_range < 0.45:
+                    if not self.has_reached_ball:
+                        self.get_logger().info("🎯 Robot reached the ball. Striking...")
+                    self.has_reached_ball = True
+                
+                # Milestone 2: If we previously reached the ball, but it is now far away,
+                # it means the ball was successfully kicked downfield. 
+                if self.has_reached_ball and ball_range > 1.2:
+                    self.get_logger().info(f"⚽ Kick complete! Ball cleared to distance: {ball_range:.2f}m. Stopping stream.")
+                    self.is_active = False
+                    return
+                
+                # --- CONSTRUCT & SEND TARGETS ---
                 kick_msg = Kick()
                 kick_msg.header.stamp = self.get_clock().now().to_msg()
                 kick_msg.header.frame_id = 'head_color_optical_frame'
-                
-                # Ball position
                 kick_msg.x = ball_x
                 kick_msg.y = ball_y
-                kick_msg.dir = 0.0 # Standard forward-facing kick
-                
-                # Target positioning (where the ball should go)
+                kick_msg.dir = 0.0 
                 kick_msg.goal_x = self.target_x
                 kick_msg.goal_y = self.target_y
                 kick_msg.robot_theta_to_field = 0.0 
                 
-                # Calculate Power
                 dist_to_target = math.sqrt((self.target_x - ball_x)**2 + (self.target_y - ball_y)**2)
-                
                 if self.is_goalshot:
-                    # Max power logic derived from brain.cpp
                     kick_msg.power = 1.5 if dist_to_target > 6.0 else 6.0
                 else:
-                    # If it's just a pass (not a goalshot), you likely want a proportional/softer kick
-                    # You can tune this multiplier based on your robot's physical strength
                     kick_msg.power = min(dist_to_target * 0.8, 4.0) 
                 
-                # Fire the command
                 self.kick_pub.publish(kick_msg)
-                
-                # For debugging (you might want to comment this out to prevent terminal spam)
-                self.get_logger().debug(f"Publishing kick -> Ball:({ball_x:.2f},{ball_y:.2f}) Power:{kick_msg.power:.1f}")
-                
-                # Break after finding the first sports ball to save processing
                 break
+                
+        # Milestone 3: Handle high-velocity kicks. If the robot strikes the ball hard, 
+        # it can vanish from the camera frame instantly. If the ball vanishes for more 
+        # than 0.6 seconds *after* the robot reached it, the kick is finished.
+        if not ball_found_this_frame and self.has_reached_ball:
+            if (current_time - self.last_time_ball_seen) > 0.6:
+                self.get_logger().info("⚽ Ball moved out of visual frame post-strike. Stopping stream.")
+                sound_msg = RpcReqMsg()
+                sound_msg.uuid = str(uuid.uuid4())
+                sound_msg.header = json.dumps({"api_id": 2020})
+                sound_msg.body = json.dumps({"sound_file_path": "/home/booster/Workspace/sounds/done.wav"})
+                self.loco_req_pub.publish(sound_msg)
+                self.is_active = False
 
 def main(args=None):
     rclpy.init(args=args)
@@ -153,7 +191,8 @@ def main(args=None):
         node.get_logger().info("Shutting down GoToBallAndKick node.")
     finally:
         node.destroy_node()
-        rclpy.shutdown()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 if __name__ == '__main__':
     main()
