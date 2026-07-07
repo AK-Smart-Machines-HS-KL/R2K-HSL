@@ -65,6 +65,9 @@ K1_TOPIC=$(jq -r '[.mapping[] | select(.hardware_type=="k1") | .topic][0] // ""'
 YAHBOOM_NS=$(echo "$YAHBOOM_TOPIC" | sed 's|/cmd_vel||')
 K1_NS=$(echo "$K1_TOPIC" | sed 's|/LocoApiTopicReq||')
 
+echo "🤖 Relay bots ($RELAY):"
+jq -r '.mapping | to_entries[] | "  \(.key): \(.value.hardware_type) → \(.value.topic)"' "$RELAY_FILE"
+
 export ROS2K_WS="$PWD"
 mkdir -p shared_state
 rm -f shared_state/current_strategy.json shared_state/Worldstate.json
@@ -89,10 +92,9 @@ cleanup() {
     
     ../kill_r2k.sh > /dev/null 2>&1
     
-    pkill -9 ollama > /dev/null 2>&1
-    
     if [ "$UBUNTU_VERSION" == "22.04" ]; then
-        pkill -9 -f "gazebo|gzserver|ruby|r2k_visualizer.py|referee_node|score_node|state_aggregator|rule_evaluator_red|ollama_sandbox_bridge|r2k_evaluator.py|tracker" > /dev/null 2>&1
+        pkill -9 -f "gazebo|gzserver|ruby|r2k_visualizer.py|referee_node|score_node|state_aggregator|rule_evaluator_red|r2k_evaluator.py|tracker" > /dev/null 2>&1
+        pkill -9 -f "python3.*ollama_sandbox_bridge" > /dev/null 2>&1
         pkill -9 -f micro_ros_agent > /dev/null 2>&1
     else
         docker stop uros_agent > /dev/null 2>&1 || true
@@ -139,6 +141,7 @@ else
     echo "🚀 Booting Ollama AI Server..."
     export OLLAMA_HOST=0.0.0.0
     nohup ollama serve > ollama.log 2>&1 &
+    disown $!
     sleep 5
 fi
 
