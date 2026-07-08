@@ -53,6 +53,21 @@ echo "=========================================================="
 # >>> WICHTIG: Wechsel in den src-Ordner für korrekten Python/ROS Kontext
 cd src || { echo "❌ Ordner 'src' nicht gefunden! Bitte Struktur prüfen."; exit 1; }
 
+RELAY_FILE="relay/${RELAY}.json"
+if [ ! -f "$RELAY_FILE" ]; then
+    echo "❌ Relay-Datei nicht gefunden: $RELAY_FILE"
+    echo "💡 Verfügbare Relay-Dateien: $(ls relay/*.json 2>/dev/null | xargs -n1 basename -s .json | tr '\n' ' ')"
+    exit 1
+fi
+REQUIRES_HARDWARE_SYNC=$(jq -r '.requires_hardware_sync' "$RELAY_FILE")
+YAHBOOM_TOPIC=$(jq -r '[.mapping[] | select(.hardware_type=="yahboom") | .topic][0] // ""' "$RELAY_FILE")
+K1_TOPIC=$(jq -r '[.mapping[] | select(.hardware_type=="k1") | .topic][0] // ""' "$RELAY_FILE")
+YAHBOOM_NS=$(echo "$YAHBOOM_TOPIC" | sed 's|/cmd_vel||')
+K1_NS=$(echo "$K1_TOPIC" | sed 's|/LocoApiTopicReq||')
+
+echo "🤖 Relay bots ($RELAY):"
+jq -r '.mapping | to_entries[] | "  \(.key): \(.value.hardware_type) → \(.value.topic)"' "$RELAY_FILE"
+
 export ROS2K_WS="$PWD"
 mkdir -p shared_state
 rm -f shared_state/current_strategy.json shared_state/Worldstate.json
@@ -64,12 +79,13 @@ cleanup() {
     TRAP_TRIGGERED=true
     echo -e "\n🛑 [TEARDOWN] Shutting down system..."
 
-    if [ "$RELAY" = "hardware_mirror" ]; then
+    if [ "$REQUIRES_HARDWARE_SYNC" = "true" ]; then
         if [ "$UBUNTU_VERSION" == "22.04" ]; then
-            timeout 1 ros2 topic pub --once /bot1/cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.0, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.0}}" > /dev/null 2>&1 || true
-            timeout 1 ros2 topic pub --once /bot1/LocoApiTopicReq booster_msgs/msg/RpcReqMsg "{uuid: 'emergency_stop', header: '{\"api_id\": 2000}', body: '{\"mode\": 1}'}" > /dev/null 2>&1 || true
+            timeout 1 ros2 topic pub --once "$YAHBOOM_TOPIC" geometry_msgs/msg/Twist "{linear: {x: 0.0, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.0}}" > /dev/null 2>&1 || true
+            timeout 1 ros2 topic pub --once "$K1_TOPIC" booster_msgs/msg/RpcReqMsg "{uuid: 'emergency_stop', header: '{\"api_id\": 2000}', body: '{\"mode\": 1}'}" > /dev/null 2>&1 || true
         else
-            docker exec -i $CONTAINER_NAME bash -c "source /opt/ros/humble/setup.bash && timeout 1 ros2 topic pub --once /bot1/cmd_vel geometry_msgs/msg/Twist \"{linear: {x: 0.0, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.0}}\"" > /dev/null 2>&1 || true
+            docker exec -i $CONTAINER_NAME bash -c "source /opt/ros/humble/setup.bash && timeout 1 ros2 topic pub --once $YAHBOOM_TOPIC geometry_msgs/msg/Twist \"{linear: {x: 0.0, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.0}}\"" > /dev/null 2>&1 || true
+            docker exec -i $CONTAINER_NAME bash -c "source /opt/ros/humble/setup.bash && timeout 1 ros2 topic pub --once $K1_TOPIC booster_msgs/msg/RpcReqMsg \"{uuid: 'emergency_stop', header: '{\\\"api_id\\\": 2000}', body: '{\\\"mode\\\": 1}'}\"" > /dev/null 2>&1 || true
         fi
     fi
 
@@ -77,10 +93,9 @@ cleanup() {
     
     ../kill_r2k.sh > /dev/null 2>&1
     
-    pkill -9 ollama > /dev/null 2>&1
-    
     if [ "$UBUNTU_VERSION" == "22.04" ]; then
-        pkill -9 -f "gazebo|gzserver|ruby|r2k_visualizer.py|referee_node|score_node|state_aggregator|rule_evaluator_red|ollama_sandbox_bridge|r2k_evaluator.py|tracker" > /dev/null 2>&1
+        pkill -9 -f "gazebo|gzserver|ruby|r2k_visualizer.py|referee_node|score_node|state_aggregator|rule_evaluator_red|r2k_evaluator.py|tracker" > /dev/null 2>&1
+        pkill -9 -f "python3.*ollama_sandbox_bridge" > /dev/null 2>&1
         pkill -9 -f micro_ros_agent > /dev/null 2>&1
     else
         docker stop uros_agent > /dev/null 2>&1 || true
@@ -92,9 +107,12 @@ cleanup() {
 trap cleanup SIGINT SIGTERM EXIT
 
 # ---- HARDWARE HOTSPOT ----
-if [ "$RELAY" = "hardware_mirror" ]; then
-    echo "📶 Starting Wi-Fi Hotspot (maker4)..."
-    nmcli device wifi hotspot ssid maker4 password nao12345
+if [ "$REQUIRES_HARDWARE_SYNC" = "true" ]; then
+    if nmcli -t -f NAME,TYPE connection show --active 2>/dev/null | grep -q '^Hotspot:802-11-wireless$'; then
+        echo "📶 Hotspot 'maker4' already active, reusing existing connection."
+    else
+        nmcli device wifi hotspot ssid maker4 password nao12345
+    fi
     
     echo "⏳ Warte auf Netzwerk-Routing (3s)..."
     sleep 3 
@@ -107,6 +125,7 @@ if [ "$RELAY" = "hardware_mirror" ]; then
         echo "🔌 Starting DOCKER micro-ROS Agent on Domain 0..."
         docker rm -f $(docker ps -a -q --filter ancestor=microros/micro-ros-agent:humble) > /dev/null 2>&1 || true
         docker run -d --name uros_agent --rm --net=host -e ROS_DOMAIN_ID=0 microros/micro-ros-agent:humble udp4 --port 8888 -v4 > /dev/null 2>&1
+        sleep 3
     fi
 fi
 
@@ -123,6 +142,7 @@ else
     echo "🚀 Booting Ollama AI Server..."
     export OLLAMA_HOST=0.0.0.0
     nohup ollama serve > ollama.log 2>&1 &
+    disown $!
     sleep 5
 fi
 
@@ -160,8 +180,8 @@ if [ "$UBUNTU_VERSION" == "22.04" ]; then
         sleep 10
         while true; do
             if ! pgrep -f "gazebo|gzserver|ruby" > /dev/null 2>&1; then
-                if [ "$RELAY" = "hardware_mirror" ]; then
-                    ros2 topic pub --once /bot1/cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.0, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.0}}" > /dev/null 2>&1 &
+                if [ "$REQUIRES_HARDWARE_SYNC" = "true" ]; then
+                    ros2 topic pub --once "$YAHBOOM_TOPIC" geometry_msgs/msg/Twist "{linear: {x: 0.0, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.0}}" > /dev/null 2>&1 &
                 fi
                 pkill -f r2k_visualizer.py > /dev/null 2>&1
                 kill -TERM $$ 2>/dev/null
@@ -176,21 +196,21 @@ if [ "$UBUNTU_VERSION" == "22.04" ]; then
     sleep 2
     python3 ai_tactics/json_spawner.py
 
-    if [ "$RELAY" = "hardware_mirror" ]; then
+    if [ "$REQUIRES_HARDWARE_SYNC" = "true" ]; then
         echo "=========================================="
         echo "🚨 BITTE SCHALTE DEN YAHBOOM & K1 JETZT EIN 🚨"
         echo "=========================================="
         YAHBOOM_READY=false; K1_READY=false; WAIT_TIME=0
         while [ $WAIT_TIME -lt 10 ]; do
-            if [ "$YAHBOOM_READY" = false ] && ros2 topic list 2>/dev/null | grep -q "/bot1/battery"; then
+            if [ "$YAHBOOM_READY" = false ] && ros2 topic list 2>/dev/null | grep -q "${YAHBOOM_NS}/battery"; then
                 echo "🔋 Yahboom Topic erkannt! Führe DDS Warm-Up durch..."
-                ros2 topic echo --once --qos-reliability best_effort /bot1/battery > /dev/null 2>&1 &
+                ros2 topic echo --once --qos-reliability best_effort ${YAHBOOM_NS}/battery > /dev/null 2>&1 &
                 echo "✅ YAHBOOM BEREIT!"
                 YAHBOOM_READY=true
             fi
-            if [ "$K1_READY" = false ] && ros2 topic list 2>/dev/null | grep -q "/bot1/odometer_state"; then
+            if [ "$K1_READY" = false ] && ros2 topic list 2>/dev/null | grep -q "${K1_NS}/odometer_state"; then
                 echo "⚙️ K1-INTERFACE ERKANNT! Führe DDS Warm-Up durch..."
-                ros2 topic echo --once /bot1/LocoApiTopicResp > /dev/null 2>&1 &
+                ros2 topic echo --once ${K1_NS}/LocoApiTopicResp > /dev/null 2>&1 &
                 echo "✅ K1 BEREIT!"
                 K1_READY=true
             fi
@@ -254,8 +274,8 @@ else
         sleep 10
         while true; do
             if ! docker exec $CONTAINER_NAME pgrep -f "gazebo|gzserver|ruby" > /dev/null 2>&1; then
-                if [ "$RELAY" = "hardware_mirror" ]; then
-                    docker exec -d $CONTAINER_NAME bash -c "$SOURCE_CMD && ros2 topic pub --once /bot1/cmd_vel geometry_msgs/msg/Twist \"{linear: {x: 0.0, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.0}}\"" > /dev/null 2>&1
+                if [ "$REQUIRES_HARDWARE_SYNC" = "true" ]; then
+                    docker exec -d $CONTAINER_NAME bash -c "$SOURCE_CMD && ros2 topic pub --once $YAHBOOM_TOPIC geometry_msgs/msg/Twist \"{linear: {x: 0.0, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.0}}\"" > /dev/null 2>&1
                 fi
                 docker exec $CONTAINER_NAME pkill -f r2k_visualizer.py > /dev/null 2>&1
                 kill -TERM $$ 2>/dev/null
@@ -270,21 +290,21 @@ else
     sleep 2
     docker exec $CONTAINER_NAME bash -c "$SOURCE_CMD && python3 ai_tactics/json_spawner.py"
 
-    if [ "$RELAY" = "hardware_mirror" ]; then
+    if [ "$REQUIRES_HARDWARE_SYNC" = "true" ]; then
         echo "=========================================="
         echo "🚨 BITTE SCHALTE DEN YAHBOOM & K1 JETZT EIN 🚨"
         echo "=========================================="
         YAHBOOM_READY=false; K1_READY=false; WAIT_TIME=0
         while [ $WAIT_TIME -lt 10 ]; do
-            if [ "$YAHBOOM_READY" = false ] && docker exec $CONTAINER_NAME bash -c "$SOURCE_CMD && ros2 topic list 2>/dev/null" | grep -q "/bot1/battery"; then
+            if [ "$YAHBOOM_READY" = false ] && docker exec $CONTAINER_NAME bash -c "$SOURCE_CMD && ros2 topic list 2>/dev/null" | grep -q "${YAHBOOM_NS}/battery"; then
                 echo "🔋 Yahboom Topic erkannt! Führe DDS Warm-Up durch..."
-                docker exec -i $CONTAINER_NAME bash -c "$SOURCE_CMD && ros2 topic echo --once --qos-reliability best_effort /bot1/battery > /dev/null 2>&1" &
+                docker exec -i $CONTAINER_NAME bash -c "$SOURCE_CMD && ros2 topic echo --once --qos-reliability best_effort ${YAHBOOM_NS}/battery > /dev/null 2>&1" &
                 echo "✅ YAHBOOM BEREIT!"
                 YAHBOOM_READY=true
             fi
-            if [ "$K1_READY" = false ] && docker exec $CONTAINER_NAME bash -c "$SOURCE_CMD && ros2 topic list 2>/dev/null" | grep -q "/bot1/odometer_state"; then
+            if [ "$K1_READY" = false ] && docker exec $CONTAINER_NAME bash -c "$SOURCE_CMD && ros2 topic list 2>/dev/null" | grep -q "${K1_NS}/odometer_state"; then
                 echo "⚙️ K1-INTERFACE ERKANNT! Führe DDS Warm-Up durch..."
-                docker exec -i $CONTAINER_NAME bash -c "$SOURCE_CMD && ros2 topic echo --once /bot1/LocoApiTopicResp > /dev/null 2>&1" &
+                docker exec -i $CONTAINER_NAME bash -c "$SOURCE_CMD && ros2 topic echo --once ${K1_NS}/LocoApiTopicResp > /dev/null 2>&1" &
                 echo "✅ K1 BEREIT!"
                 K1_READY=true
             fi

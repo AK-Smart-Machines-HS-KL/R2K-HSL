@@ -1,6 +1,29 @@
-1. deploy_relay.sh (The Setup & Installation Script)
+README, incl. Deployment on booster
 
-This is your primary tool. It copies all necessary files to the robot, configures the systemd background services, dynamically updates the robot's namespace prefix, and optionally sets the bridge to launch automatically every time the robot powers on.
+This util will install and activate  a ROS2 
+relay function to isolate each bots topic into its own namespace.
+
+IMPORTANT: if you are to steer the K1 bots with ros2k core id (ollama_bridge), check the bots entries in core/src/relay/hardware_mirror.json:
+Using Kev1n as running sample:
+   "k1_bot": {"hardware_type": "k1", "topic": "/Kev1n/LocoApiTopicReq", "mirror_of": "blue_2"}
+  }
+
+NOTE:once we move the LLM into the K1 bots, this relay will render useless.
+
+This is a loosely coupled set of python code. Main purposes:
+* Runnning olllama bridge on host requires K1 listening 
+* this code will list specific ros2 topics for DOMAIN 0
+* Eg: K1<robot name>/<rLoCoAPITopicReq/>, <robot name>/Odometer_States
+* refresh rate:
+**  Installation**
+0. Start network "maker4", nao12345
+- PC maker4 provides the network wlan 
+- K1 power on , will connect to the net, default mode will suffice
+0. deploy_relay.sh <Robot_IP> <Robot_Name>
+(The Setup & Installation Script)
+
+This is your primary tool. It copies all necessary files to the robot, configures the system-daemon background services, dynamically updates the robot's ROS2 namespace prefix (robot name) , and optionally sets the relay to launch automatically every time the robot powers on
+
 Parameters (Positional Arguments)
 
 You must provide these two arguments in this exact order at the end of your command:
@@ -22,14 +45,23 @@ Examples
     Standard Full Deployment:
     Bash
 
-    ./deploy_relay.sh 10.42.0.102 bot1
+    ./deploy_relay.sh 10.42.0.122 Kev1n
+    password: 123456
 
-    (Deploys to 10.42.0.102, prefixes topics with /bot1/, and sets the bridge to run on boot).
+    (Deploys to 10.42.0.122, prefixes topics with /Kev1n/, and sets the bridge to run on boot).
+****************************
+Shared connection to 10.42.0.122 closed.
+Cleaning up SSH connection...
+Exit request sent.
+========================================================
+Deployment Complete! The relays are now running.
+========================================================
 
+****************************
     Deploy for Testing (No Auto-Start):
     Bash
 
-    ./deploy_relay.sh --no_auto_start 10.42.0.102 bot_test
+    ./deploy_relay.sh --no_auto_start 10.42.0.122 Kev1n
 
     (Deploys the files and configures them for /bot_test/, but does NOT tell the robot to launch them automatically on the next reboot).
 
@@ -49,11 +81,13 @@ Examples
     Start the relays manually:
     Bash
 
-    ./start_relays.sh 10.42.0.102 bot2
+    ./start_relays.sh 10.42.0.122 Kev1n
 
-    (Connects, sets the environment variables, starts the Python scripts in the background, and drops internal_relay.log and external_relay.log in the robot's workspace).
-
-3. stop_relays.sh (The Manual Kill Script)
+    (Connects, sets the environment variables on robot to get relays active, starts the Python scripts in the background, and drops internal_relay.log and external_relay.log in the robot's workspace).
+    
+Check for "Kev1n"in ros2 topic list
+3. stop_relays.sh <IP address>
+(The Manual Kill Script)
 
 This script is the exact counter-part to start_relays.sh. It logs into the robot and forcefully kills any running Python processes named internal_relay.py or external_relay.py.
 Parameters (Positional Arguments)
@@ -62,10 +96,10 @@ Parameters (Positional Arguments)
 
 Examples
 
-    Stop the manually started relays:
+    Stop the manually started relays:bridge
     Bash
 
-    ./stop_relays.sh 10.42.0.102
+    ./stop_relays.sh 10.42.0.122
 
     (Silently kills the background processes on that robot).
 
