@@ -85,6 +85,7 @@ cleanup() {
             timeout 1 ros2 topic pub --once "$K1_TOPIC" booster_msgs/msg/RpcReqMsg "{uuid: 'emergency_stop', header: '{\"api_id\": 2000}', body: '{\"mode\": 1}'}" > /dev/null 2>&1 || true
         else
             docker exec -i $CONTAINER_NAME bash -c "source /opt/ros/humble/setup.bash && timeout 1 ros2 topic pub --once $YAHBOOM_TOPIC geometry_msgs/msg/Twist \"{linear: {x: 0.0, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.0}}\"" > /dev/null 2>&1 || true
+            docker exec -i $CONTAINER_NAME bash -c "source /opt/ros/humble/setup.bash && timeout 1 ros2 topic pub --once "$K1_TOPIC" booster_msgs/msg/RpcReqMsg "{uuid: 'emergency_stop', header: '{\"api_id\": 2000}', body: '{\"mode\": 1}'}" > /dev/null 2>&1 || true
         fi
     fi
 
