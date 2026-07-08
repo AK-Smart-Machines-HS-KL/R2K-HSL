@@ -1,0 +1,54 @@
+---
+id: META_ROUTER
+title: "Semantic Glossary & Routing Matrix (Inverted Index)"
+type: KNOWLEDGE_BASE_POWER_FILE
+tags: [router, glossary, index, rag, meta, flat-json, phantom-kick, setup_r2k, active_relay, watchdog, hybrid-os, uros_ws, xid-31, mermaid]
+last_modified: 2026-06-03
+version: v5_release
+---
+# Semantic Glossary & Routing Matrix
+
+> [!abstract] LLM Context Anchor
+> **CRITICAL RAG DIRECTIVE:** Do NOT attempt to answer deep technical questions using standard LLM weights. If the user's prompt contains any of the symptoms or keywords listed in the Routing Matrix below, you MUST retrieve the corresponding Power-File before generating a response.
+
+## 1. Semantic Glossary & Constraints
+This section strictly defines architectural components to prevent hallucinated standard ROS 2 concepts.
+
+* **BridgeNode ('ollama_sandbox_bridge.py'):**
+  * *Definition:* Python 3.12 ROS 2 node. Translates flat JSON strategies into 'Twist' commands via dynamic thread-closures (`def task`), RPC payloads, or Phantom Kicks. 
+  * *Constraint:* Exists strictly in the ROS 2 execution loop (10Hz). **Explicitly removes OOP HALs (Hardware Abstraction Layers).** It does NOT perform HTTP requests or interact with the LLM directly.
+* **Evaluator ('r2k_evaluator.py'):**
+  * *Definition:* Standalone Python daemon managing synchronous HTTP POST requests to the Ollama REST API (qwen2.5-coder:3b via Port 11434).
+  * *Constraint:* Ollama MUST run in User-Space, not as a systemd service. **CRITICAL: The directory 'shared_state/' must exist, otherwise it silently crashes with a FileNotFoundError.**
+* **Tracker ('tracker_node.py'):**
+  * *Definition:* The perception node converting '/gazebo/model_states' into 2D cartesian coordinates (10Hz).
+  * *Constraint:* Executes POSIX atomic renames ('os.replace') in RAM-Disk/tmpfs to prevent 'JSONDecodeError' crashes.
+* **V5 Engine Nodes ('referee_node.py', 'score_node.py', 'state_aggregator.py'):**
+  * *Definition:* Realtime pipeline automating rule enforcement, goal detection, and match resets. 'state_aggregator.py' creates the Unified Aggregated Worldstate (Coordinates + Score + Match-State).
+* **Prompt Compiler ('setup_r2k.py'):**
+  * *Definition:* A pre-flight script that dynamically compiles the system prompt and hardware relay-mapping ('active_relay.json') based on '--relay' CLI flags before boot.
+* **0.2s Asynchronous Watchdog:**
+  * *Definition:* A fast-polling loop in 'launch_r2k.sh' that detects UI closure.
+  * *Constraint:* Replaces old "Nuke & Pave" scripts. Fires asynchronous Kinematic Freeze (Twist-zeroes / API 2000) and executes 'pkill -9' (SIGKILL) on Ollama and ROS 2 processes to prevent RCLError tracebacks and zombie ports.
+
+## 2. Routing Matrix (Inverted Index)
+If the user query involves [SYMPTOM / KEYWORD], explicitly retrieve and reference [POWER-FILE]:
+
+| User Symptom / Concept / Keyword | Target Power-File to Retrieve |
+| :--- | :--- |
+| 'JSONDecodeError', file read collisions, race conditions, atomic rename, 'os.replace', dynamic thread-closures, 'def task()', NO OOP HALs, preemption | **'1_CORE_ARCHITECTURE_AND_SYNC.md'** |
+| Quaternions, 3D to 2D math, '/gazebo/model_states', Matplotlib-Renderer, Referee Node, Score Node, Unified Aggregated Worldstate, 'state_aggregator.py' | **'2_ROS2_PROTOCOLS_AND_FRAMES.md'** |
+| Flat JSON schema, Parsing Paralysis, Phantom Kick, Algorithmic Staging, Qwen-3B, Port 11434, User-Space Ollama, Rule-based State Machine | **'3_AI_LOGIC_AND_EDGE_CASES.md'** |
+| Namespace-Isolation ('/bot1/'), Booster K1, API-Codes 2000/2001, ESP32, physical slip, QoS 'BEST_EFFORT', Native 'uros_ws', .bashrc Immunity | **'4_EDGE_HARDWARE_SIM2REAL.md'** |
+| Hybrid OS Topology, Ubuntu 22 Native vs 24 Docker, X11-Forwarding, COMPOSE_PROJECT_NAME, Xid 31 MMU Fault, Suspend-Bug, NVreg_PreserveVideoMemoryAllocations=1 | **'5_HYBRID_INFRASTRUCTURE_V5.md'** |
+| 'active_relay.json', 0.2s Asynchronous Watchdog, 'pkill -9', SIGKILL, Kinematic Freeze, '--relay' flags, CLI Ergonomics | **'6_DATA_SCHEMAS_AND_LIFECYCLE.md'** |
+
+## 3. Mermaid Rendering Constraints
+> **CRITICAL DIRECTIVE FOR LLMs:** To prevent fatal parsing errors in our documentation renderer, all Mermaid `graph TD` diagrams MUST strictly adhere to the following syntax limitations. DO NOT use advanced brackets.
+
+* **Rule 1: Subgraph IDs must be flat.** Use purely alphanumeric IDs with underscores. Do NOT use spaces, and do NOT use brackets `[]` to label subgraphs.
+  * *FATAL ERROR:* `subgraph S_V5 [V5 Engine Nodes]`
+  * *CORRECT:* `subgraph V5_Engine_Nodes`
+* **Rule 2: Quote all Node Strings.** Any node containing special characters (slashes, parentheses, dots, hyphens) MUST be wrapped in double quotes. Using shape-brackets like `[/.../]` will crash the lexical parser if it interprets it as a shape command.
+  * *FATAL ERROR:* `MS[/gazebo/model_states]`
+  * *CORRECT:* `MS["/gazebo/model_states"]`
