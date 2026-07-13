@@ -3,8 +3,8 @@ id: 6_03
 title: "Cheatpage: CLI Ergonomics, Launch Flags & V5 System-Orchestration"
 type: CHEATPAGE
 tags: [cli, flags, launch, terminal, hybrid-os, bashrc-immunity, watchdog]
-last_modified: 2026-05-31
-version: v5_release
+last_modified: 2026-07-13
+version: v6
 ---
 # Cheatpage: CLI Ergonomics & Launch Flags
 
@@ -19,9 +19,10 @@ version: v5_release
 
 Das Startskript ist der alleinige Entrypoint. Alle Parameter werden an `setup_r2k.py` zur dynamischen Kompilation weitergereicht.
 
-* `--relay [profile]`: Bestimmt das Hardware-Routing (via `active_relay.json`).
-    * `only_sim_bots`: Routet an Gazebo.
-    * `hardware_mirror`: Aktiviert physische Spiegelung (Yahboom/K1).
+* `--relay [profile]`: Selects the relay profile. `launch_r2k.sh` automatically reads `src/relay/<profile>.json` as single source of truth. Topic names, hardware namespaces and sync flags are derived from the JSON at startup. No manual sync between script and config required.
+    * `only_sim_bots`: Routes all agents to Gazebo (default).
+    * `hardware_mirror`: Activates physical mirroring (Yahboom/K1).
+    * Any future `relay/<name>.json` file is supported automatically.
 * `--scenario [name]`: Wählt die Szenario-JSON; löst die dynamische Prompt-Kompilierung für `qwen2.5-coder:3b` aus.
 * `--no-explain`: Deaktiviert den textuellen Reasoning-Output der KI, um die Latenz der 10Hz-Pipeline zu minimieren.
 * `--debug`: Aktiviert verbale Logs der `ollama_sandbox_bridge.py` und des `state_aggregator.py`.
@@ -48,3 +49,8 @@ Das System nutzt `launch_r2k.sh` als einzigen Entrypoint. Die ehemals existieren
     * *Lösung:* Das V5-Skript setzt `COMPOSE_PROJECT_NAME=$(basename "$PWD")`. Stelle sicher, dass die Arbeitsverzeichnisse der Instanzen eindeutige Namen tragen.
 * **"cannot change mount namespace":** Tritt bei korrupten Snap-Schnittstellen auf Ubuntu 24 auf.
     * *Lösung:* `sudo /usr/lib/snapd/snap-discard-ns <app>` ausführen.
+
+## 5. Hardware Sync Stability Notes [NEW in v6]
+
+* **Hotspot reuse (maker4):** If the maker4 hotspot is already active when `launch_r2k.sh` starts, it will not be restarted. This prevents breaking the WLAN connection of already-connected hardware (e.g. K1). The hotspot is only started fresh if not yet active.
+* **uros agent race condition (Ubuntu 24):** The Docker micro-ROS agent container needs ~3s to become ready after start. A `sleep 3` is added after container launch to avoid the Yahboom reconnect missing the agent on relaunch.

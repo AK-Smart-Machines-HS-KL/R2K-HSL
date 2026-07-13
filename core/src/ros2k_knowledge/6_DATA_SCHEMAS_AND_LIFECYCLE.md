@@ -2,9 +2,9 @@
 id: 6_DATA_LIFECYCLE
 title: "Section 6: Data Schemas & System Lifecycle (V5)"
 type: KNOWLEDGE_BASE_POWER_FILE
-tags: [json, schema, rpc, bash, lifecycle, orchestration, setup_r2k, flat-json, relay-profiles, watchdog, cli-ergonomics, active_relay, bashrc-immunity]
-last_modified: 2026-05-31
-version: v5_release
+tags: [json, schema, rpc, bash, lifecycle, orchestration, setup_r2k, flat-json, relay-profiles, watchdog, cli-ergonomics, active_relay, bashrc-immunity, v6, tactical-score, tactical-reward, match-state, eval-results, batch-evaluator, momentum]
+last_modified: 2026-07-13
+version: v6_active
 ---
 # Section 6: Data Schemas & System Lifecycle (V5)
 
@@ -138,3 +138,163 @@ pkill -9 -f "ros2"
 pkill -9 ollama
 echo "✅ Teardown complete. Ports released."
 ~~~
+
+---
+
+## V6 Addendum: New Topics & Batch Eval Schemas
+
+> [!warning] V6 Extension
+> V6 adds three new/extended ROS topics (`/match_state` v6, `/tactical_score` v6,
+> `/tactical_reward`) and the `batch_evaluator.py` orchestrator with `eval_results.json` output.
+> Source: `core/docs/optimization_spec_v6.md`.
+
+### `/match_state` V6 Schema (referee_node.py)
+
+Extended from V5 (which had only `blue`, `red`, `status`) to include ball-out, foul, and restart fields:
+
+~~~json
+{
+  "blue": 0,
+  "red": 0,
+  "status": "playing",
+  "ball_out_event": null,
+  "restart_team": null,
+  "restart_pos": null,
+  "last_toucher": null,
+  "foul": null
+}
+~~~
+
+Valid statuses: `"playing"`, `"goal"`, `"ball_out"`, `"foul_penalty"`.
+
+Foul event object (when `foul` is not null):
+~~~json
+{
+  "foul": {
+    "type": "pushing",
+    "offender": "blue_2",
+    "victim": "red_1",
+    "position": {"x": -1.5, "y": 0.3},
+    "penalty": "sideline_warp"
+  }
+}
+~~~
+
+### `/tactical_score` V6 Schema (score_node.py)
+
+Extended from V5 with momentum fields:
+
+~~~json
+{
+  "current_numerical_score": -5.24,
+  "average_numerical_score": -0.82,
+  "momentum_30s": -2.1,
+  "momentum_trend": "collapsing",
+  "fact_label": "Red attacking",
+  "ball_possession_fact": "Red Team"
+}
+~~~
+
+Valid trends: `"ascending"`, `"improving"`, `"stable"`, `"declining"`, `"collapsing"`.
+
+### `/tactical_reward` Schema (reward_node.py — NEW in V6)
+
+Published at 1Hz. Two source types: decision rewards and foul penalties.
+
+Decision reward:
+~~~json
+{
+  "timestamp": 1782986654.74,
+  "source": "decision",
+  "action_type": "Move",
+  "target_x": 2.3,
+  "target_y": -1.1,
+  "score_before": -6.5,
+  "score_after": -4.2,
+  "reward": 2.3,
+  "classification": "positive",
+  "bot_id": "blue_1"
+}
+~~~
+
+Foul penalty:
+~~~json
+{
+  "timestamp": 1782986655.10,
+  "source": "foul",
+  "action_type": "pushing",
+  "target_x": null,
+  "target_y": null,
+  "score_before": -3.2,
+  "score_after": null,
+  "reward": -1.0,
+  "classification": "negative",
+  "bot_id": "blue_2"
+}
+~~~
+
+Classification thresholds: `> +1.0` positive, `-1.0..+1.0` neutral, `< -1.0` negative.
+
+### `eval_results.json` Schema (batch_evaluator.py)
+
+Single output file per batch run. No per-run files. All metrics collected live via ROS topic subscriptions.
+
+~~~json
+{
+  "meta": {
+    "version": "v6",
+    "timestamp": "20260709_143022",
+    "duration_per_run": 60,
+    "runs_per_config": 5,
+    "models": ["qwen2.5-coder:3b", "nemotron-3-nano:4b", "cosmos"],
+    "strategies": ["strat_aggro", "strat_recover", "strat_default"],
+    "scenarios": ["3vs3_attack_center", "..."]
+  },
+  "results": {
+    "3vs3_defensive_crisis": {
+      "strat_aggro": {
+        "qwen2.5-coder:3b": {
+          "runs": [
+            {
+              "goals_for": 1,
+              "goals_against": 0,
+              "avg_reward": 0.82,
+              "positive_rate": 0.45,
+              "negative_rate": 0.18,
+              "foul_rate": 0.03,
+              "avg_latency_ms": 950,
+              "decisions": 8,
+              "avg_bot_distance": 2.1
+            }
+          ],
+          "aggregate": {
+            "composite": 0.72,
+            "consistency": 0.12,
+            "win_rate": 0.8
+          },
+          "momentum_series": [
+            {"time_s": 0, "blue_score": 0, "red_score": 0, "trend": "stable"},
+            {"time_s": 10, "blue_score": 1.2, "red_score": -0.3, "trend": "improving"}
+          ]
+        }
+      }
+    }
+  }
+}
+~~~
+
+### Batch Evaluator CLI (batch_evaluator.py)
+
+~~~bash
+python3 batch_evaluator.py \
+    --scenarios 3vs3_attack_center,3vs3_defensive_crisis,3vs3_fast_counter \
+    --strategies strat_aggro,strat_recover,strat_default \
+    --models qwen2.5-coder:3b,nemotron-3-nano:4b \
+    --runs 5 \
+    --duration 60 \
+    --output eval_results_20260709.json
+~~~
+
+* Subscribes to `/tactical_score`, `/tactical_reward`, `/match_state`, `/world_positions` in a parallel thread.
+* All metrics aggregated in memory, written once at end.
+* **Must NOT kill `ollama` on teardown** — only ROS nodes and Gazebo.

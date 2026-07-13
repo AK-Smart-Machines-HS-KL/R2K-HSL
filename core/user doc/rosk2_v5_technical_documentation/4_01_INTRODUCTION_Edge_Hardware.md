@@ -3,8 +3,8 @@ id: 4_01
 title: "Introduction to Edge Hardware Integration"
 type: INTRODUCTION
 tags: [sim2real, edge-hardware, esp32, booster-k1, json-rpc, hal]
-last_modified: 2026-05-31
-version: v5_release
+last_modified: 2026-07-13
+version: v6
 ---
 # Introduction to Edge Hardware Integration
 
@@ -141,10 +141,14 @@ In V5, hardware integration is orchestrated centrally via CLI flags passed to th
 ./launch_r2k.sh --scenario 2vs2_default --relay hardware_mirror
 ~~~
 
+**[NEW in v6] Relay JSON as Single Source of Truth:**
+As of v6, `relay/<name>.json` is the single source of truth for hardware topic names. `YAHBOOM_TOPIC`, `K1_TOPIC`, `YAHBOOM_NS` and `K1_NS` are derived from the JSON at launch. No hardcoded `/bot1` or `/Kev1n` references remain in `launch_r2k.sh`.
+
 ## 4. Known Issues & Limitations
 * Simulation odometry is perfect; physical odometry suffers from wheel slip and battery voltage drops, causing a severe divergence between the LLM's expected reality and the physical result.
 * Simultaneous execution of Gazebo and multiple physical agents requires intense network bandwidth, occasionally causing FastDDS packet drops.
 * **[NEW in v5] Docker Network Isolation:** On Ubuntu 24.04 (Docker OS mode), FastDDS UDP multicast for hardware Discovery relies entirely on `network_mode: "host"`. If the host firewall blocks UDP port 8888, the micro-ROS agents will fail to appear on the DDS bus.
+* **[NEW in v6] Docker uros agent startup delay:** The Docker micro-ROS agent container takes ~3s to become ready after start on Ubuntu 24. A guard `sleep 3` is added in `launch_r2k.sh` to prevent the Yahboom from missing the agent on reconnect.
 
 ## 5. Glossary
 * **Sim2Real:** The process of training or defining logic in a simulation and transferring it to physical reality.

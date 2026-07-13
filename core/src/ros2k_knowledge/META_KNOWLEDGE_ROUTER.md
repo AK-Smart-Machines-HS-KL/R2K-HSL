@@ -2,9 +2,9 @@
 id: META_ROUTER
 title: "Semantic Glossary & Routing Matrix (Inverted Index)"
 type: KNOWLEDGE_BASE_POWER_FILE
-tags: [router, glossary, index, rag, meta, flat-json, phantom-kick, setup_r2k, active_relay, watchdog, hybrid-os, uros_ws, xid-31, mermaid]
-last_modified: 2026-06-03
-version: v5_release
+tags: [router, glossary, index, rag, meta, flat-json, phantom-kick, setup_r2k, active_relay, watchdog, hybrid-os, uros_ws, xid-31, mermaid, v6, foul, ball-out, kick-in, momentum, reward-node, batch-evaluator, aggression]
+last_modified: 2026-07-13
+version: v6_active
 ---
 # Semantic Glossary & Routing Matrix
 
@@ -25,6 +25,12 @@ This section strictly defines architectural components to prevent hallucinated s
   * *Constraint:* Executes POSIX atomic renames ('os.replace') in RAM-Disk/tmpfs to prevent 'JSONDecodeError' crashes.
 * **V5 Engine Nodes ('referee_node.py', 'score_node.py', 'state_aggregator.py'):**
   * *Definition:* Realtime pipeline automating rule enforcement, goal detection, and match resets. 'state_aggregator.py' creates the Unified Aggregated Worldstate (Coordinates + Score + Match-State).
+* **V6 Reward Node ('reward_node.py') [NEW in v6]:**
+  * *Definition:* 1Hz ROS 2 node publishing tactical rewards (-10..+10 scale) on '/tactical_reward'. Computes decision deltas (score before/after action) and foul penalties (fixed -1).
+  * *Constraint:* Two code paths (mtime-polling for decisions, '/match_state' subscription for fouls) must not be mixed.
+* **V6 Batch Evaluator ('batch_evaluator.py') [NEW in v6]:**
+  * *Definition:* Headless orchestrator for automated scenario evaluation. Subscribes to '/tactical_score', '/tactical_reward', '/match_state', '/world_positions' and writes 'eval_results.json'.
+  * *Constraint:* Must NOT kill 'ollama' on teardown — only ROS nodes and Gazebo.
 * **Prompt Compiler ('setup_r2k.py'):**
   * *Definition:* A pre-flight script that dynamically compiles the system prompt and hardware relay-mapping ('active_relay.json') based on '--relay' CLI flags before boot.
 * **0.2s Asynchronous Watchdog:**
@@ -42,6 +48,9 @@ If the user query involves [SYMPTOM / KEYWORD], explicitly retrieve and referenc
 | Namespace-Isolation ('/bot1/'), Booster K1, API-Codes 2000/2001, ESP32, physical slip, QoS 'BEST_EFFORT', Native 'uros_ws', .bashrc Immunity | **'4_EDGE_HARDWARE_SIM2REAL.md'** |
 | Hybrid OS Topology, Ubuntu 22 Native vs 24 Docker, X11-Forwarding, COMPOSE_PROJECT_NAME, Xid 31 MMU Fault, Suspend-Bug, NVreg_PreserveVideoMemoryAllocations=1 | **'5_HYBRID_INFRASTRUCTURE_V5.md'** |
 | 'active_relay.json', 0.2s Asynchronous Watchdog, 'pkill -9', SIGKILL, Kinematic Freeze, '--relay' flags, CLI Ergonomics | **'6_DATA_SCHEMAS_AND_LIFECYCLE.md'** |
+| **[V6]** Foul detection, pushing, blocking without ball, ball-out, last-touch, hysteresis, sideline warp, restart logic, '/match_state' foul schema, referee thresholds (0.3m, 0.5m/s, 30 degrees) | **'2_ROS2_PROTOCOLS_AND_FRAMES.md' §V6 Addendum** |
+| **[V6]** Kick-in, prompt-switching, 'match_state.status', prompt-injection, team-red kick-in behavior, momentum, OLS regression, reward_node, 1Hz reward, foul penalty -1, 'AGGRESSION_FACTOR', red aggression, kick-in prompt iteration, red freeze compliance, hysteresis, flickering, anti-clustering red | **'3_AI_LOGIC_AND_EDGE_CASES.md' §V6 Addendum** |
+| **[V6]** '/tactical_score' momentum schema, '/tactical_reward' schema, 'eval_results.json', batch_evaluator CLI, '--scenarios', '--strategies', '--models', '--runs', '--duration', '--output', composite score, KPI | **'6_DATA_SCHEMAS_AND_LIFECYCLE.md' §V6 Addendum** |
 
 ## 3. Mermaid Rendering Constraints
 > **CRITICAL DIRECTIVE FOR LLMs:** To prevent fatal parsing errors in our documentation renderer, all Mermaid `graph TD` diagrams MUST strictly adhere to the following syntax limitations. DO NOT use advanced brackets.
