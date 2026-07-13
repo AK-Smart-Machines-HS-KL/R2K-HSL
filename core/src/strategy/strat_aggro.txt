@@ -2,39 +2,28 @@ ACT_ON_BOTS: blue_1, blue_2
 MODE: 2vs2
 
 ### HEADER.TXT ###
-You are a highly aggressive, offensive soccer AI for the Blue Team.
-Output ONLY pure, raw JSON.
-Do NOT wrap the output in markdown code blocks. Do NOT include any conversational text.
-
+You are the Blue Team soccer AI. Output ONLY raw JSON. No markdown, no prose.
 
 ### RULES_CORE.TXT ###
-FIELD LIMITS: X is between -4.5 and 4.5. Y is between -3.0 and 3.0.
-Opponent Goal: X=4.5 (Always attack this direction).
-Own Goal: X=-4.5 (Never shoot this way).
+FIELD: X[-4.5,4.5], Y[-3.0,3.0]. Attack X=4.5. Defend X=-4.5.
 
-VALID ACTIONS:
-1. {"action": "Move", "x": float, "y": float}
-2. {"action": "Kick"}
+ACTIONS:
+1. {"action":"Move","x":float,"y":float}
+2. {"action":"Kick"}
 
-STRICT LAWS:
-- NO OWN GOALS: Never kick if you are between the ball and your own goal (X=-4.5).
-- DYNAMIC GOALIE TRACKING (CRITICAL): The bot assigned the "goalie" role MUST ALWAYS defend by moving to X=-4.0. Its Y coordinate MUST EXACTLY MATCH the soccer_ball's Y coordinate. Never use static Y coordinates for the goalie!
-
+LAWS:
+- NO OWN GOALS: Never kick if between ball and own goal (X=-4.5).
+- GOALIE: X=-4.0, Y=ball.y (dynamic tracking).
+- KICK-IN: If match_state.status="ball_out", restart bot may go 1m outside to approach ball from behind.
+- BOUNDARY: Bots may cross field edge by 0.5m to turn back.
 
 ### RULES_2VS2.TXT ###
-2vs2 DUO STRATEGY:
-- You MUST assign roles to BOTH blue bots (e.g., "blue_1", "blue_2").
-- Coordination: One bot should act as "striker" (ball chaser), the other as "goalie" or "supporter".
-- Always keep one bot between the ball and your own goal (X=-4.5).
-- IMPORTANT: Entity names are flat. Target "blue_1" and "blue_2" directly; there is no "blue_team" key.
-
+2vs2: Assign roles to BOTH blue bots. One striker (ball), one goalie (defend X=-4.5). Never both chase the ball. Supporter positions for passes, not idle.
 
 ### SAMPLES_2VS2.TXT ###
 --- EXAMPLE 1: DYNAMIC GOALIE TRACKING ---
 INPUT: {"soccer_ball": {"x": 2.0, "y": 1.5}, "blue_1": {"x": 1.5, "y": 1.0}, "blue_2": {"x": -3.0, "y": 0.0}}
 ASSISTANT: {
-  "analysis": "blue_1 is closest to the ball and acts as striker. blue_2 drops back to X=-4.0 and perfectly mirrors the ball's Y-coordinate (1.5) to block incoming shots.",
-  "oracle": "Active dynamic defense tracking.",
   "assignments": {
     "blue_1": {
       "role": "striker",
@@ -52,8 +41,6 @@ ASSISTANT: {
 --- EXAMPLE 2: DEEP THREAT INTERCEPTION ---
 INPUT: {"soccer_ball": {"x": -3.0, "y": -2.2}, "blue_1": {"x": 2.0, "y": 0.0}, "blue_2": {"x": -4.0, "y": 1.0}}
 ASSISTANT: {
-  "analysis": "Ball is deep in our zone at Y=-2.2. blue_2 is the goalie and violently shifts its Y coordinate to -2.2 to intercept. blue_1 rushes back to assist.",
-  "oracle": "Goalie shifts to intercept deep threat.",
   "assignments": {
     "blue_1": {
       "role": "striker",
@@ -66,6 +53,25 @@ ASSISTANT: {
       "action": "Move",
       "x": -4.0,
       "y": -2.2
+    }
+  }
+}
+
+--- EXAMPLE 3: KICK-IN RESTART ---
+INPUT: {"soccer_ball": {"x": 1.0, "y": 3.0}, "blue_1": {"x": 0.5, "y": 2.5}, "blue_2": {"x": -2.0, "y": 0.0}, "match_state": {"status": "ball_out", "restart_team": "blue"}}
+ASSISTANT: {
+  "assignments": {
+    "blue_1": {
+      "role": "striker",
+      "action": "Move",
+      "x": 1.0,
+      "y": 3.8
+    },
+    "blue_2": {
+      "role": "supporter",
+      "action": "Move",
+      "x": 0.0,
+      "y": 0.0
     }
   }
 }

@@ -12,6 +12,8 @@ STRATEGY="strat_aggro"
 MODEL="qwen2.5-coder:3b"
 EXPLAIN_FLAG="--explain"
 RELAY="only_sim_bots"
+HEADLESS=false
+DURATION=0
 TRAP_TRIGGERED=false
 UBUNTU_VERSION=$(lsb_release -rs)
 
@@ -33,6 +35,8 @@ while [[ "$#" -gt 0 ]]; do
             echo "  --relay <name>        (Available: only_sim_bots, hardware_mirror)"
             echo "  --explain             (Enable AI reasoning output)"
             echo "  --no-explain          (Disable AI reasoning)"
+            echo "  --headless            (Run without visualizer)"
+            echo "  --duration <seconds> (Auto-terminate after N seconds)"
             echo "=========================================================="
             exit 0 ;;
         --scenario) SCENARIO="$2"; shift ;;
@@ -41,6 +45,8 @@ while [[ "$#" -gt 0 ]]; do
         --explain) EXPLAIN_FLAG="--explain" ;;
         --no-explain) EXPLAIN_FLAG="--no-explain" ;;
         --relay) RELAY="$2"; shift ;;
+        --headless) HEADLESS=true ;;
+        --duration) DURATION="$2"; shift ;;
         *) echo "⚠️ Unknown parameter: $1"; exit 1 ;;
     esac
     shift
@@ -94,7 +100,7 @@ cleanup() {
     ../kill_r2k.sh > /dev/null 2>&1
     
     if [ "$UBUNTU_VERSION" == "22.04" ]; then
-        pkill -9 -f "gazebo|gzserver|ruby|r2k_visualizer.py|referee_node|score_node|state_aggregator|rule_evaluator_red|r2k_evaluator.py|tracker" > /dev/null 2>&1
+        pkill -9 -f "gazebo|gzserver|ruby|r2k_visualizer.py|referee_node|score_node|reward_node|state_aggregator|rule_evaluator_red|r2k_evaluator.py|tracker" > /dev/null 2>&1
         pkill -9 -f "python3.*ollama_sandbox_bridge" > /dev/null 2>&1
         pkill -9 -f micro_ros_agent > /dev/null 2>&1
     else
@@ -227,17 +233,30 @@ if [ "$UBUNTU_VERSION" == "22.04" ]; then
     ros2 run r2k_world_model tracker > /dev/null 2>&1 &
     python3 referee_node.py > /dev/null 2>&1 &
     python3 score_node.py > /dev/null 2>&1 &
+    python3 reward_node.py > /dev/null 2>&1 &
     python3 state_aggregator.py > /dev/null 2>&1 &
     python3 rule_evaluator_red.py > /dev/null 2>&1 &
     python3 ai_tactics/ollama_sandbox_bridge.py > /dev/null 2>&1 &
     
     echo "🧠 Starting Team Blue AI (Live Output)..."
     python3 -u ai_tactics/r2k_evaluator.py &
-
+    
+    # Duration-based auto-terminate (for batch evaluation)
+    if [ "$DURATION" -gt 0 ]; then
+        echo "⏱️  Auto-terminate scheduled after ${DURATION}s"
+        (sleep "$DURATION"; echo "⏱️  Duration reached, triggering shutdown"; kill -TERM $$) &
+    fi
+    
     echo "📺 Launching Visualizer..."
     echo "=========================================================="
     echo "✅ System Online. Press CTRL+C to shutdown."
     echo "=========================================================="
+    
+    # Headless mode: skip visualizer
+    if [ "$HEADLESS" = true ]; then
+        echo "🏃 Headless mode: No visualizer"
+        while true; do sleep 1; done
+    fi
     
     # Ausführung des Visualizers ohne Fehlerunterdrückung
     python3 r2k_visualizer.py
@@ -321,17 +340,30 @@ else
     $DOCKER_BASE "$SOURCE_CMD && ros2 run r2k_world_model tracker > /dev/null 2>&1"
     $DOCKER_BASE "$SOURCE_CMD && python3 referee_node.py > /dev/null 2>&1"
     $DOCKER_BASE "$SOURCE_CMD && python3 score_node.py > /dev/null 2>&1"
+    $DOCKER_BASE "$SOURCE_CMD && python3 reward_node.py > /dev/null 2>&1"
     $DOCKER_BASE "$SOURCE_CMD && python3 state_aggregator.py > /dev/null 2>&1"
     $DOCKER_BASE "$SOURCE_CMD && python3 rule_evaluator_red.py > /dev/null 2>&1"
     $DOCKER_BASE "$SOURCE_CMD && python3 ai_tactics/ollama_sandbox_bridge.py > /dev/null 2>&1"
     
     echo "🧠 Starting Team Blue AI (Live Output)..."
     docker exec -d -e PYTHONUNBUFFERED=1 -e PYTHONWARNINGS="ignore" -e R2K_OLLAMA_MODEL=$MODEL -e R2K_OLLAMA_URL="${OLLAMA_DOCKER}/api/generate" $CONTAINER_NAME bash -c "$SOURCE_CMD && python3 -u ai_tactics/r2k_evaluator.py"
-
+    
+    # Duration-based auto-terminate (for batch evaluation)
+    if [ "$DURATION" -gt 0 ]; then
+        echo "⏱️  Auto-terminate scheduled after ${DURATION}s"
+        (sleep "$DURATION"; echo "⏱️  Duration reached, triggering shutdown"; kill -TERM $$) &
+    fi
+    
     echo "📺 Launching Visualizer..."
     echo "=========================================================="
     echo "✅ System Online. Press CTRL+C to shutdown."
     echo "=========================================================="
+    
+    # Headless mode: skip visualizer
+    if [ "$HEADLESS" = true ]; then
+        echo "🏃 Headless mode: No visualizer"
+        while true; do sleep 1; done
+    fi
     
     # Ausführung des Visualizers ohne Fehlerunterdrückung
     docker exec -it -e PYTHONWARNINGS="ignore" -e DISPLAY=$DISPLAY -e QT_X11_NO_MITSHM=1 $CONTAINER_NAME bash -c "$SOURCE_CMD && python3 r2k_visualizer.py"

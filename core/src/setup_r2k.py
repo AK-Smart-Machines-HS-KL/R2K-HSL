@@ -108,7 +108,7 @@ def main():
         data = json.load(f)
         blue_bots = sorted([k for k in data.get('entities', {}).keys() if 'blue' in k])
         
-    mode = args.scenario.split('_')[0] if '_' in args.scenario else "3vs3"
+    mode = data.get('mode') or (args.scenario.split('_')[0] if '_' in args.scenario else "3vs3")
     clean_strat = args.strategy.replace('strat_', '')
     frag_path = "strategy/fragments"
     prompt_lines = [f"ACT_ON_BOTS: {', '.join(blue_bots)}", f"MODE: {mode}\n"]

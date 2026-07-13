@@ -10,6 +10,7 @@ class StateAggregator(Node):
         self.create_subscription(String, '/world_positions', self.pos_cb, 10)
         self.create_subscription(String, '/match_state', self.match_cb, 10)
         self.create_subscription(String, '/tactical_score', self.score_cb, 10)
+        self.create_subscription(String, '/tactical_reward', self.reward_cb, 10)
         
         # 10 Hz Schreib-Zyklus
         self.timer = self.create_timer(0.1, self.write_to_disk) 
@@ -17,16 +18,18 @@ class StateAggregator(Node):
         self.pos_data = {}
         self.match_data = {}
         self.score_data = {}
+        self.reward_data = {}
         
         # FIX: Hier wurde der Pfad auf /workspace gesetzt!
         base_dir = os.getenv('ROS2K_WS', '.')
         self.file_path = os.path.join(base_dir, 'shared_state', 'Worldstate.json')
         
-        self.get_logger().info("📦 Aggregator V4 Online: Writing to Worldstate.json at 10 Hz")
+        self.get_logger().info("📦 Aggregator V6 Online: Writing to Worldstate.json at 10 Hz")
 
     def pos_cb(self, msg): self.pos_data = json.loads(msg.data)
     def match_cb(self, msg): self.match_data = json.loads(msg.data)
     def score_cb(self, msg): self.score_data = json.loads(msg.data)
+    def reward_cb(self, msg): self.reward_data = json.loads(msg.data)
 
     def write_to_disk(self):
         if not self.pos_data: return # Warten auf erste echte Daten
@@ -34,6 +37,8 @@ class StateAggregator(Node):
         combined_state = self.pos_data.copy()
         combined_state['match_state'] = self.match_data
         combined_state['tactical_score'] = self.score_data
+        if self.reward_data:
+            combined_state['tactical_reward'] = self.reward_data
         
         try:
             # Atomares Schreiben verhindert "File in Use" Abstürze

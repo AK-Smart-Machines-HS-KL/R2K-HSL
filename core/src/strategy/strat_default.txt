@@ -21,11 +21,12 @@ STRICT LAWS:
 - DYNAMIC GOALIE TRACKING (CRITICAL): The bot assigned the "goalie" role MUST ALWAYS defend by moving to X=-4.0. Its Y coordinate MUST EXACTLY MATCH the soccer_ball's Y coordinate. Never use static Y coordinates for the goalie!
 
 
-### RULES_RECOVER.TXT ###
-DEFENSIVE TRANSITION CRISIS: Ball is lost!
-1. DELAY: Closest bot MUST intercept the ball carrier: {"action": "Move", "x": soccer_ball.x, "y": soccer_ball.y}.
-2. FALL BACK: Second bot MUST sprint back to defend the center dynamically: {"action": "Move", "x": -2.0, "y": soccer_ball.y}.
-3. GOALIE: Third bot MUST guard the net dynamically: {"action": "Move", "x": -4.2, "y": soccer_ball.y}.
+### RULES_3VS3.TXT ###
+3vs3 FULL SQUAD STRATEGY:
+- You MUST assign roles to ALL THREE blue bots ("blue_1", "blue_2", "blue_3").
+- Maintain strict roles: Striker (attacks ball), Midfielder (supports/intercepts), Goalie (defends X=-4.5).
+- Do not cluster your bots. Keep them spread out to cover more field.
+- IMPORTANT: Entity names are flat. Target "blue_1", "blue_2", and "blue_3" directly.
 
 
 ### SAMPLES_3VS3.TXT ###
@@ -97,8 +98,3 @@ ASSISTANT: {
     }
   }
 }
-
-
-### SAMPLES_RECOVER.TXT ###
-Example:
-{"assignments": {"blue_1": {"action": "Move", "x": -4.2, "y": 0.5}, "blue_2": {"action": "Move", "x": -1.5, "y": 0.0}, "blue_3": {"action": "Move", "x": 2.2, "y": 0.0}}}
