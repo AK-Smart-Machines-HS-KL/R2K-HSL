@@ -34,6 +34,7 @@ class TeamRedEvaluator(Node):
         # Match state tracking (referee decisions, freeze compliance)
         self.match_state = {}
         self.last_blue_score = 0
+        self.last_red_score = 0
 
         # Per-bot hysteresis state (prevents threshold flickering)
         self.bot_states = {}
@@ -53,23 +54,32 @@ class TeamRedEvaluator(Node):
         """Determine freeze status from match_state. Returns (all_red_frozen, frozen_bot_ids, context)."""
         status = self.match_state.get('status', 'playing')
         blue_score = self.match_state.get('blue', 0)
+        red_score = self.match_state.get('red', 0)
+        restart_team = self.match_state.get('restart_team', '')
 
-        red_conceded = blue_score > self.last_blue_score
         self.last_blue_score = blue_score
+        self.last_red_score = red_score
 
         all_red_frozen = False
         frozen_bots = set()
         ctx = {
             'status': status,
             'ball_out': status == 'ball_out',
-            'restart_team': self.match_state.get('restart_team', ''),
-            'kick_in_for_red': status == 'ball_out' and self.match_state.get('restart_team', '') == 'red',
-            'kick_in_against_red': status == 'ball_out' and self.match_state.get('restart_team', '') == 'blue',
+            'restart_team': restart_team,
+            'kick_in_for_red': status == 'ball_out' and restart_team == 'red',
+            'kick_in_against_red': status == 'ball_out' and restart_team == 'blue',
+            'goal_kick_for_red': status == 'goal_kick' and restart_team == 'red',
+            'goal_kick_against_red': status == 'goal_kick' and restart_team == 'blue',
+            'corner_kick_in_for_red': status == 'corner_kick_in' and restart_team == 'red',
+            'corner_kick_in_against_red': status == 'corner_kick_in' and restart_team == 'blue',
         }
 
-        if status == 'goal' and red_conceded:
+        if status == 'goal' and restart_team == 'blue':
+            # Red scored (restart_team=blue=conceding) → red (scoring team) is frozen
             all_red_frozen = True
-        elif status == 'ball_out' and ctx['restart_team'] == 'blue':
+        elif status == 'ball_out' and restart_team == 'blue':
+            all_red_frozen = True
+        elif status in ('goal_kick', 'corner_kick_in') and restart_team == 'blue':
             all_red_frozen = True
         elif status == 'foul_penalty':
             foul = self.match_state.get('foul', {})
@@ -157,7 +167,8 @@ class TeamRedEvaluator(Node):
                 if 'blue_' in name:
                     blue_bots.append((name, msg.pose[i]))
 
-            aggression_active = random.random() < self.AGGRESSION_FACTOR
+            # Aggression: disabled during freeze to avoid wasted computation and false targets
+            aggression_active = (not all_red_frozen) and (random.random() < self.AGGRESSION_FACTOR)
 
             supporter_assigned = False
             for name, pose in red_bots:
@@ -214,13 +225,12 @@ class TeamRedEvaluator(Node):
                             target_x = blue_x + (cx - blue_x) * 0.3
                             target_y = blue_y + (cy - blue_y) * 0.3
 
-                # Kick-in behavior override during ball_out
-                if ctx['kick_in_against_red']:
-                    # Blue has the restart — red plays defensively, hold midfield, close pass lanes
-                    if name != closest_bot:
-                        target_x = 2.0
-                        target_y = clamp(self.ball_pos.y * 0.7, -2.0, 2.0)
-                elif ctx['kick_in_for_red'] and name == closest_bot:
+                # Kick-in / restart behavior override
+                if ctx['kick_in_against_red'] or ctx['goal_kick_against_red'] or ctx['corner_kick_in_against_red']:
+                    # Blue has the restart — all red bots hold midfield, don't interfere
+                    target_x = 2.0
+                    target_y = clamp(self.ball_pos.y * 0.7, -2.0, 2.0)
+                elif (ctx['kick_in_for_red'] or ctx['goal_kick_for_red'] or ctx['corner_kick_in_for_red']) and name == closest_bot:
                     # Red has the restart — approach ball from behind for kick-in
                     target_x, target_y = behind_x, behind_y
 
@@ -237,9 +247,38 @@ class TeamRedEvaluator(Node):
                                 target_y = min(target_y, other_pose.position.y - 1.5)
                             break
 
-                # Boundary tolerance: 0.5m outside for turning back
-                target_x = clamp(target_x, -5.0, 5.0)
-                target_y = clamp(target_y, -3.5, 3.5)
+                # Blocking avoidance: if this bot's target is between a blue opponent and the ball,
+                # shift laterally toward the sideline to open the opponent's goal-ward path
+                if name != closest_bot and blue_bots:
+                    for blue_name, blue_pose in blue_bots:
+                        bx, by = blue_pose.position.x, blue_pose.position.y
+                        opp_to_ball_x = self.ball_pos.x - bx
+                        opp_to_ball_y = self.ball_pos.y - by
+                        opp_to_ball_len = math.hypot(opp_to_ball_x, opp_to_ball_y)
+                        if opp_to_ball_len < 0.01:
+                            continue
+                        # Normalize opponent-to-ball direction
+                        dir_x = opp_to_ball_x / opp_to_ball_len
+                        dir_y = opp_to_ball_y / opp_to_ball_len
+                        # Project this bot's target onto the opponent-to-ball line
+                        to_tgt_x = target_x - bx
+                        to_tgt_y = target_y - by
+                        proj = to_tgt_x * dir_x + to_tgt_y * dir_y
+                        # Perpendicular distance from target to the opponent-to-ball line
+                        perp_dist = abs(to_tgt_x * (-dir_y) + to_tgt_y * dir_x)
+                        # If target is between opponent and ball and within 0.5m of the line
+                        if 0 < proj < opp_to_ball_len and perp_dist < 0.5:
+                            # Shift toward nearest sideline (away from center, opening goal-ward path)
+                            sideline_dir = 1.0 if target_y >= 0 else -1.0
+                            shift = 0.6 - perp_dist
+                            target_y += sideline_dir * shift
+                            break
+
+                # Boundary tolerance: 1.0m outside for restart approaches, 0.5m for normal play
+                restart_active = ctx['kick_in_for_red'] or ctx['goal_kick_for_red'] or ctx['corner_kick_in_for_red']
+                boundary_margin = 1.0 if restart_active else 0.5
+                target_x = clamp(target_x, -(4.5 + boundary_margin), 4.5 + boundary_margin)
+                target_y = clamp(target_y, -(3.0 + boundary_margin), 3.0 + boundary_margin)
 
                 dx = target_x - cx
                 dy = target_y - cy

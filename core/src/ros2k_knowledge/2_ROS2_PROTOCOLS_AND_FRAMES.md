@@ -2,8 +2,8 @@
 id: 2_PROTOCOLS
 title: "Section 2: ROS 2 Protocols, Frames & V5 Engine Nodes"
 type: KNOWLEDGE_BASE_POWER_FILE
-tags: [ros2, model_states, quaternions, euler, visualizer, teleop, set_entity_state, v5-engine, referee, score, qwen, v6, foul, ball-out, kick-in, hysteresis, last-touch, sideline-warp]
-last_modified: 2026-07-13
+tags: [ros2, model_states, quaternions, euler, visualizer, teleop, set_entity_state, v5-engine, referee, score, qwen, v6, foul, ball-out, kick-in, hysteresis, last-touch, sideline-warp, set-piece, goal-kick, corner-kick-in, kickoff, own-half-warp, blitting]
+last_modified: 2026-07-14
 version: v6_active
 ---
 # Section 2: ROS 2 Protocols, Frames & V5 Engine Nodes
@@ -131,76 +131,110 @@ self.set_state_client.call_async(request)
 
 ---
 
-## V6 Addendum: Referee Foul Detection & Ball-Out
+## V6 Addendum: Referee Foul Detection, Ball-Out & Unified Set-Piece Logic
 
-> [!warning] V6 Extension
+> [!warning] V6 Extension (updated 2026-07-14)
 > The V5 referee (goal detection + out-of-bounds reset) was extended in V6 to support
 > SPL-conformant ball-out, foul detection (pushing + blocking without ball), last-touch
-> tracking, and structured restart logic. Source: `referee_node.py`, `core/docs/optimization_spec_v6.md`.
+> tracking, structured restart logic, and **unified set-piece** (goal kick, corner
+> kick-in, kickoff countdown). Source: `referee_node.py`, `core/docs/referee_rulebook.md`.
+>
+> **Authoritative reference:** `core/docs/referee_rulebook.md` is the complete rulebook
+> with 2D diagrams, state machine, and all thresholds. This section is a summary;
+> the rulebook is the single source of truth.
 
 ### Foul Detection: Pushing
 
-Two **opposing** bots collide away from the ball. All three conditions must be true simultaneously (conjunctive, not independent):
+Two **opposing** bots collide away from the ball. All conditions must be true simultaneously:
 
-* **Distance:** Bot centers within `0.3m` of each other.
-* **Velocity:** Relative approach speed `> 0.5 m/s` (collision course).
-* **Ball proximity:** Neither bot within `0.8m` of the ball (not a legitimate play).
-* **Same-team exclusion:** Two bots on the same team near each other is NOT a foul — teammates may cluster defensively.
+* **Distance:** Bot centers within `0.3m` of each other (`PUSHING_DISTANCE_THRESHOLD`).
+* **Ball proximity:** Neither bot within `0.8m` of the ball (`BALL_PROXIMITY_THRESHOLD`).
+* **Same-team exclusion:** Two bots on the same team near each other is NOT a foul.
 
-**Rationale:** If either bot is near the ball, the contact is a legitimate tackle, not a foul. The ball-proximity check prevents false positives during normal play. Same-team proximity is normal defensive play.
+**Penalty:** Offender warped to own sideline (`X = ±4.0`, random Y). Reward: `-1.0`. Cooldown: 5s per bot.
 
 ### Foul Detection: Blocking Without Ball
 
 A bot obstructs an **opponent's** path to the ball without possessing it:
 
-* **Distance:** Blocking bot within `0.5m` of the opponent-to-ball line.
+* **Distance:** Blocking bot within `0.5m` of the opponent (`BLOCKING_DISTANCE_THRESHOLD`).
 * **Ball proximity:** Blocking bot NOT within `0.8m` of the ball.
-* **Obstruction angle:** Bot within `30°` of the direct opponent-to-ball path.
-* **Duration:** Blocking must be sustained for `3.0` seconds before a foul is called. Momentary obstruction during maneuvering is not penalized. The timer is per-blocker and resets if the blocker moves away, approaches the ball, or the angle condition breaks.
-* **Same-team exclusion:** Blocking is only checked between opponents (blue blocker vs red victim and vice versa). Same-team blocking is not a foul.
+* **Obstruction angle:** Bot within `30°` of the direct opponent-to-ball path (`OBSTRUCTION_ANGLE`).
+* **Duration:** Blocking must be sustained for `3.0s` (`BLOCKING_MIN_DURATION`) before a foul is called.
+* **Same-team exclusion:** Only checked between opponents.
 
-**Rationale:** A bot legitimately defending near the ball is not blocking. Only a bot far from the ball that deliberately and persistently obstructs the opponent's access is penalized. The 3-second duration prevents false positives from transient crossings during normal movement.
-
-### Foul Penalty: Sideline Warp (Pushing)
-
-* Pushing offender is warped to `X = -4.0` (blue) or `X = +4.0` (red), `Y = random(-2.0, 2.0)`.
-* Foul event published on `/match_state` with `offender`, `victim`, `type`, `position`, `penalty: "sideline_warp"`.
-* `reward_node.py` applies a fixed `-1` penalty (10% of the -10..+10 scale).
-* Play resumes after `1s` freeze.
-
-### Foul Penalty: Own-Goal Warp (Blocking Without Ball)
-
-* Blocking offender is warped to a random position in their own half towards their own goal:
-  * Blue: `X = random(-4.3, -2.0)`, `Y = random(-2.8, 2.8)` (towards X=-4.5 own goal)
-  * Red: `X = random(2.0, 4.3)`, `Y = random(-2.8, 2.8)` (towards X=+4.5 own goal)
-* Foul event published with `penalty: "own_goal_warp"`.
-* Same `-1` reward penalty and `1s` freeze as pushing.
-* **Rationale:** Blocking is an obstruction foul, not a collision. Warping towards own goal penalizes the offender by forcing them back into a defensive position, which is a more thematically appropriate penalty than sideline warp.
-
-### General Foul Properties
-
-* **Foul detection is team-agnostic** — applies equally to blue and red bots. `rule_evaluator_red.py` has `AGGRESSION_FACTOR = 0.15` (15% chance per decision to move toward opponent) to generate realistic foul scenarios.
-* Both foul types share a 5-second cooldown per offender to prevent repeated triggering.
+**Penalty:** Offender warped to random position in own half (toward own goal). Penalty label: `own_half_warp` (was `own_goal_warp` — renamed to avoid confusion with actual goals). Reward: `-1.0`. Cooldown: 5s per bot.
 
 ### Ball-Out Detection
 
 * **Sideline out:** `|ball_y| > 3.0`.
-* **Goal-line out (no goal):** `|ball_x| > 4.5` AND `|ball_y| > 0.9` (outside goal width).
-* **Debounce:** `5` consecutive frames at 10Hz (0.5s) to prevent flickering at the boundary.
-* **Hysteresis:** Prevents oscillation when the ball bounces on the line. Without hysteresis, the referee fires spurious ball-out events every frame.
+* **Goal-line out (no goal):** `|ball_x| > 4.5` AND `|ball_y| > 0.9` (outside goal posts).
+* **Debounce:** `5` consecutive frames to prevent flickering at the boundary.
 
 ### Last-Touch Detection
 
 * Tracks closest bot to ball each frame.
-* **Hysteresis:** Same bot must be closest for `3` consecutive frames to count as "last toucher".
-* On ball-out: `last_toucher` = bot with most frames closest to ball.
-* **Restart team:** Opposite of `last_toucher`'s team (sideline out) or defending team (goal-line out without goal).
-* **Rationale:** SPL rules require kick-in for the team that did NOT last touch the ball. Without last-touch tracking, the referee cannot determine restart entitlement.
+* **Hysteresis:** Same bot must be closest for `3` consecutive frames within `0.8m` to count as "last toucher".
+* **No decay:** Once `last_toucher` is set, it persists indefinitely — the counter only resets when a *different* bot becomes closest. A bot that kicks the ball and moves away remains the last toucher.
+* **No-toucher fallback removed:** The no-toucher neutral restart code was dead code — `last_toucher` is always set after the first few seconds of play and never cleared. See `referee_node.py:361-369`.
 
-### Restart Logic
+### Sideline Ball-Out Penalty
 
-* **Ball reset:** Referee calculates restart position and calls `/gazebo/set_entity_state` to place the ball. This is a physical/ROS action — the LLM does NOT handle ball reset.
-* **Sideline restart:** Ball placed infield at the exit point; restart team = opposite of last toucher.
-* **Goal-line restart (no goal):** Ball placed inside at the line; restart team = defending team.
-* **Freeze:** Offending team holds position for `1.0s` before play resumes.
-* **Timeout:** `3.0s` auto-transition to "playing" if no restart occurs.
+* **Offender:** `last_toucher` (bot responsible for kicking ball out).
+* **Offender penalty:** Warped 2m inward from the sideline (`BALL_OUT_WARP_DISTANCE`).
+* **Team penalty:** Entire offending team frozen for `5.0s` (`BALL_OUT_FREEZE_TIME`).
+* **Ball:** Placed on the sideline where it exited, stationary.
+* **Restart:** Opposing team gets the kick-in. Reward: `-0.5` (reduced penalty).
+* **Status:** `ball_out` (3.0s timeout via `BALL_OUT_TIMEOUT`).
+
+### Goal-Line Ball-Out → Unified Set Piece
+
+Goal-line outs (ball crosses X=±4.5, wide of posts, no goal) are classified into two set-piece types via `_start_set_piece()`:
+
+**Scenario A — Goal Kick** (attacker kicked over defender's goal line):
+* Ball placed at nearer corner of goal area: `(±3.5, ±1.0)` (`GOAL_AREA_X`, `GOAL_AREA_Y`).
+* Defending team gets the goal kick.
+* Attacking team (offender) frozen 5s, opponents within 1.5m warped 2m away.
+* Status: `goal_kick` (5.0s countdown via `SET_PIECE_COUNTDOWN`).
+
+**Scenario B — Corner Kick-In** (defender kicked over own goal line):
+* Ball placed at corner flag: `(±4.3, ±2.8)`.
+* Attacking team gets the corner kick-in.
+* Defending team (offender) frozen 5s, opponents within 1.5m warped 2m away.
+* Status: `corner_kick_in` (5.0s countdown).
+
+### Kickoff (after goal)
+
+* Ball reset to center `(0, 0)`, all bots warped to kickoff positions.
+* **Scoring team** frozen for 5.0s (was: conceding team frozen 3.0s — changed in V6.1).
+* `restart_team` set to conceding team (opposite of scoring team) for early-termination check.
+* Conceding team takes the kickoff.
+* Status: `goal` (5.0s countdown).
+
+### Early Restart Termination (V6.1)
+
+The freeze ends immediately if the **restart team's** bot comes within `0.3m` of the ball — the 5s countdown is a maximum, not a fixed duration.
+
+* Checked every frame in `pos_callback` after `_track_last_toucher`.
+* Only the restart team's touch triggers early termination — opponent (frozen team) touches do NOT.
+* `_end_restart()` clears `frozen_bots` immediately and transitions to `playing`.
+* Threshold: 0.3m (matches `PUSHING_DISTANCE_THRESHOLD`).
+* Applies to ALL restart types: `goal`, `ball_out`, `goal_kick`, `corner_kick_in`.
+
+### Unified Restart Pattern
+
+All three restart types (kickoff, goal kick, corner kick-in) follow `_start_set_piece()`:
+1. Place ball at restart position.
+2. Warp opponent bots within `1.5m` (`SET_PIECE_WARP_RADIUS`) radially away `2.0m` (`WARP_AWAY_DISTANCE`).
+3. Freeze offending/opponent team for `5.0s` (`SET_PIECE_COUNTDOWN`).
+4. Set status and start 5.0s countdown.
+5. Countdown expires OR restart team touches ball → `BALL FREE` → status = `playing`.
+
+### Visualizer Blitting (V6.1)
+
+* `r2k_visualizer.py` was refactored from `fig.clf()` full-rebuild per frame to **blitted artist updates**.
+* `init_figure()` creates all 22 artists (pitch, scatters, text, arrows, panels) ONCE.
+* `update_figure()` updates existing artist data via `set_offsets()`, `set_text()`, `set_position()`, `set_visible()`.
+* Frame time: ~200-500ms → ~10-30ms (~2-5 FPS → ~30+ FPS).
+* `draw_empty_pitch()` removed (no longer needed).
+* `plt.pause(0.04)` → `plt.pause(0.01)`, `rclpy.spin_once(timeout_sec=0.01)` → `timeout_sec=0.001`.

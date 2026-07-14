@@ -2,8 +2,8 @@
 id: 6_DATA_LIFECYCLE
 title: "Section 6: Data Schemas & System Lifecycle (V5)"
 type: KNOWLEDGE_BASE_POWER_FILE
-tags: [json, schema, rpc, bash, lifecycle, orchestration, setup_r2k, flat-json, relay-profiles, watchdog, cli-ergonomics, active_relay, bashrc-immunity, v6, tactical-score, tactical-reward, match-state, eval-results, batch-evaluator, momentum]
-last_modified: 2026-07-13
+tags: [json, schema, rpc, bash, lifecycle, orchestration, setup_r2k, flat-json, relay-profiles, watchdog, cli-ergonomics, active_relay, bashrc-immunity, v6, tactical-score, tactical-reward, match-state, eval-results, batch-evaluator, momentum, set-piece, goal-kick, corner-kick-in, own-half-warp]
+last_modified: 2026-07-14
 version: v6_active
 ---
 # Section 6: Data Schemas & System Lifecycle (V5)
@@ -165,7 +165,13 @@ Extended from V5 (which had only `blue`, `red`, `status`) to include ball-out, f
 }
 ~~~
 
-Valid statuses: `"playing"`, `"goal"`, `"ball_out"`, `"foul_penalty"`.
+Valid statuses (updated 2026-07-14): `"playing"`, `"goal"`, `"ball_out"`, `"goal_kick"`, `"corner_kick_in"`, `"foul_penalty"`.
+
+> [!note] Set-piece statuses
+> `"goal_kick"` and `"corner_kick_in"` are new in V6.1. They follow the same
+> 5.0s countdown as `"goal"` (via `SET_PIECE_COUNTDOWN`). `"ball_out"` and
+> `"foul_penalty"` use `BALL_OUT_TIMEOUT = 3.0s`. See `core/docs/referee_rulebook.md`
+> for the complete state machine.
 
 Foul event object (when `foul` is not null):
 ~~~json
@@ -179,6 +185,10 @@ Foul event object (when `foul` is not null):
   }
 }
 ~~~
+
+Foul `penalty` values: `"sideline_warp"` (pushing), `"own_half_warp"` (blocking, was `"own_goal_warp"`), `"warp_2m_freeze_5s"` (ball-out sideline).
+Foul `type` values: `"pushing"`, `"blocking_without_ball"`, `"ball_out"`.
+Ball-out foul includes `out_type` (`"sideline"` or `"goal_line"`) and `restart_team`.
 
 ### `/tactical_score` V6 Schema (score_node.py)
 

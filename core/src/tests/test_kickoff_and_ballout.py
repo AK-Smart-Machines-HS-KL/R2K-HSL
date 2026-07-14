@@ -138,33 +138,31 @@ class TestClampBallToLine:
 class TestKickoffReset:
     """Test suite for kickoff reset after goal"""
     
-    KICKOFF_FREEZE_TIME = 3.0
+    KICKOFF_FREEZE_TIME = 5.0  # Updated: unified set-piece countdown
     
-    def test_kickoff_conceding_team_blue_scores(self):
-        """Blue scores → Red team frozen for 3s, Blue free to move."""
+    def test_kickoff_scoring_team_blue_scores(self):
+        """Blue scores → Blue team frozen for 5s, Red free to move."""
         # Simulate: Blue scores (ball crossed X=4.5)
         scoring_team = "blue"
-        conceding_team = "red" if scoring_team == "blue" else "blue"
         
-        # Frozen bots should be on conceding team
+        # Frozen bots should be on scoring team
         bots = ["blue_1", "blue_2", "blue_3", "red_1", "red_2", "red_3"]
-        frozen_bots = [bot for bot in bots if conceding_team in bot]
-        
-        assert len(frozen_bots) == 3
-        assert all("red" in bot for bot in frozen_bots)
-        assert "blue_1" not in frozen_bots
-    
-    def test_kickoff_conceding_team_red_scores(self):
-        """Red scores → Blue team frozen for 3s, Red free to move."""
-        scoring_team = "red"
-        conceding_team = "red" if scoring_team == "blue" else "blue"
-        
-        bots = ["blue_1", "blue_2", "blue_3", "red_1", "red_2", "red_3"]
-        frozen_bots = [bot for bot in bots if conceding_team in bot]
+        frozen_bots = [bot for bot in bots if scoring_team in bot]
         
         assert len(frozen_bots) == 3
         assert all("blue" in bot for bot in frozen_bots)
         assert "red_1" not in frozen_bots
+    
+    def test_kickoff_scoring_team_red_scores(self):
+        """Red scores → Red team frozen for 5s, Blue free to move."""
+        scoring_team = "red"
+        
+        bots = ["blue_1", "blue_2", "blue_3", "red_1", "red_2", "red_3"]
+        frozen_bots = [bot for bot in bots if scoring_team in bot]
+        
+        assert len(frozen_bots) == 3
+        assert all("red" in bot for bot in frozen_bots)
+        assert "blue_1" not in frozen_bots
     
     def test_ball_reset_to_center(self):
         """Ball should be reset to (0, 0) after goal."""
@@ -173,9 +171,9 @@ class TestKickoffReset:
         assert ball_reset_x == 0.0
         assert ball_reset_y == 0.0
     
-    def test_freeze_time_is_3_seconds(self):
-        """Conceding team frozen for exactly 3 seconds."""
-        assert self.KICKOFF_FREEZE_TIME == 3.0
+    def test_freeze_time_is_5_seconds(self):
+        """Scoring team frozen for exactly 5 seconds (unified set-piece countdown)."""
+        assert self.KICKOFF_FREEZE_TIME == 5.0
 
 
 class TestBallOutNoToucher:

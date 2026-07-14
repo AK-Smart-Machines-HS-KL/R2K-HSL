@@ -54,8 +54,14 @@ class RefereeNode(Node):
         self.BALL_OUT_FREEZE_TIME = 5.0
         self.BALL_OUT_REWARD_PENALTY = -0.5
         
+        # Set-piece logic (unified: kickoff, goal kick, corner kick-in)
+        self.SET_PIECE_COUNTDOWN = 5.0
+        self.GOAL_AREA_X = 3.5      # 1m inward from goal line (±4.5)
+        self.GOAL_AREA_Y = 1.0      # ±1.0m, 2m wide goal area
+        self.SET_PIECE_WARP_RADIUS = 1.5   # opponents within this get warped away
+        self.WARP_AWAY_DISTANCE = 2.0      # warp this far radially from ball
+        
         # Kickoff logic
-        self.KICKOFF_FREEZE_TIME = 3.0  # Conceding team frozen for 3s
         self.kickoff_positions = {}  # Loaded from first world_positions
         self.kickoff_positions_loaded = False
         
@@ -104,6 +110,16 @@ class RefereeNode(Node):
             # 3. Last-touch tracking
             self._track_last_toucher(ball, entities)
             
+            # 3b. Early restart termination: restart team touches the ball
+            if self.status in ("goal", "ball_out", "goal_kick", "corner_kick_in") and self.restart_start_time and self.restart_team:
+                for bot_id, bot_pos in entities.items():
+                    if bot_id == 'soccer_ball':
+                        continue
+                    dist = math.hypot(bot_pos['x'] - ball['x'], bot_pos['y'] - ball['y'])
+                    if dist < 0.3 and self.restart_team in bot_id:
+                        self._end_restart()
+                        break
+            
             # 4. Foul detection
             if self.status == "playing":
                 self._detect_fouls(entities)
@@ -111,7 +127,8 @@ class RefereeNode(Node):
             # 5. Restart handling
             if self.restart_start_time:
                 elapsed = time.time() - self.restart_start_time
-                if elapsed > self.BALL_OUT_TIMEOUT:
+                timeout = self.SET_PIECE_COUNTDOWN if self.status in ("goal", "goal_kick", "corner_kick_in", "ball_out") else self.BALL_OUT_TIMEOUT
+                if elapsed > timeout:
                     self.status = "playing"
                     self.restart_start_time = None
                     self.ball_out_event = None
@@ -135,14 +152,14 @@ class RefereeNode(Node):
             self.ball_was_in_goal = True
             self.status = "goal"
             self.get_logger().info(f"⚽ GOAL FOR BLUE! Score: {self.score_blue}:{self.score_red}")
-            self._kickoff_reset(entities, conceding_team="red")
+            self._kickoff_reset(entities, scoring_team="blue")
         # Red scores: ball crosses blue goal line AND within goal posts
         elif x < self.FIELD_X_MIN and self.GOAL_Y_MIN <= y <= self.GOAL_Y_MAX and not self.ball_was_in_goal:
             self.score_red += 1
             self.ball_was_in_goal = True
             self.status = "goal"
             self.get_logger().info(f"⚽ GOAL FOR RED! Score: {self.score_blue}:{self.score_red}")
-            self._kickoff_reset(entities, conceding_team="blue")
+            self._kickoff_reset(entities, scoring_team="red")
         elif -4.0 <= x <= 4.0:
             self.ball_was_in_goal = False
     
@@ -154,8 +171,8 @@ class RefereeNode(Node):
         self.kickoff_positions_loaded = True
         self.get_logger().info(f"📍 Stored {len(self.kickoff_positions)} kickoff positions")
     
-    def _kickoff_reset(self, entities, conceding_team):
-        """Reset ball to center and bots to kickoff. Conceding team frozen 3s."""
+    def _kickoff_reset(self, entities, scoring_team):
+        """Reset ball to center and bots to kickoff. Scoring team frozen 5s."""
         # 1. Reset ball to center
         self._reset_ball(0.0, 0.0)
         
@@ -163,22 +180,18 @@ class RefereeNode(Node):
         for bot_id, pos in self.kickoff_positions.items():
             self._warp_bot(bot_id, pos['x'], pos['y'])
         
-        # 3. Freeze conceding team for 3 seconds
-        now = time.time()
-        for bot_id in entities:
-            if conceding_team in bot_id:
-                self.frozen_bots[bot_id] = now + self.KICKOFF_FREEZE_TIME
+        # 3. Freeze scoring team for 5 seconds (unified set-piece countdown)
+        self._freeze_team(scoring_team, entities, self.SET_PIECE_COUNTDOWN)
         
         # 4. Set restart timer
-        self.restart_start_time = now
-        self.BALL_OUT_TIMEOUT = self.KICKOFF_FREEZE_TIME + 2.0  # buffer after freeze
+        self.restart_start_time = time.time()
         
         # 5. Clear event state
         self.ball_out_event = None
-        self.restart_team = None
+        self.restart_team = "red" if scoring_team == "blue" else "blue"
         self.foul_event = None
         
-        self.get_logger().info(f"🥅 KICKOFF: Ball reset. {conceding_team.upper()} frozen {self.KICKOFF_FREEZE_TIME}s.")
+        self.get_logger().info(f"🥅 KICKOFF: Ball reset. {scoring_team.upper()} frozen {self.SET_PIECE_COUNTDOWN:.0f}s.")
     
     def _reset_after_goal(self):
         """Clear event state after goal (called by kickoff)."""
@@ -187,6 +200,15 @@ class RefereeNode(Node):
         self.restart_pos = None
         self.last_toucher = None
         self.foul_event = None
+    
+    def _end_restart(self):
+        """End restart immediately — restart team touched the ball."""
+        self.status = "playing"
+        self.restart_start_time = None
+        self.ball_out_event = None
+        self.foul_event = None
+        self.frozen_bots.clear()
+        self.get_logger().info("BALL FREE (early — restart team touched ball)")
     
     def _check_ball_out(self, ball):
         x, y = ball['x'], ball['y']
@@ -328,7 +350,7 @@ class RefereeNode(Node):
                 # Red's own goal is at X=+4.5, warp somewhere in own half
                 warp_x = random.uniform(2.0, 4.3)
             warp_y = random.uniform(-2.8, 2.8)
-            penalty_label = "own_goal_warp"
+            penalty_label = "own_half_warp"
         else:
             # Pushing foul: warp offender to sideline (original behavior)
             warp_x = -4.0 if 'blue' in offender else 4.0
@@ -356,21 +378,7 @@ class RefereeNode(Node):
         )
     
     def _apply_ball_out_penalty(self, ball, out_type):
-        """Ball-out foul: warp offender 2m inward, freeze team 5s, reset ball on line."""
-        if not self.last_toucher:
-            # No toucher tracked → neutral restart
-            if out_type == "sideline":
-                self.ball_out_event = {"type": out_type, "position": {"x": ball['x'], "y": ball['y']}}
-                self.restart_team = "red" if "blue" in (self.last_toucher or "") else "blue"
-                self.restart_pos = {"x": ball['x'], "y": min(2.8, max(-2.8, ball['y']))}
-            else:
-                self.ball_out_event = {"type": out_type, "position": {"x": ball['x'], "y": ball['y']}}
-                self.restart_team = "blue" if ball['x'] > 0 else "red"
-                self.restart_pos = {"x": 4.0 if ball['x'] > 0 else -4.0, "y": 0.0}
-            self.status = "ball_out"
-            self.restart_start_time = time.time()
-            return
-        
+        """Ball-out handler. Sideline → foul penalty. Goal-line → set piece (goal kick or corner kick-in)."""
         # Get current entities from position_history
         entities = self.position_history[-1][1] if self.position_history else {}
         offender = self.last_toucher
@@ -381,6 +389,33 @@ class RefereeNode(Node):
         
         # Determine offending team
         offending_team = "blue" if "blue" in offender else "red"
+        
+        # Goal-line out → set piece (goal kick or corner kick-in)
+        if out_type == "goal_line":
+            goal_line_owner = "red" if ball['x'] > 0 else "blue"
+            if offending_team == goal_line_owner:
+                # Scenario B: defender kicked over own line → corner kick-in for attacker
+                restart_team = "red" if offending_team == "blue" else "blue"
+                ball_pos = self._corner_flag_position(ball)
+                self._start_set_piece("corner_kick_in", ball_pos, restart_team, offending_team, entities)
+                self.get_logger().info(
+                    f"🚩 CORNER KICK-IN: {offender} kicked over own goal line. "
+                    f"Ball at ({ball_pos[0]:.1f},{ball_pos[1]:.1f}). "
+                    f"{offending_team.upper()} warped+frozen {self.SET_PIECE_COUNTDOWN:.0f}s. Restart: {restart_team}"
+                )
+            else:
+                # Scenario A: attacker kicked over defender's line → goal kick for defender
+                restart_team = goal_line_owner
+                ball_pos = self._goal_area_corner(ball, goal_line_owner)
+                self._start_set_piece("goal_kick", ball_pos, restart_team, offending_team, entities)
+                self.get_logger().info(
+                    f"🥅 GOAL KICK: {offender} kicked over opponent's goal line. "
+                    f"Ball at ({ball_pos[0]:.1f},{ball_pos[1]:.1f}). "
+                    f"{offending_team.upper()} warped+frozen {self.SET_PIECE_COUNTDOWN:.0f}s. Restart: {restart_team}"
+                )
+            return
+        
+        # Sideline out → existing foul penalty
         restart_team = "red" if offending_team == "blue" else "blue"
         
         # Compute warp position: 2m inward from boundary
@@ -402,6 +437,7 @@ class RefereeNode(Node):
         # Record foul event
         self.foul_event = {
             "type": "ball_out",
+            "out_type": out_type,
             "offender": offender,
             "victim": None,
             "position": {"x": offender_pos['x'], "y": offender_pos['y']},
@@ -441,6 +477,52 @@ class RefereeNode(Node):
             return x, self.FIELD_Y_MAX if y > 0 else -self.FIELD_Y_MAX
         else:  # goal_line — place at goal line
             return self.FIELD_X_MAX if x > 0 else -self.FIELD_X_MAX, 0.0
+    
+    def _goal_area_corner(self, ball, goal_line_owner):
+        """Nearer corner of goal area: X=±3.5, Y=±1.0 nearest to ball exit Y."""
+        x = self.GOAL_AREA_X if goal_line_owner == "red" else -self.GOAL_AREA_X
+        y = self.GOAL_AREA_Y if ball['y'] > 0 else -self.GOAL_AREA_Y
+        return (x, y)
+    
+    def _corner_flag_position(self, ball):
+        """Corner flag just inside field at goal-line/sideline intersection."""
+        x = 4.3 if ball['x'] > 0 else -4.3
+        y = 2.8 if ball['y'] > 0 else -2.8
+        return (x, y)
+    
+    def _warp_opponents_away(self, ball_pos, restart_team, entities):
+        """Warp opponent bots within SET_PIECE_WARP_RADIUS radially away from ball."""
+        for bot_id, bot_pos in entities.items():
+            if bot_id == 'soccer_ball' or restart_team in bot_id:
+                continue
+            dist = math.hypot(bot_pos['x'] - ball_pos[0], bot_pos['y'] - ball_pos[1])
+            if dist < self.SET_PIECE_WARP_RADIUS:
+                if dist < 0.01:
+                    angle = 0.0
+                else:
+                    angle = math.atan2(bot_pos['y'] - ball_pos[1], bot_pos['x'] - ball_pos[0])
+                new_x = ball_pos[0] + math.cos(angle) * self.WARP_AWAY_DISTANCE
+                new_y = ball_pos[1] + math.sin(angle) * self.WARP_AWAY_DISTANCE
+                self._warp_bot(bot_id, new_x, new_y)
+    
+    def _freeze_team(self, team_to_freeze, entities, duration):
+        """Freeze all bots on the given team for `duration` seconds."""
+        now = time.time()
+        for bot_id in entities:
+            if team_to_freeze in bot_id:
+                self.frozen_bots[bot_id] = now + duration
+    
+    def _start_set_piece(self, set_piece_type, ball_pos, restart_team, opponent_team, entities):
+        """Unified set-piece: place ball, warp nearby opponents, freeze opponents, start countdown."""
+        self._reset_ball(ball_pos[0], ball_pos[1])
+        self._warp_opponents_away(ball_pos, restart_team, entities)
+        self._freeze_team(opponent_team, entities, self.SET_PIECE_COUNTDOWN)
+        self.status = set_piece_type
+        self.restart_start_time = time.time()
+        self.restart_team = restart_team
+        self.restart_pos = {"x": ball_pos[0], "y": ball_pos[1]}
+        self.ball_out_event = {"type": set_piece_type, "position": {"x": ball_pos[0], "y": ball_pos[1]}}
+        self.foul_event = None
     
     def _warp_bot(self, bot_id, x, y):
         """Warp bot via Gazebo set_entity_state."""
