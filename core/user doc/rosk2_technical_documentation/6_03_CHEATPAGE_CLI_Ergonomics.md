@@ -1,10 +1,10 @@
 ---
 id: 6_03
-title: "Cheatpage: CLI Ergonomics, Launch Flags & V5 System-Orchestration"
+title: "Cheatpage: CLI Ergonomics, Launch Flags & System-Orchestration"
 type: CHEATPAGE
-tags: [cli, flags, launch, terminal, hybrid-os, bashrc-immunity, watchdog]
-last_modified: 2026-07-13
-version: v6
+tags: [cli, flags, launch, terminal, hybrid-os, bashrc-immunity, watchdog, v6, v6.1, v6.2, headless, duration, explain, r2k-run-id]
+last_modified: 2026-07-15
+version: v6.2
 ---
 # Cheatpage: CLI Ergonomics & Launch Flags
 
@@ -25,7 +25,13 @@ Das Startskript ist der alleinige Entrypoint. Alle Parameter werden an `setup_r2
     * Any future `relay/<name>.json` file is supported automatically.
 * `--scenario [name]`: Wählt die Szenario-JSON; löst die dynamische Prompt-Kompilierung für `qwen2.5-coder:3b` aus.
 * `--no-explain`: Deaktiviert den textuellen Reasoning-Output der KI, um die Latenz der 10Hz-Pipeline zu minimieren.
+* `--explain`: Aktiviert Reasoning-Output (analysis+oracle keys, 600 token cap). Standardmäßig deaktiviert.
+* `--headless`: Startet nur `gzserver` (kein Gazebo-GUI). Für Batch-Evaluation. Siehe [[7_03_CHEATPAGE_Tools_and_Utils]].
+* `--duration [N]`: Match-Dauer in Sekunden. Auto-Terminierung nach Ablauf.
+* `--strategy [name]`: Wählt die Strategie (z.B. `strat_default`, `strat_aggro`, `strat_recover`). Bestimmt welche Fragment-Overrides gelten.
+* `--model [name]`: Wählt das Ollama-Modell (Standard: `qwen2.5-coder:3b`).
 * `--debug`: Aktiviert verbale Logs der `ollama_sandbox_bridge.py` und des `state_aggregator.py`.
+* **`R2K_RUN_ID`**: Automatisch exportiert als `${SCENARIO}_${STRATEGY}_<timestamp>`. Korreliert Trace-Dateien. Siehe [[7_03_CHEATPAGE_Tools_and_Utils]].
 
 ## 2. V5-Sicherheitsmechanismen (Autonom)
 

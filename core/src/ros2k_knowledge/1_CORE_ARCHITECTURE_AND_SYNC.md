@@ -1,10 +1,10 @@
 ---
 id: 1_CORE
-title: "Section 1: System Overview, Core Architecture & State Sync (V5)"
+title: "Section 1: System Overview, Core Architecture & State Sync (V6.1)"
 type: KNOWLEDGE_BASE_POWER_FILE
-tags: [architecture, tmpfs, threading, race-conditions, decoupled-multiplexing, os.replace, qwen, state-aggregator, v5]
-last_modified: 2026-05-31
-version: v5_release
+tags: [architecture, tmpfs, threading, race-conditions, decoupled-multiplexing, os.replace, qwen, state-aggregator, v5, v6.1, trace-logging, observability]
+last_modified: 2026-07-15
+version: v6.1
 ---
 # Section 1: System Overview, Core Architecture & State Sync
 
@@ -121,3 +121,41 @@ response = requests.post("http://127.0.0.1:11434/api/generate", json={
     "format": "json"
 })
 ~~~
+
+---
+
+## V6.1 Addendum: Trace Logging as Observability Layer
+
+> [!warning] V6.1 Extension
+> V6.1 adds a third decoupled channel: trace logging. This does NOT replace or modify the
+> tmpfs state sync (Worldstate.json / current_strategy.json) or the ROS 2 topic bus.
+> It is a write-only observability layer that records what the system did, for offline analysis.
+
+### The Third Channel
+
+The V5 architecture has two decoupled channels:
+1. **tmpfs state sync** — `Worldstate.json` (aggregator → evaluator) and `current_strategy.json` (evaluator → bridge)
+2. **ROS 2 topic bus** — `/world_positions`, `/match_state`, `/tactical_score`, `/tactical_reward`, `/cmd_vel`
+
+V6.1 adds a third:
+3. **Trace logging** — `logs/llm_trace_<run_id>.jsonl` and `logs/world_trace_<run_id>.jsonl`
+
+### Design Constraints (same as tmpfs sync)
+
+* **Append-only JSONL** — no reads, no locks, no atomic swaps needed. Each line is a self-contained JSON record.
+* **Non-blocking** — trace writes are wrapped in `try/except` with bare `pass` on failure. A trace logging error NEVER crashes the 10Hz loop or the LLM evaluator.
+* **Decoupled** — trace logging happens AFTER the atomic `Worldstate.json` swap (`state_aggregator.py:60-71`) and AFTER the LLM response is parsed (`r2k_evaluator.py:135,139`). It observes the outcome, never influences it.
+* **No interference** — trace files go to `logs/` (gitignored), NOT `shared_state/`. The LLM and bridge never read trace files. There is no feedback loop.
+
+### Why Not ROS 2 Topics?
+
+Trace logging could have been a ROS 2 topic (e.g. `/llm_trace`). It wasn't, because:
+1. `r2k_evaluator.py` is NOT a ROS 2 node — it's a standalone HTTP daemon. It cannot publish topics.
+2. The trace data is large (raw LLM responses, full entity maps) and high-frequency (10Hz world trace). ROS 2 topics would add serialization overhead for data that's only needed offline.
+3. The trace files are consumed by `tools/analyze_trace.py` AFTER the run ends, not during. File I/O is sufficient.
+
+### R2K_RUN_ID as Correlation Key
+
+Both trace files share a common `R2K_RUN_ID` (env var set by `launch_r2k.sh:82`). This allows `analyze_trace.py` to join world-state frames with LLM calls by timestamp, reconstructing the full decision loop: world state → LLM input → LLM output → parse result → latency.
+
+See `6_DATA_SCHEMAS_AND_LIFECYCLE.md` §V6.1 Addendum for trace file schemas and KPI definitions.

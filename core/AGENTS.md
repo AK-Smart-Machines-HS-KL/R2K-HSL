@@ -14,7 +14,7 @@ All work happens under `core/`. The repo root is a thin wrapper (README, `git_ru
 - `core/.github/copilot-instructions.md` — architecture axioms and agent persona rules.
 - `core/docs/` — developer-facing specs: `optimization_spec_v6.md` (v6.1 spec with phase checkpoints), `spec_taktische_evaluierung.md` (German historical design decisions), `referee_rulebook.md` (complete referee decision catalog with thresholds, field diagrams, state machine — read before changing any rule).
 - `core/src/ros2k_knowledge/` — RAG power-files (`1_CORE_…` … `6_DATA_…`) + `META_KNOWLEDGE_ROUTER.md` (inverted index of symptoms → which file has the answer). Consult the router before debugging.
-- `core/user doc/rosk2_v5_technical_documentation/` — 35-file detailed architecture reference (human-facing).
+- `core/user doc/rosk2_technical_documentation/` — 40-file detailed architecture reference (human-facing).
 - `core/src/scenario/README.md` — scenario naming + v5/v6 schema rules.
 - `git_rules.md` (repo root) — branch naming + language conventions.
 

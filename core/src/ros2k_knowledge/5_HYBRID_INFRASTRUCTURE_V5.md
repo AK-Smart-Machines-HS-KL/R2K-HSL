@@ -1,10 +1,10 @@
 ---
 id: 5_HYBRID
-title: "Section 5: Hybrid OS Infrastructure & Deployment (V5)"
+title: "Section 5: Hybrid OS Infrastructure & Deployment (V6.1)"
 type: KNOWLEDGE_BASE_POWER_FILE
-tags: [hybrid-os, docker, ubuntu-24, ubuntu-22, host-mode, fastdds, x11, xid-31, suspend-bug, compose-project-name]
-last_modified: 2026-05-31
-version: v5_release
+tags: [hybrid-os, docker, ubuntu-24, ubuntu-22, host-mode, fastdds, x11, xid-31, suspend-bug, compose-project-name, v6.1, headless-gzserver, docker-env-passthrough]
+last_modified: 2026-07-15
+version: v6.1
 ---
 # Section 5: Hybrid OS Infrastructure & Deployment (V5)
 
@@ -122,3 +122,29 @@ else
     docker compose up -d
 fi
 ~~~
+
+---
+
+## V6.1 Addendum: Headless Gazebo & Docker Env Passthrough
+
+> [!warning] V6.1 Extension
+> V6.1 adds headless Gazebo mode (gzserver only) for batch evaluation and propagates `R2K_RUN_ID`
+> into Docker containers for trace logging correlation. Source: `launch_r2k.sh`,
+> `ros2_ws/src/r2k_scenario_spawner/launch/soccer_match.launch.py`.
+
+### Headless Gazebo (gzserver only)
+
+* `soccer_match.launch.py` now declares a `headless` launch argument (default `false`).
+* When `headless:=true`, only `gzserver` is launched — no `gzclient` GUI. This eliminates rendering overhead for batch evaluation.
+* `launch_r2k.sh:188` passes `headless:=true` when `--headless` flag is set (native path).
+* `launch_r2k.sh:299` passes `headless:=true` for Docker path.
+* Expected: 30-50% faster physics-only simulation vs. full GUI rendering.
+* The watchdog still works: it polls for `gazebo|gzserver|ruby` PID, so headless runs are torn down correctly on CTRL+C or duration timeout.
+
+### Docker Env Passthrough
+
+* `launch_r2k.sh:82` exports `R2K_RUN_ID` on the host.
+* Native path: child processes inherit the env var automatically.
+* Docker path: `R2K_RUN_ID` is explicitly passed via `docker exec -d -e R2K_RUN_ID="$R2K_RUN_ID"` to `state_aggregator.py` (`launch_r2k.sh:357`) and `r2k_evaluator.py` (`launch_r2k.sh:362`).
+* Without this explicit passthrough, Docker containers do NOT inherit host env vars by default, and trace files would be named with the fallback `run_{timestamp}` instead of the correlated run ID.
+* `R2K_OLLAMA_MODEL` and `R2K_OLLAMA_URL` are also passed through (`launch_r2k.sh:362`) to allow per-run model selection.

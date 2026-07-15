@@ -2,9 +2,9 @@
 id: 4_01
 title: "Introduction to Edge Hardware Integration"
 type: INTRODUCTION
-tags: [sim2real, edge-hardware, esp32, booster-k1, json-rpc, hal]
-last_modified: 2026-07-13
-version: v6
+tags: [sim2real, edge-hardware, esp32, booster-k1, json-rpc, hal, v6, v6.1, v6.2]
+last_modified: 2026-07-15
+version: v6.2
 ---
 # Introduction to Edge Hardware Integration
 

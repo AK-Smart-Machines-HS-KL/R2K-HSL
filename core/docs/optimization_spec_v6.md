@@ -1,11 +1,17 @@
 ---
-title: ROS2K v6.1 Technical Specification
-tags: [ros2k, v6, v6.1, optimization, llm, evaluation, benchmark, referee, momentum, reward, fouls]
+title: ROS2K v6.1 Technical Specification (SUPERSEDED)
+tags: [ros2k, v6, v6.1, optimization, llm, evaluation, benchmark, referee, momentum, reward, fouls, superseded]
 date: 2026-07-09
 checkpoint_date: 2026-07-13
-status: active
+status: superseded
+superseded_by: optimization_spec_v6.2.md
 version: 6.1
 ---
+
+> [!warning] SUPERSEDED by v6.2
+> This spec is preserved for historical reference. The active specification is
+> `core/docs/optimization_spec_v6.2.md`, which integrates all completed work
+> (Phases 0-1) and adds Phase 5 Future Work. Do not use this file for planning.
 
 # ROS2K v6.1 — Technical Specification
 

@@ -2,9 +2,9 @@
 id: 3_01
 title: "Introduction to AI Teams Overview"
 type: INTRODUCTION
-tags: [ai, team-blue, team-red, paradigm]
-last_modified: 2026-05-31
-version: v5_release
+tags: [ai, team-blue, team-red, paradigm, v6, v6.1, v6.2]
+last_modified: 2026-07-15
+version: v6.2
 ---
 # Introduction to AI Teams Overview
 
@@ -14,6 +14,7 @@ version: v5_release
 > [!abstract] LLM Context Anchor
 > ROS2K explicitly segments AI into two paradigms. Team Blue uses asynchronous JSON file multiplexing. Team Red bypasses file I/O entirely, acting as a synchronous, low-latency ROS 2 node. BOTH teams now share parity in utilizing the `/gazebo/set_entity_state` service for Phantom Kicking.
 > **[NEW in v5]:** Team Blue has been upgraded to `qwen2.5-coder:3b` via Ollama REST API. Team Red serves as the deterministic Python control group relying on a Rule-based State Machine.
+> **[NEW in v6.1]:** Team Red adds `AGGRESSION_FACTOR=0.15` (realistic foul scenarios), smoothstep hysteresis, boundary clamp (±1.0m restart / ±0.5m normal), blocking avoidance (P4), and freeze compliance via `restart_team` check. Team Blue adds trace logging (llm_trace). See [[3_05_ARCHITECTURE_TeamRed_Algorithmic]] and [[7_04_SPECIFICATION_Prompt_Architecture]].
 
 ## 1. System Topology of the Dual-Brain Paradigm
 

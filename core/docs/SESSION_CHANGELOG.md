@@ -546,3 +546,162 @@ confidence.
   end-to-end verified
 - Visualizer blitting refactor still untested with live ROS 2 + Gazebo
   (orthogonal to this work)
+
+## 2026-07-15 (continued) — Knowledge base v6.1 update, v6.2 unified spec, user docs overhaul
+
+**Goal:** Update RAG knowledge base to v6.1, write unified v6.2 optimization spec merging
+all prior work, overhaul user documentation with new Section 7 (Scoring/Referee,
+World Model, Tools, Prompt Architecture, Experiment Guide).
+
+**Done:**
+
+### RAG knowledge base update (v6_active → v6.1)
+
+Bumped 6 power-files from `v6_active`/`v5_release` to `v6.1`. Titles updated from (V5) to (V6.1).
+New content added (experiment findings excluded as transient — stayed in SESSION_CHANGELOG):
+
+- `1_CORE_ARCHITECTURE_AND_SYNC.md`: Trace logging as third decoupled channel (append-only
+  JSONL, non-blocking, why not ROS topic, R2K_RUN_ID correlation). v5_release → v6.1.
+- `2_ROS2_PROTOCOLS_AND_FRAMES.md`: Content already current from 2026-07-14, tag/title
+  bump only. v6_active → v6.1.
+- `3_AI_LOGIC_AND_EDGE_CASES.md`: 4 new topics — prompt disentanglement (strat_*.txt
+  removal, sample-override, dump_prompt.py), R2K_INCLUDE_MATCH_STATE, goalie idle
+  structural limitation, team red P1-P5 (freeze bug fix, boundary clamp, blocking
+  avoidance, aggression guard). v6_active → v6.1.
+- `5_HYBRID_INFRASTRUCTURE_V5.md`: Headless gzserver, Docker env passthrough (R2K_RUN_ID,
+  R2K_OLLAMA_MODEL via docker exec -e). v5_release → v6.1.
+- `6_DATA_SCHEMAS_AND_LIFECYCLE.md`: R2K_RUN_ID lifecycle, llm_trace schema, world_trace
+  schema, analyze_trace.py 14 KPI definitions, log file lifecycle. v6_active → v6.1.
+- `META_KNOWLEDGE_ROUTER.md`: 4 new glossary entries (trace logger, KPI analyzer, prompt
+  inspector, run ID), 3 new routing matrix rows. v6_active → v6.1.
+- Not touched: `4_EDGE_HARDWARE_SIM2REAL.md` (v5_release, no v6.1 changes),
+  `ROS2K_GEM_FAQ.md` (v5_release, no v6.1 changes).
+
+### Unified v6.2 optimization spec (`core/docs/optimization_spec_v6.2.md`)
+
+783-line spec merging v6.1 infrastructure spec + completed prompt study (Phases 0-1) +
+new Phase 5 Future Work. Key decisions (user-approved):
+- Phase 2 baseline: reduced 27-run (9 scenarios × consolidated prompt × 3b × 3 runs)
+- Phase 3 models: pull cosmos (3b + cosmos + nemotron-4b)
+- v6.1's 5 named variants (Minimalist, Role-first, etc.): dropped (B-study superseded)
+- B6a vs current fragments: keep current (STAY INSIDE + goalie -4.0)
+
+Structure: 12 sections (Management Summary, Architecture, Components, Scenarios,
+Prompt Architecture, KPIs, Experiment Catalog, Phases 0-5, Run Budget, Data Format,
+Related Files, Open Questions). Phases 0-1 marked DONE, Phase 2 NEXT, Phases 3-4 BLOCKED,
+Phase 5 RESEARCH (10 items: Kalman, predictive model, watchdog, failsafe, dynamic prompts,
+GUI, sim-to-real, opponent adaptation, temporal reasoning, active learning).
+
+Experiment catalog: B-series DONE (11×3=33 runs), C-series stretch (5 deferred),
+D-series new (8 experiments: model size, temperature, context window, dynamic prompt,
+opponent adaptation, scenario ranking, temporal context, 10× confidence).
+
+`optimization_spec_v6.md` marked as superseded with frontmatter note.
+
+### User documentation overhaul
+
+- Renamed folder: `rosk2_v5_technical_documentation/` → `rosk2_technical_documentation/`
+- Renamed file: `2_04_ARCHITECTURE_V5_Engine_Nodes.md` → `2_04_ARCHITECTURE_Engine_Nodes.md`
+- `AGENTS.md` reference updated
+
+**Master index rewritten** (`00_MASTER_INDEX.md`, 231 lines): Fixed heredoc corruption
+(duplicated content lines 47-257), added Section 7 TOC, novice reading path, 13 new
+glossary entries, 5 new Q&A entries, updated Future Work (10 v6.2 research directions),
+version bumped to v6.2.
+
+**5 new Section 7 files (1,220 lines total):**
+- `7_01_INTRODUCTION_Scoring_Referee_Gamestate.md` (224 lines, German): unified scoring
+  (momentum, reward), referee (fouls, set-pieces, kickoff), game state schema, interaction
+  flow, tradeoffs (samples, explain, goalie idle)
+- `7_02_ARCHITECTURE_World_Model_Components.md` (229 lines, English): perception-cognition-
+  execution pipeline, what LLM sees vs what exists, trace logging layer, ground truth axiom,
+  future work
+- `7_03_CHEATPAGE_Tools_and_Utils.md` (264 lines, English): dump_prompt, analyze_trace,
+  swap_fragments, run_experiment, batch_evaluator, R2K_RUN_ID lifecycle, 14 KPI reference,
+  experiment intro example with real B-study numbers
+- `7_04_SPECIFICATION_Prompt_Architecture.md` (244 lines, English): fragment assembly,
+  override logic, strat_*.txt removal, B-study findings table (RQ1-RQ3), consolidated v6.2
+  prompt, goalie idle limitation, dynamic prompt selection roadmap
+- `7_05_CHEATPAGE_Experiment_Guide.md` (259 lines, English): step-by-step novice guide —
+  run single match, inspect KPIs, run 3-repeat experiment, compare results, run full batch,
+  file locations, troubleshooting table
+
+**12 existing files updated (v6.2 bump + v6.1 notes):**
+- `1_01`: v6.2 bump, v6.1 abstract note (trace, reward, referee, momentum, headless)
+- `2_01`: v6.2 bump, v6 note (new topics: /match_state, /tactical_score, /tactical_reward)
+- `2_04`: **Full rewrite** (125→206 lines): added foul detection, set-pieces, momentum,
+  reward node, v6.1 schema, updated mermaid topology
+- `3_01`: v6.2 bump, v6.1 note (red aggression, P1-P5, trace logging)
+- `3_02`: v6.2 bump, Nemotron→qwen in summary + mermaid, v6.1 note (trace, explain, match_state)
+- `3_05`: v6.2 bump, v6.1 note (AGGRESSION_FACTOR, smoothstep, P1-P5, freeze bug fix)
+- `3_08`: v6.2 bump, v6.1 note (strat_*.txt removed, override logic, dump_prompt.py)
+- `4_01`: v6→v6.2 bump, date update
+- `5_01`: v6.2 bump, v6.1 note (headless Gazebo, Docker env passthrough)
+- `6_01`: **Major update** (161→280+ lines): v6 note, 4 new sections (match_state, tactical_score,
+  tactical_reward schemas, trace+eval schemas)
+- `6_02`: v6.2 bump, title de-versioned, v6.1 note (R2K_RUN_ID, trace lifecycle, headless)
+- `6_03`: v6→v6.2 bump, title de-versioned, added --explain/--headless/--duration/--strategy/
+  --model flags, R2K_RUN_ID entry
+
+**Not updated (21 files at v5_release):** hardware docs (ESP32, K1, micro-ROS), unchanged
+architecture docs (control loops, state sync, race conditions, thread spawning, coordinate
+frames, optional modules, Qwen latency, blue/red failsafes, edge cases, Docker networking,
+build scratch, Xid 31) — no v6.1 content to add.
+
+**Files touched:**
+- `core/docs/optimization_spec_v6.2.md` (NEW — 783 lines)
+- `core/docs/optimization_spec_v6.md` (superseded note added)
+- `core/src/ros2k_knowledge/1_CORE_ARCHITECTURE_AND_SYNC.md` (v6.1, trace logging section)
+- `core/src/ros2k_knowledge/2_ROS2_PROTOCOLS_AND_FRAMES.md` (v6.1, tag/title bump)
+- `core/src/ros2k_knowledge/3_AI_LOGIC_AND_EDGE_CASES.md` (v6.1, 4 new topics)
+- `core/src/ros2k_knowledge/5_HYBRID_INFRASTRUCTURE_V5.md` (v6.1, headless + Docker env)
+- `core/src/ros2k_knowledge/6_DATA_SCHEMAS_AND_LIFECYCLE.md` (v6.1, trace schemas + KPIs)
+- `core/src/ros2k_knowledge/META_KNOWLEDGE_ROUTER.md` (v6.1, 4 glossary + 3 routing rows)
+- `core/AGENTS.md` (folder reference updated)
+- `core/user doc/rosk2_technical_documentation/00_MASTER_INDEX.md` (rewritten, 231 lines)
+- `core/user doc/rosk2_technical_documentation/7_01_INTRODUCTION_Scoring_Referee_Gamestate.md` (NEW)
+- `core/user doc/rosk2_technical_documentation/7_02_ARCHITECTURE_World_Model_Components.md` (NEW)
+- `core/user doc/rosk2_technical_documentation/7_03_CHEATPAGE_Tools_and_Utils.md` (NEW)
+- `core/user doc/rosk2_technical_documentation/7_04_SPECIFICATION_Prompt_Architecture.md` (NEW)
+- `core/user doc/rosk2_technical_documentation/7_05_CHEATPAGE_Experiment_Guide.md` (NEW)
+- `core/user doc/rosk2_technical_documentation/1_01_INTRODUCTION_Overall_Architecture.md` (v6.2)
+- `core/user doc/rosk2_technical_documentation/2_01_INTRODUCTION_ROS2_Protocol_Stack.md` (v6.2)
+- `core/user doc/rosk2_technical_documentation/2_04_ARCHITECTURE_Engine_Nodes.md` (full rewrite)
+- `core/user doc/rosk2_technical_documentation/3_01_INTRODUCTION_AI_Teams_Overview.md` (v6.2)
+- `core/user doc/rosk2_technical_documentation/3_02_ARCHITECTURE_TeamBlue_LLM.md` (v6.2, Nemotron→qwen)
+- `core/user doc/rosk2_technical_documentation/3_05_ARCHITECTURE_TeamRed_Algorithmic.md` (v6.2)
+- `core/user doc/rosk2_technical_documentation/3_08_ARCHITECTURE_Dynamic_Prompting.md` (v6.2)
+- `core/user doc/rosk2_technical_documentation/4_01_INTRODUCTION_Edge_Hardware.md` (v6.2)
+- `core/user doc/rosk2_technical_documentation/5_01_INTRODUCTION_Dual_OS_Topology.md` (v6.2)
+- `core/user doc/rosk2_technical_documentation/6_01_SPECIFICATION_Data_Schemas.md` (major update)
+- `core/user doc/rosk2_technical_documentation/6_02_CHEATPAGE_System_Lifecycle.md` (v6.2)
+- `core/user doc/rosk2_technical_documentation/6_03_CHEATPAGE_CLI_Ergonomics.md` (v6.2)
+- `core/docs/SESSION_CHANGELOG.md` (this entry)
+
+**New files (untracked):**
+- `core/docs/optimization_spec_v6.2.md`
+- `core/user doc/rosk2_technical_documentation/7_01_INTRODUCTION_Scoring_Referee_Gamestate.md`
+- `core/user doc/rosk2_technical_documentation/7_02_ARCHITECTURE_World_Model_Components.md`
+- `core/user doc/rosk2_technical_documentation/7_03_CHEATPAGE_Tools_and_Utils.md`
+- `core/user doc/rosk2_technical_documentation/7_04_SPECIFICATION_Prompt_Architecture.md`
+- `core/user doc/rosk2_technical_documentation/7_05_CHEATPAGE_Experiment_Guide.md`
+
+**Files deleted:**
+- `core/user doc/rosk2_v5_technical_documentation/` (folder renamed, all 35 files moved)
+
+**Not yet done:**
+- 21 user docs still at v5_release (hardware + unchanged architecture docs) — by design,
+  no v6.1 content to add
+- `batch_evaluator.py` KPI collection still broken (Phase 2b in v6.2 spec)
+- Nothing committed — all work uncommitted on `feature/ros2k_behavior_optimization`
+- Visualizer blitting refactor still untested with live ROS 2 + Gazebo
+
+**Next:**
+- Phase 2 of v6.2 spec: fix `batch_evaluator.py` KPI collection (2b), then run 27-run
+  baseline (2c), then identify 3 worst scenarios (2d)
+- Alternatively: commit all documentation work first (separate branch from code work)
+
+**Blockers:**
+- None for documentation work — all complete
+- Phase 2b (batch_evaluator fix) requires live Ollama + Gazebo to verify
+- Phase 2c (27-run baseline) requires ~45min compute + working batch_evaluator

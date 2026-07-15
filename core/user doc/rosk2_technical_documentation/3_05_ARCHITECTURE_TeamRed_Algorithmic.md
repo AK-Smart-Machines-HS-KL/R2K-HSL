@@ -2,9 +2,9 @@
 id: 3_05
 title: "Team Red Algorithmic Architecture"
 type: ARCHITECTURE
-tags: [team-red, state-machine, deterministic, baseline, staging]
-last_modified: 2026-05-31
-version: v5_release
+tags: [team-red, state-machine, deterministic, baseline, staging, v6, v6.1, v6.2, aggression, p1-p5, freeze-compliance, blocking-avoidance]
+last_modified: 2026-07-15
+version: v6.2
 ---
 # Team Red Algorithmic Architecture
 
@@ -14,6 +14,7 @@ version: v5_release
 > [!abstract] LLM Context Anchor
 > `rule_evaluator_red.py` is a self-contained ROS 2 node. It bypasses JSON polling entirely. It calculates a staging point strictly 0.6m behind the ball. Upon reaching the ball, it halts and triggers the `/gazebo/set_entity_state` service, achieving parity with Team Blue.
 > **[NEW in v5]:** The script `rule_evaluator_red.py` has been moved to the root directory for a flat process hierarchy. It remains the deterministic mathematical baseline against the new `qwen2.5-coder:3b` LLM.
+> **[NEW in v6.1]:** Red adds `AGGRESSION_FACTOR=0.15` (15% chance to attack opponents → generates realistic foul scenarios). Smoothstep + low-pass filter hysteresis replaces all hard thresholds. P1-P5 improvements: boundary clamp (±1.0m restart / ±0.5m normal), all-bots-hold-midfield during opponent restart, blocking avoidance (shift toward sideline to open goal-ward path), aggression guarded during freeze. Freeze bug fix: `red_scored` one-shot edge detector replaced with `restart_team == 'blue'` check. See [[7_01_INTRODUCTION_Scoring_Referee_Gamestate]].
 
 ## 1. System Topology of the Deterministic State Machine
 

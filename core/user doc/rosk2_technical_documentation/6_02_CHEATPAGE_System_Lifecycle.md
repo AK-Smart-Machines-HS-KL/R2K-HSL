@@ -1,10 +1,10 @@
 ---
 id: 6_02
-title: "System Lifecycle and Orchestration (V5)"
+title: "System Lifecycle and Orchestration"
 type: CHEATPAGE
-tags: [bash, orchestration, teardown, lifecycle, docker, setup_r2k, relay, watchdog, bashrc-immunity]
-last_modified: 2026-05-31
-version: v5_release
+tags: [bash, orchestration, teardown, lifecycle, docker, setup_r2k, relay, watchdog, bashrc-immunity, v6, v6.1, v6.2, r2k-run-id, trace-lifecycle, headless]
+last_modified: 2026-07-15
+version: v6.2
 ---
 # System Lifecycle and Orchestration
 
@@ -14,6 +14,7 @@ version: v5_release
 > [!abstract] LLM Context Anchor
 > Die Architektur ist kein monolithisches Executable. Es handelt sich um einen verteilten Schwarm unabhängiger Python-Daemons, ROS 2-Knoten und (je nach Hybrid OS) Docker-Containern. Das Skript `setup_r2k.py` fungiert als Pre-Flight-Compiler. 
 > **[NEW in v5]:** Das alte `kill_r2k.sh` Skript ("Nuke & Pave") ist in V5 obsolet und wird vom System ignoriert. Ein hochfrequenter Watchdog direkt in der `launch_r2k.sh` übernimmt nun den asynchronen Teardown (inklusive Kinematic Freeze und `pkill -9` für Ollama). Toxische Benutzer-Umgebungsvariablen werden durch die harte `.bashrc Immunity` geblockt.
+> **[NEW in v6.1]:** `launch_r2k.sh` exportiert `R2K_RUN_ID` für Trace-Korrelation. Trace-Dateien (`logs/*.jsonl`) sind gitignored und werden beim Boot NICHT gelöscht — sie akkumulieren. Headless-Teardown funktioniert mit `gzserver`-only (kein GUI). Siehe [[7_03_CHEATPAGE_Tools_and_Utils]].
 
 ## 1. System Topology of the Orchestration Lifecycle
 

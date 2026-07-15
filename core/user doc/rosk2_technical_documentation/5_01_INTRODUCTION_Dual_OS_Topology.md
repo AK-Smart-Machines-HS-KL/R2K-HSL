@@ -2,9 +2,9 @@
 id: 5_01
 title: "Dual OS Topology and Orchestration"
 type: INTRODUCTION
-tags: [docker, orchestration, ubuntu-24, ubuntu-22, hybrid-os, gpu-access, watchdog]
-last_modified: 2026-05-31
-version: v5_release
+tags: [docker, orchestration, ubuntu-24, ubuntu-22, hybrid-os, gpu-access, watchdog, v6, v6.1, v6.2, headless-gzserver, docker-env-passthrough]
+last_modified: 2026-07-15
+version: v6.2
 ---
 # Dual OS Topology and Orchestration
 
@@ -14,6 +14,7 @@ version: v5_release
 > [!abstract] LLM Context Anchor
 > The architecture utilizes a specific OS-bridge strategy: the host runs Ubuntu 24 (Noble) without any ROS 2 installation. All robotics middleware resides in an Ubuntu 22 (Jammy) Docker container to satisfy the ROS 2 Humble dependency for Booster K1 and Yahboom hardware.
 > **[NEW in v5]:** The system now utilizes a "Hybrid OS Topology". The bootstrap script dynamically evaluates the host operating system. Ubuntu 22.04 executes 100% natively (for 0ms latency), whereas Ubuntu 24.04 encapsulates the environment via Docker Compose. Additionally, X11-Forwarding (`/tmp/.X11-unix`) and dynamic `COMPOSE_PROJECT_NAME` generation ensure GUI passthrough without container collisions.
+> **[NEW in v6.1]:** Headless Gazebo mode (`--headless` flag → `gzserver` only, no `gzclient` GUI) for batch evaluation. Docker env passthrough: `R2K_RUN_ID` propagated via `docker exec -e`. See [[7_03_CHEATPAGE_Tools_and_Utils]].
 
 ## 1. System Topology of OS-Level Boundaries
 

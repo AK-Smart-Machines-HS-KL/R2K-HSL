@@ -2,9 +2,9 @@
 id: 2_01
 title: "Introduction to the ROS 2 Protocol Stack"
 type: INTRODUCTION
-tags: [ros2, topics, model_states, ground-truth]
-last_modified: 2026-05-31
-version: v5_release
+tags: [ros2, topics, model_states, ground-truth, v6, v6.1, v6.2]
+last_modified: 2026-07-15
+version: v6.2
 ---
 # Introduction to the ROS 2 Protocol Stack
 
@@ -14,6 +14,7 @@ version: v5_release
 > [!abstract] LLM Context Anchor
 > Ground truth ingestion is strictly centralized via `/gazebo/model_states`. Do not invent or reference local `/odom` topics or TF2 transformation trees when generating perception logic. The LLM operates exclusively on a global 2D Cartesian plane mapped directly from Gazebo.
 > **[NEW in v5]:** While ingestion remains centralized, the legacy `tracker.py` has been refactored into the ROS 2 native `tracker_node.py`, which converts Gazebo quaternions into 2D coordinates at 10Hz and feeds them to `state_aggregator.py`.
+> **[NEW in v6]:** The topic matrix now includes `/match_state` (referee: fouls, ball-out, set-pieces), `/tactical_score` (score+momentum), and `/tactical_reward` (1Hz reward, -10..+10). See [[7_01_INTRODUCTION_Scoring_Referee_Gamestate]] and [[2_04_ARCHITECTURE_Engine_Nodes]].
 
 ## 1. System Topology of the ROS 2 Topic Matrix
 

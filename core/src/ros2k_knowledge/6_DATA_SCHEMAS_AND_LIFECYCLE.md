@@ -1,10 +1,10 @@
 ---
 id: 6_DATA_LIFECYCLE
-title: "Section 6: Data Schemas & System Lifecycle (V5)"
+title: "Section 6: Data Schemas & System Lifecycle (V6.1)"
 type: KNOWLEDGE_BASE_POWER_FILE
-tags: [json, schema, rpc, bash, lifecycle, orchestration, setup_r2k, flat-json, relay-profiles, watchdog, cli-ergonomics, active_relay, bashrc-immunity, v6, tactical-score, tactical-reward, match-state, eval-results, batch-evaluator, momentum, set-piece, goal-kick, corner-kick-in, own-half-warp]
-last_modified: 2026-07-14
-version: v6_active
+tags: [json, schema, rpc, bash, lifecycle, orchestration, setup_r2k, flat-json, relay-profiles, watchdog, cli-ergonomics, active_relay, bashrc-immunity, v6, v6.1, tactical-score, tactical-reward, match-state, eval-results, batch-evaluator, momentum, set-piece, goal-kick, corner-kick-in, own-half-warp, trace-logging, llm-trace, world-trace, r2k-run-id, analyze-trace, kpi]
+last_modified: 2026-07-15
+version: v6.1
 ---
 # Section 6: Data Schemas & System Lifecycle (V5)
 
@@ -308,3 +308,99 @@ python3 batch_evaluator.py \
 * Subscribes to `/tactical_score`, `/tactical_reward`, `/match_state`, `/world_positions` in a parallel thread.
 * All metrics aggregated in memory, written once at end.
 * **Must NOT kill `ollama` on teardown** — only ROS nodes and Gazebo.
+
+---
+
+## V6.1 Addendum: Trace Logging & KPI Measurement
+
+> [!warning] V6.1 Extension
+> V6.1 adds an observability layer: two JSONL trace files written during every run, plus an
+> offline KPI analyzer. These do NOT interfere with the 10Hz execution loop — they are a third
+> decoupled channel (state sync → LLM → trace logging). Source: `r2k_evaluator.py:19-42`,
+> `state_aggregator.py:28-71`, `tools/analyze_trace.py`.
+
+### R2K_RUN_ID Lifecycle
+
+* `launch_r2k.sh:82` exports `R2K_RUN_ID="${SCENARIO}_${STRATEGY}_$(date +%Y%m%d_%H%M%S)"`.
+* Propagated to `r2k_evaluator.py` and `state_aggregator.py` via env var (native) or `docker exec -e R2K_RUN_ID=...` (Docker, `launch_r2k.sh:357,362`).
+* Both nodes use it to name their trace files. If unset, falls back to `run_{timestamp}`.
+* The run ID is also printed to console at boot: `📋 Run ID: ...  (logs: src/logs/*_${R2K_RUN_ID}.jsonl)`.
+* `tools/analyze_trace.py --run-id <R2K_RUN_ID>` locates the matching trace files for offline analysis.
+
+### `llm_trace_<run_id>.jsonl` (r2k_evaluator.py)
+
+One JSON line per LLM call. Written to `logs/llm_trace_<run_id>.jsonl`.
+
+~~~json
+{
+  "t": 1782986654.74,
+  "world_snapshot": {"blue_1": {"x": -1.5, "y": 0.3}, "soccer_ball": {"x": 0.0, "y": 0.1}},
+  "sys_prompt_hash": "a3f1b2c8d9e01234",
+  "raw_response": "{\"assignments\":{...}}",
+  "parse_code": 0,
+  "latency_ms": 827,
+  "model": "qwen2.5-coder:3b",
+  "num_predict": 150,
+  "explain": false
+}
+~~~
+
+* `parse_code`: `0` = clean JSON, `1` = trailing comma fix, `2` = assignments extraction fallback, `3` = total parse failure.
+* `raw_response` truncated to 2000 chars.
+* `sys_prompt_hash` is SHA1 of the system prompt (first 16 hex chars) — allows detecting prompt changes between runs without storing the full prompt.
+
+### `world_trace_<run_id>.jsonl` (state_aggregator.py)
+
+One JSON line per 10Hz world-state write. Written to `logs/world_trace_<run_id>.jsonl`.
+
+~~~json
+{
+  "t": 1782986654.74,
+  "entities": {"blue_1": {"x": -1.5, "y": 0.3}, "red_1": {"x": 2.1, "y": -0.2}, "soccer_ball": {"x": 0.0, "y": 0.1}},
+  "match_state": {"blue": 0, "red": 0, "status": "playing", "restart_team": null, "foul": null},
+  "tactical_score": {"current_numerical_score": -0.5, "average_numerical_score": -0.2, "momentum_30s": 0.3, "momentum_trend": "stable"}
+}
+~~~
+
+* Written at the end of each `write_to_disk()` call (`state_aggregator.py:60-71`), after the atomic `Worldstate.json` swap.
+* Wrapped in try/except — trace logging failures never crash the aggregator.
+
+### `tools/analyze_trace.py` — KPI Definitions
+
+Offline analyzer. Reads both trace files for a given run ID, computes 14 KPIs, outputs JSON.
+
+~~~bash
+python3 tools/analyze_trace.py --run-id 3vs3_attack_center_strat_default_20260715_122720
+python3 tools/analyze_trace.py --run-id <ID> --output results/kpis_<ID>.json
+~~~
+
+**World KPIs** (from `world_trace`):
+
+| KPI | Calculation |
+|-----|-------------|
+| `goals_for_blue` / `goals_for_red` | Score delta count across frames |
+| `cluster_pct` | % frames where min pairwise blue bot distance < 1.5m |
+| `goalie_idle_pct` | % frames where goalie moved < 0.1m from previous frame |
+| `oob_pct` | % frames where any blue bot is > 0.5m outside field bounds |
+| `ball_possession_blue_pct` | % frames where closest bot to ball is blue |
+| `tactical_score_avg` | Mean of `average_numerical_score` across frames |
+| `tactical_score_final` | Last `current_numerical_score` value |
+| `status_distribution` | Counter of `match_state.status` values across frames |
+| `duration_s` | Time span from first to last record |
+
+**LLM KPIs** (from `llm_trace`):
+
+| KPI | Calculation |
+|-----|-------------|
+| `latency_p50` / `latency_p95` / `latency_max` | Percentile latency from `latency_ms` |
+| `parse_error_rate` | % of LLM calls with `parse_code > 0` |
+| `role_diversity` | Count of distinct `role` values in LLM assignments |
+| `roles` | Counter of role names (e.g. `{"striker": 45, "goalie": 20}`) |
+| `avg_response_tokens` | Mean `len(raw_response) / 4` (approximate token count) |
+
+### Log File Lifecycle
+
+* `logs/` directory is gitignored. Created automatically by `os.makedirs(LOG_DIR, exist_ok=True)`.
+* `launch_r2k.sh` does NOT wipe `logs/` on start — trace files accumulate. Manual cleanup: `rm src/logs/*.jsonl`.
+* Trace files are append-only within a run. Multiple runs with the same `R2K_RUN_ID` (should not happen) would interleave lines.
+* The `R2K_RUN_ID` encodes scenario + strategy + timestamp, so trace files are self-identifying.

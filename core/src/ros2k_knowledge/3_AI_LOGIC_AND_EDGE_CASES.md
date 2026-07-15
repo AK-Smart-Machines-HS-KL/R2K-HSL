@@ -1,10 +1,10 @@
 ---
 id: 3_AI_LOGIC
-title: "Section 3: AI Logic, Failsafes & Edge Cases (V5)"
+title: "Section 3: AI Logic, Failsafes & Edge Cases (V6.1)"
 type: KNOWLEDGE_BASE_POWER_FILE
-tags: [qwen, team-blue, team-red, failsafes, bounding-box, hysteresis, orbital-singularity, setup_r2k, phantom-kick, flat-json, ollama-tuning, kv-cache, user-space, v6, kick-in, prompt-switching, prompt-injection, reward-node, momentum, aggression]
-last_modified: 2026-07-13
-version: v6_active
+tags: [qwen, team-blue, team-red, failsafes, bounding-box, hysteresis, orbital-singularity, setup_r2k, phantom-kick, flat-json, ollama-tuning, kv-cache, user-space, v6, v6.1, kick-in, prompt-switching, prompt-injection, reward-node, momentum, aggression, prompt-disentanglement, strat-artifact, sample-override, dump-prompt, match-state-injection, goalie-idle, red-p1-p5, blocking-avoidance, freeze-bug]
+last_modified: 2026-07-15
+version: v6.1
 ---
 # Section 3: AI Logic, Failsafes & Edge Cases
 
@@ -227,3 +227,37 @@ Team Red must treat ball-out as a special state, not as normal play:
 5. Red must NOT occupy the restart position if rules forbid it.
 6. After restart: return to normal defensive behavior.
 7. Red needs a state recognition for `ball_out` and a reaction policy for `restart_team != red`.
+
+### V6.1 Prompt Build Disentanglement (setup_r2k.py)
+
+The prompt compilation pipeline was restructured in Phase 0 (2026-07-15) to eliminate build artifacts and fix contradictory sample signals:
+
+* **`strat_*.txt` build artifacts removed:** `setup_r2k.py` no longer writes `strategy/strat_*.txt` files. These were build outputs assembled from fragments — they are now gitignored and deleted from version control. The fragments in `strategy/fragments/` are the sole source of truth.
+* **Strategy-specific samples override mode samples:** `setup_r2k.py:117-120` — if `samples_{strategy}.txt` exists (e.g. `samples_recover.txt`), it is used INSTEAD of `samples_{mode}.txt` (e.g. `samples_3vs3.txt`). Previously both were appended, sending contradictory signals to the LLM (e.g. aggressive + defensive samples in the same prompt).
+* **Strategy-specific rules override mode rules:** Same pattern at `setup_r2k.py:116` — `rules_{strategy}.txt` takes precedence over `rules_{mode}.txt` when it exists.
+* **`tools/dump_prompt.py`** — dry-run prompt inspector that assembles fragments identically to `setup_r2k.py` WITHOUT requiring ROS or Ollama. Usage: `python3 tools/dump_prompt.py --scenario 3vs3_attack_center --strategy strat_default --no-explain`. Prints the full assembled prompt, per-fragment breakdown, and token estimate. Use this to verify prompt changes before launching a match.
+* **Fragment assembly order:** `header.txt` → `rules_core.txt` → `rules_{strategy}.txt` (or `rules_{mode}.txt`) → `samples_{strategy}.txt` (or `samples_{mode}.txt`). The `header.txt` contains `{{EXPLAIN_INSTRUCTION}}` which is replaced at runtime with `--explain` / `--no-explain` directives.
+
+### V6.1 R2K_INCLUDE_MATCH_STATE (r2k_evaluator.py)
+
+* **Env var `R2K_INCLUDE_MATCH_STATE=1`** optionally injects `match_state` (status, restart_team) into the LLM payload (`r2k_evaluator.py:91-96`). Default is `0` (excluded).
+* By default, `r2k_evaluator.py:88` strips the worldstate to `min_ents` — only X/Y coordinates of entities, no match_state, no tactical_score. The LLM never sees referee status unless this env var is set.
+* **Warning:** The `match_state` injection is structured JSON (status string + restart_team string), NOT free-text instructions. This complies with the Prompt-Injection Protection Principle (see above).
+
+### V6.1 Goalie Idle — Structural Limitation
+
+* Goalie idle rate is 80-100% across all experiments. This is NOT fixable via prompt engineering.
+* **Root cause:** The bridge PD controller chases a jittery ball-Y setpoint. The LLM outputs a goalie Y target, but the bridge's `smooth_membership` + low-pass filter overreacts to ball position noise, producing micro-oscillations that keep the goalie "moving" without actual positional progress.
+* **Implication:** Future agents should NOT attempt to fix goalie behavior by changing prompt text, role descriptions, or goalie position parameters. The fix must be in the bridge's goalie PD controller tuning (smoothing factor, deadband), not in the LLM prompt.
+* The goalie X position (default `-4.0`) is set by the LLM and enforced by the bridge when the ball is in the opponent/midfield half. When the ball enters the own zone (X < -2.0), the LLM's target stands and the goalie may advance.
+
+### V6.1 Team Red Improvements (rule_evaluator_red.py)
+
+Beyond the V6 aggression and freeze compliance documented above, V6.1 adds:
+
+* **Freeze bug fix (critical):** The `red_scored` one-shot edge detector was replaced with `restart_team == 'blue'` check (`rule_evaluator_red.py:77-83`). Previously, `red_scored` was only `True` on the score-change frame, causing red to unfreeze after 1 frame. Now red stays frozen for the full 5s during kickoff/set-pieces by checking `restart_team` from `match_state` directly.
+* **P1 — Boundary clamp expansion during restarts:** `restart_active` flag (`rule_evaluator_red.py:278-281`) expands the boundary clamp to ±1.0m beyond field limits when red has a restart (kick-in, goal kick, corner kick-in). Normal play keeps ±0.5m. This allows red bots to approach the ball from behind for restarts, matching the blue KICK-IN EXCEPTION rule.
+* **P3 — All red bots hold midfield during opponent restart:** `rule_evaluator_red.py:229-232` — when blue has any restart, ALL red bots hold midfield position `(2.0, ball_y * 0.7)`. Previously, the closest bot kept charging, violating the freeze.
+* **P4 — Blocking avoidance:** `rule_evaluator_red.py:250-275` — non-closest red bots check if their target is between a blue opponent and the ball. If the perpendicular distance to the opponent-to-ball line is < 0.5m, the bot shifts toward the nearest sideline by `0.6m - perp_dist`. This opens the goal-ward path for the striker instead of accidentally blocking it.
+* **P5 — Aggression guarded during freeze:** `rule_evaluator_red.py:171` — `aggression_active = (not all_red_frozen) and (random.random() < self.AGGRESSION_FACTOR)`. No aggression during any freeze state.
+* **Set-piece context flags:** `rule_evaluator_red.py:71-74` — `goal_kick_for_red/against_red`, `corner_kick_in_for_red/against_red` added alongside the existing `kick_in_for_red/against_red`. All used by the restart behavior override.

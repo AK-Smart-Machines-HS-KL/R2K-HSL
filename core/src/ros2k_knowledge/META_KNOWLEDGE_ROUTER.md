@@ -2,9 +2,9 @@
 id: META_ROUTER
 title: "Semantic Glossary & Routing Matrix (Inverted Index)"
 type: KNOWLEDGE_BASE_POWER_FILE
-tags: [router, glossary, index, rag, meta, flat-json, phantom-kick, setup_r2k, active_relay, watchdog, hybrid-os, uros_ws, xid-31, mermaid, v6, foul, ball-out, kick-in, momentum, reward-node, batch-evaluator, aggression, set-piece, goal-kick, corner-kick-in, kickoff, own-half-warp, blitting, referee-rulebook]
-last_modified: 2026-07-14
-version: v6_active
+tags: [router, glossary, index, rag, meta, flat-json, phantom-kick, setup_r2k, active_relay, watchdog, hybrid-os, uros_ws, xid-31, mermaid, v6, v6.1, foul, ball-out, kick-in, momentum, reward-node, batch-evaluator, aggression, set-piece, goal-kick, corner-kick-in, kickoff, own-half-warp, blitting, referee-rulebook, trace-logging, llm-trace, world-trace, r2k-run-id, analyze-trace, kpi, prompt-disentanglement, dump-prompt, strat-artifact, goalie-idle, red-p1-p5, blocking-avoidance, headless-gzserver, docker-env-passthrough]
+last_modified: 2026-07-15
+version: v6.1
 ---
 # Semantic Glossary & Routing Matrix
 
@@ -34,6 +34,18 @@ This section strictly defines architectural components to prevent hallucinated s
 * **V6.1 Referee Rulebook ('core/docs/referee_rulebook.md') [NEW in v6.1]:**
   * *Definition:* Standalone Markdown document (not a RAG power-file, but referenced by the routing matrix). Complete catalog of every referee decision: triggers, consequences, scoring, timing, freeze enforcement, field layout, state machine, and visualizer event labels. Includes 2D field diagrams and mermaid flowcharts.
   * *Constraint:* Read this BEFORE changing any referee rule, threshold, or visualizer label. The rulebook is the single source of truth — the V6 addendum in `2_ROS2_PROTOCOLS_AND_FRAMES.md` is a summary; the rulebook is authoritative.
+* **V6.1 Trace Logger [NEW in v6.1]:**
+  * *Definition:* Append-only JSONL observability layer. Two files: `logs/llm_trace_<run_id>.jsonl` (one record per LLM call, written by `r2k_evaluator.py`) and `logs/world_trace_<run_id>.jsonl` (one record per 10Hz world-state write, written by `state_aggregator.py`). Non-blocking, wrapped in try/except, never crashes the execution loop.
+  * *Constraint:* Trace files are write-only during a run. They are consumed offline by `tools/analyze_trace.py` AFTER the run ends. The `logs/` directory is gitignored and NOT wiped on boot.
+* **V6.1 KPI Analyzer ('tools/analyze_trace.py') [NEW in v6.1]:**
+  * *Definition:* Offline script that joins `llm_trace` and `world_trace` files by `R2K_RUN_ID`, computes 14 KPIs (goals, cluster_pct, goalie_idle_pct, oob_pct, possession, tactical_score_avg/final, latency p50/p95/max, parse_error_rate, role_diversity, status_distribution, avg_response_tokens), outputs JSON.
+  * *Constraint:* Requires the `--run-id` argument matching the `R2K_RUN_ID` env var set by `launch_r2k.sh`. Does NOT require ROS or Ollama — pure offline file analysis.
+* **V6.1 Prompt Inspector ('tools/dump_prompt.py') [NEW in v6.1]:**
+  * *Definition:* Dry-run script that assembles prompt fragments identically to `setup_r2k.py` WITHOUT requiring ROS or Ollama. Prints the full assembled prompt, per-fragment breakdown, and token estimate.
+  * *Constraint:* Use this to verify prompt changes before launching a match. Does NOT write `system_prompt.txt` — it only prints to stdout.
+* **V6.1 Run ID ('R2K_RUN_ID') [NEW in v6.1]:**
+  * *Definition:* Env var exported by `launch_r2k.sh:82` as `${SCENARIO}_${STRATEGY}_$(date +%Y%m%d_%H%M%S)`. Used as correlation key for trace files. Propagated to Docker containers via `docker exec -e R2K_RUN_ID=...`.
+  * *Constraint:* If unset, both `r2k_evaluator.py` and `state_aggregator.py` fall back to `run_{timestamp}` — trace files will not be correlatable with the run's console log.
 * **Prompt Compiler ('setup_r2k.py'):**
   * *Definition:* A pre-flight script that dynamically compiles the system prompt and hardware relay-mapping ('active_relay.json') based on '--relay' CLI flags before boot.
 * **0.2s Asynchronous Watchdog:**
@@ -55,6 +67,9 @@ If the user query involves [SYMPTOM / KEYWORD], explicitly retrieve and referenc
 | **[V6]** Kick-in, prompt-switching, 'match_state.status', prompt-injection, team-red kick-in behavior, momentum, OLS regression, reward_node, 1Hz reward, foul penalty -1, 'AGGRESSION_FACTOR', red aggression, kick-in prompt iteration, red freeze compliance, hysteresis, flickering, anti-clustering red | **'3_AI_LOGIC_AND_EDGE_CASES.md' §V6 Addendum** |
 | **[V6]** '/tactical_score' momentum schema, '/tactical_reward' schema, 'eval_results.json', batch_evaluator CLI, '--scenarios', '--strategies', '--models', '--runs', '--duration', '--output', composite score, KPI, '/match_state' goal_kick, '/match_state' corner_kick_in, foul penalty values | **'6_DATA_SCHEMAS_AND_LIFECYCLE.md' §V6 Addendum** |
 | **[V6.1]** Referee rulebook, complete decision catalog, set-piece positions, field diagram, 2D graphics, state machine, scoring, reward system, freeze enforcement, K1 limitation, `referee_rulebook.md` | **'core/docs/referee_rulebook.md'** (standalone doc) |
+| **[V6.1]** `llm_trace`, `world_trace`, trace logging, `R2K_RUN_ID`, `analyze_trace.py`, KPI measurement, latency p50/p95, parse_error_rate, role_diversity, cluster_pct, goalie_idle_pct, oob_pct, ball possession, observability layer, third decoupled channel | **'6_DATA_SCHEMAS_AND_LIFECYCLE.md' §V6.1 Addendum** + **'1_CORE_ARCHITECTURE_AND_SYNC.md' §V6.1 Addendum** |
+| **[V6.1]** `strat_*.txt` removal, prompt disentanglement, `dump_prompt.py`, sample-override, strategy-specific samples, fragment assembly order, `R2K_INCLUDE_MATCH_STATE`, match_state injection, goalie idle structural limitation, bridge PD controller, red P1-P5, red boundary clamp, red blocking avoidance, red freeze bug, `restart_team` freeze check | **'3_AI_LOGIC_AND_EDGE_CASES.md' §V6.1 Addendum** |
+| **[V6.1]** Headless Gazebo, `gzserver` only, `--headless` flag, `headless:=true`, Docker env passthrough, `R2K_RUN_ID` Docker, `R2K_OLLAMA_MODEL` Docker, `docker exec -e` | **'5_HYBRID_INFRASTRUCTURE_V5.md' §V6.1 Addendum** |
 
 ## 3. Mermaid Rendering Constraints
 > **CRITICAL DIRECTIVE FOR LLMs:** To prevent fatal parsing errors in our documentation renderer, all Mermaid `graph TD` diagrams MUST strictly adhere to the following syntax limitations. DO NOT use advanced brackets.

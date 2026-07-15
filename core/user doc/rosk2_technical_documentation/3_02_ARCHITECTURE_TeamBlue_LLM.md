@@ -2,18 +2,19 @@
 id: 3_02
 title: "Team Blue LLM Architecture"
 type: ARCHITECTURE
-tags: [nemotron, qwen, rest-api, json, delegation]
-last_modified: 2026-05-31
-version: v5_release
+tags: [qwen, rest-api, json, delegation, v6, v6.1, v6.2, trace-logging, explain, r2k-include-match-state]
+last_modified: 2026-07-15
+version: v6.2
 ---
 # Team Blue LLM Architecture
 
 > [!info] Human Summary
-> This document details how ROS2K communicates with the Nemotron LLM via raw HTTP POST requests, bypassing complex Python wrapper libraries to minimize inference latency.
+> This document details how ROS2K communicates with the `qwen2.5-coder:3b` LLM via raw HTTP POST requests, bypassing complex Python wrapper libraries to minimize inference latency. V6.1 adds trace logging, `--explain`/`--no-explain` flags, and optional `match_state` injection.
 
 > [!abstract] LLM Context Anchor
 > The LLM receives contextual data solely via Port 11434 REST API calls. The `r2k_evaluator.py` concatenates the physical `Worldstate.json` and `system_prompt.txt` into a single payload. The LLM is strictly prohibited from generating executable Python code.
 > **[NEW in v5]:** The target model is strictly `qwen2.5-coder:3b`. Ollama MUST be executed in User-Space (not as a root Systemd service) to prevent 404 model-path errors. Additionally, `r2k_evaluator.py` requires the `shared_state/` directory to exist; otherwise, it crashes silently with a `FileNotFoundError`.
+> **[NEW in v6.1]:** The evaluator now writes `llm_trace_<run_id>.jsonl` (one line per LLM call: world snapshot, raw response, parse_code, latency, model, explain flag). The `--explain`/`--no-explain` flag controls output format (150/600 token cap). Env var `R2K_INCLUDE_MATCH_STATE=1` optionally injects referee status into the LLM payload. `temperature: 0.0` and `num_predict` are hardcoded. See [[7_02_ARCHITECTURE_World_Model_Components]] and [[7_04_SPECIFICATION_Prompt_Architecture]].
 
 ## 1. System Topology of LLM Payload Ingestion
 
@@ -34,7 +35,7 @@ graph TD
 
     subgraph Server ["Ollama Engine"]
         Port{"Port 11434"}
-        Model["Nemotron Model"]
+        Model["qwen2.5-coder:3b"]
     end
 
     WS -->|State JSON| Concat

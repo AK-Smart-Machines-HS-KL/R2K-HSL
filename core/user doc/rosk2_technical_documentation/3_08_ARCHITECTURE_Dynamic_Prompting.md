@@ -2,9 +2,9 @@
 id: 3_08
 title: "Dynamic Prompt Assembly & Scenarios"
 type: ARCHITECTURE
-tags: [setup_r2k, prompt-engineering, scenarios, dynamic, relay-mapping]
-last_modified: 2026-05-31
-version: v5_release
+tags: [setup_r2k, prompt-engineering, scenarios, dynamic, relay-mapping, v6, v6.1, v6.2, fragments, strat-artifact, dump-prompt, sample-override]
+last_modified: 2026-07-15
+version: v6.2
 ---
 # Dynamic Prompt Assembly & Scenarios
 
@@ -14,6 +14,7 @@ version: v5_release
 > [!abstract] LLM Context Anchor
 > There is NO static `system_prompt.txt` committed to version control. The file is stitched together dynamically at runtime by `setup_r2k.py` using text fragments stored in `/strategy/fragments/` to match the active scenario JSON.
 > **[NEW in v5]:** The `setup_r2k.py` script now functions as a comprehensive "Pre-Flight Compiler". Beyond prompt stitching for `qwen2.5-coder:3b`, it also evaluates the `--relay` flag to dynamically generate `ai_tactics/active_relay.json`, routing the AI's execution threads to either simulated Twist topics or physical JSON RPC hardware APIs.
+> **[NEW in v6.1]:** `strat_*.txt` build artifacts are removed (gitignored, deleted). Strategy-specific fragments now OVERRIDE mode fragments instead of being appended (fixes contradictory signals). `tools/dump_prompt.py` added for dry-run prompt inspection. See [[7_04_SPECIFICATION_Prompt_Architecture]] for the full specification.
 
 ## 1. System Topology of Prompt Assembly
 

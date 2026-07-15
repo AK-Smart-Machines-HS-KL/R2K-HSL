@@ -2,9 +2,9 @@
 id: 1_01_INTRODUCTION_Overall_Architecture
 title: "Introduction to the Overall Architecture"
 type: INTRODUCTION
-tags: [architecture, overview, sim2real, hybrid-ai]
-last_modified: 2026-05-31
-version: v5_release
+tags: [architecture, overview, sim2real, hybrid-ai, v6, v6.1, v6.2]
+last_modified: 2026-07-15
+version: v6.2
 ---
 # Introduction to the Overall Architecture
 
@@ -15,6 +15,7 @@ version: v5_release
 > ROS2K explicitly rejects rigid C++ Hardware Abstraction Layers (HALs). It enforces strict decoupling between high-frequency physical execution (ROS 2/Gazebo) and low-frequency cognitive strategy via asynchronous File I/O polling.
 > **[DEPRECATED in v4]:** Optimized for `Nemotron-3-nano:4b`.
 > **[NEW in v5]:** Optimized for `qwen2.5-coder:3b` via Ollama REST API.
+> **[NEW in v6.1]:** Trace logging layer (llm_trace, world_trace JSONL), reward_node (1Hz, -10..+10), referee foul detection + set-pieces, momentum OLS regression, headless Gazebo. See [[7_01_INTRODUCTION_Scoring_Referee_Gamestate]] and [[7_02_ARCHITECTURE_World_Model_Components]].
 
 ## 1. System Topology of the Hybrid Environment
 
