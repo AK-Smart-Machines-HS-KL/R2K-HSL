@@ -12,6 +12,7 @@ __pycache__/
 
 # Editor / IDE
 .obsidian/
+core/.vscode/continue*
 *.inv
 *~
 \#*\#
