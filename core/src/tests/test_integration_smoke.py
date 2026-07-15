@@ -137,27 +137,31 @@ def test_headless_duration():
     print("  4. Verify: Cleanup scripts run successfully")
 
 def test_strategy_files_exist():
-    """All strategy fragment files should exist."""
+    """All strategy fragment source files should exist (fragments/ is the source of truth)."""
     print(f"\n{'='*70}")
-    print(f"Testing strategy file availability")
+    print(f"Testing strategy fragment file availability")
     print(f"{'='*70}\n")
     
-    strategies_dir = Path(__file__).parent.parent / "strategy"
+    fragments_dir = Path(__file__).parent.parent / "strategy" / "fragments"
     required_files = [
-        "strat_default.txt",
-        "strat_aggro.txt",
-        "strat_recover.txt",
-        "strat_recovers.txt"
+        "header.txt",
+        "rules_core.txt",
+        "rules_3vs3.txt",
+        "samples_3vs3.txt",
+        "rules_2vs2.txt",
+        "samples_2vs2.txt",
+        "rules_recover.txt",
+        "samples_recover.txt",
     ]
     
-    for strategy_file in required_files:
-        strategy_path = strategies_dir / strategy_file
-        if not strategy_path.exists():
-            print(f"  ❌ Missing strategy: {strategy_file}")
-            assert False, f"Strategy file not found: {strategy_file}"
-        print(f"  ✅ Found: {strategy_file}")
+    for fragment_file in required_files:
+        fragment_path = fragments_dir / fragment_file
+        if not fragment_path.exists():
+            print(f"  ❌ Missing fragment: {fragment_file}")
+            assert False, f"Fragment file not found: {fragment_file}"
+        print(f"  ✅ Found: {fragment_file}")
     
-    print(f"\n✅ All {len(required_files)} strategy files present")
+    print(f"\n✅ All {len(required_files)} fragment files present")
 
 def test_launch_script_flags():
     """Launch script should support new flags."""

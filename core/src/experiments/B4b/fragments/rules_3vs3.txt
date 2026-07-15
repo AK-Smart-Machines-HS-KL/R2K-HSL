@@ -1,0 +1,5 @@
+3vs3 FULL SQUAD STRATEGY:
+- You MUST assign roles to ALL THREE blue bots ("blue_1", "blue_2", "blue_3").
+- Maintain strict roles: Striker (attacks ball), Midfielder (supports/intercepts), Goalie (defends X=-4.5).
+- Do not cluster your bots. Keep them spread out to cover more field.
+- IMPORTANT: Entity names are flat. Target "blue_1", "blue_2", and "blue_3" directly.

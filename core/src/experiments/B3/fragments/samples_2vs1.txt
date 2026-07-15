@@ -1,0 +1,32 @@
+--- EXAMPLE 1: WIDE SPACING ATTACK ---
+INPUT: {"soccer_ball": {"x": 1.0, "y": 0.0}, "blue_1": {"x": 0.5, "y": 1.5}, "blue_2": {"x": 0.5, "y": -1.5}, "red_1": {"x": 2.0, "y": 0.0}}
+ASSISTANT: {
+  "analysis": "blue_1 and blue_2 maintain wide spacing to confuse the lone defender.",
+  "oracle": "blue_1 will attack the ball while blue_2 stays ready for a rebound.",
+  "assignments": {
+    "blue_1": {"role": "striker", "action": "Move", "x": 1.0, "y": 0.0},
+    "blue_2": {"role": "supporter", "action": "Move", "x": 1.0, "y": -2.0}
+  }
+}
+
+--- EXAMPLE 2: PASSING AROUND DEFENDER ---
+INPUT: {"soccer_ball": {"x": 0.0, "y": 2.0}, "blue_1": {"x": -0.5, "y": 1.8}, "blue_2": {"x": 2.0, "y": -1.0}, "red_1": {"x": 1.0, "y": 2.0}}
+ASSISTANT: {
+  "analysis": "blue_1 kicks ball toward blue_2's lane to bypass red_1.",
+  "oracle": "Successful pass to the open teammate blue_2.",
+  "assignments": {
+    "blue_1": {"role": "passer", "action": "Kick"},
+    "blue_2": {"role": "striker", "action": "Move", "x": 2.5, "y": -1.0}
+  }
+}
+
+--- EXAMPLE 3: ANTI-CLUSTERING DEFENSE ---
+INPUT: {"soccer_ball": {"x": -2.0, "y": 0.0}, "blue_1": {"x": -2.2, "y": 0.1}, "blue_2": {"x": -2.2, "y": -0.1}}
+ASSISTANT: {
+  "analysis": "Bots are colliding in the defensive half. blue_1 strikes. blue_2 retreats to the goal line (X=-4.5).",
+  "oracle": "Immediate spacing to restore defensive structure.",
+  "assignments": {
+    "blue_1": {"role": "striker", "action": "Move", "x": -2.5, "y": 0.0},
+    "blue_2": {"role": "goalie", "action": "Move", "x": -4.5, "y": 0.0}
+  }
+}

@@ -1,6 +1,7 @@
 import rclpy
 import json
 import os
+import time
 from rclpy.node import Node
 from std_msgs.msg import String
 
@@ -24,7 +25,14 @@ class StateAggregator(Node):
         base_dir = os.getenv('ROS2K_WS', '.')
         self.file_path = os.path.join(base_dir, 'shared_state', 'Worldstate.json')
         
+        # --- Phase 1 instrumentation: world-state trace logger ---
+        self.run_id = os.getenv('R2K_RUN_ID', f"run_{int(time.time())}")
+        self.log_dir = os.path.join(base_dir, 'logs')
+        self.world_trace_path = os.path.join(self.log_dir, f"world_trace_{self.run_id}.jsonl")
+        os.makedirs(self.log_dir, exist_ok=True)
+        
         self.get_logger().info("📦 Aggregator V6 Online: Writing to Worldstate.json at 10 Hz")
+        self.get_logger().info(f"📋 World trace: {self.world_trace_path}")
 
     def pos_cb(self, msg): self.pos_data = json.loads(msg.data)
     def match_cb(self, msg): self.match_data = json.loads(msg.data)
@@ -46,6 +54,19 @@ class StateAggregator(Node):
             with open(tmp_path, 'w') as f:
                 json.dump(combined_state, f)
             os.rename(tmp_path, self.file_path)
+        except Exception:
+            pass
+        
+        # --- Phase 1: world-state trace ---
+        try:
+            record = {
+                "t": time.time(),
+                "entities": combined_state.get("entities", {}),
+                "match_state": combined_state.get("match_state", {}),
+                "tactical_score": combined_state.get("tactical_score", {}),
+            }
+            with open(self.world_trace_path, 'a') as f:
+                f.write(json.dumps(record) + "\n")
         except Exception:
             pass
 

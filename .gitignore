@@ -23,6 +23,10 @@ core/src/shared_state/
 core/src/ai_tactics/system_prompt.txt
 core/src/ai_tactics/active_scenario.json
 core/src/ai_tactics/active_relay.json
+core/src/strategy/strat_*.txt
+
+# Phase 1 instrumentation logs
+core/src/logs/
 
 # Backup files
 *.bak

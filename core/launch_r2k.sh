@@ -10,7 +10,7 @@ export PYTHONWARNINGS="ignore"
 SCENARIO="2vs2_default"
 STRATEGY="strat_aggro"
 MODEL="qwen2.5-coder:3b"
-EXPLAIN_FLAG="--explain"
+EXPLAIN_FLAG="--no-explain"
 RELAY="only_sim_bots"
 HEADLESS=false
 DURATION=0
@@ -75,8 +75,13 @@ echo "🤖 Relay bots ($RELAY):"
 jq -r '.mapping | to_entries[] | "  \(.key): \(.value.hardware_type) → \(.value.topic)"' "$RELAY_FILE"
 
 export ROS2K_WS="$PWD"
-mkdir -p shared_state
+mkdir -p shared_state logs
 rm -f shared_state/current_strategy.json shared_state/Worldstate.json
+
+# --- Phase 1 instrumentation: auto-tag run ID for trace logs ---
+export R2K_RUN_ID="${SCENARIO}_${STRATEGY}_$(date +%Y%m%d_%H%M%S)"
+echo "📋 Run ID: $R2K_RUN_ID  (logs: src/logs/*_${R2K_RUN_ID}.jsonl)"
+
 python3 setup_r2k.py --scenario "$SCENARIO" --strategy "$STRATEGY" --model "$MODEL" --relay "$RELAY" $EXPLAIN_FLAG || { echo "❌ Setup failed!"; exit 1; }
 
 # ---- CLEANUP TRAP ----
@@ -179,7 +184,11 @@ if [ "$UBUNTU_VERSION" == "22.04" ]; then
     source venv/bin/activate
     
     echo "🌍 Starting Gazebo natively..."
-    ros2 launch r2k_scenario_spawner soccer_match.launch.py > /dev/null 2>&1 &
+    if [ "$HEADLESS" = true ]; then
+        ros2 launch r2k_scenario_spawner soccer_match.launch.py headless:=true > /dev/null 2>&1 &
+    else
+        ros2 launch r2k_scenario_spawner soccer_match.launch.py > /dev/null 2>&1 &
+    fi
 
     # Fast-Polling Watchdog (0.2s)
     (
@@ -286,7 +295,11 @@ else
     SOURCE_CMD="cd /workspace && source /opt/ros/humble/setup.bash && source ros2_ws/install/setup.bash"
 
     echo "🌍 Starting Gazebo in Docker..."
-    $DOCKER_BASE "$SOURCE_CMD && ros2 launch r2k_scenario_spawner soccer_match.launch.py > /dev/null 2>&1"
+    if [ "$HEADLESS" = true ]; then
+        $DOCKER_BASE "$SOURCE_CMD && ros2 launch r2k_scenario_spawner soccer_match.launch.py headless:=true > /dev/null 2>&1"
+    else
+        $DOCKER_BASE "$SOURCE_CMD && ros2 launch r2k_scenario_spawner soccer_match.launch.py > /dev/null 2>&1"
+    fi
 
     # Fast-Polling Watchdog (0.2s)
     (
@@ -341,12 +354,12 @@ else
     $DOCKER_BASE "$SOURCE_CMD && python3 referee_node.py > /dev/null 2>&1"
     $DOCKER_BASE "$SOURCE_CMD && python3 score_node.py > /dev/null 2>&1"
     $DOCKER_BASE "$SOURCE_CMD && python3 reward_node.py > /dev/null 2>&1"
-    $DOCKER_BASE "$SOURCE_CMD && python3 state_aggregator.py > /dev/null 2>&1"
+    docker exec -d -e R2K_RUN_ID="$R2K_RUN_ID" $CONTAINER_NAME bash -c "$SOURCE_CMD && python3 state_aggregator.py > /dev/null 2>&1"
     $DOCKER_BASE "$SOURCE_CMD && python3 rule_evaluator_red.py > /dev/null 2>&1"
     $DOCKER_BASE "$SOURCE_CMD && python3 ai_tactics/ollama_sandbox_bridge.py > /dev/null 2>&1"
     
     echo "🧠 Starting Team Blue AI (Live Output)..."
-    docker exec -d -e PYTHONUNBUFFERED=1 -e PYTHONWARNINGS="ignore" -e R2K_OLLAMA_MODEL=$MODEL -e R2K_OLLAMA_URL="${OLLAMA_DOCKER}/api/generate" $CONTAINER_NAME bash -c "$SOURCE_CMD && python3 -u ai_tactics/r2k_evaluator.py"
+    docker exec -d -e PYTHONUNBUFFERED=1 -e PYTHONWARNINGS="ignore" -e R2K_OLLAMA_MODEL=$MODEL -e R2K_OLLAMA_URL="${OLLAMA_DOCKER}/api/generate" -e R2K_RUN_ID="$R2K_RUN_ID" $CONTAINER_NAME bash -c "$SOURCE_CMD && python3 -u ai_tactics/r2k_evaluator.py"
     
     # Duration-based auto-terminate (for batch evaluation)
     if [ "$DURATION" -gt 0 ]; then

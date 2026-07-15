@@ -409,3 +409,140 @@ touch, and fix numerous display and logic bugs found during review.
 - Visualizer blitting refactor not yet tested with live ROS 2 + Gazebo
   (only tested headless with stubbed rclpy)
 - opencode TUI in Chinese — may need config reset or language setting
+
+## 2026-07-15 — Prompt engineering study: Phases 0-2 (disentangle, instrument, experiment)
+
+**Goal:** Diagnose erratic blue LLM behavior (clustering, goalie freeze, OOB,
+unreflected rules), reorganize the prompt architecture, and run a bottom-up
+single-variable study on how to steer Qwen2.5-Coder:3b.
+
+### Phase 0 — Disentangle the build (structural, zero semantic change)
+- Removed `strat_*.txt` build-artifact write from `setup_r2k.py:135`
+- `git rm` 4 `strat_*.txt` files (build outputs, gitignored going forward)
+- Deleted dead `strat_recovers.txt` (truncated, no samples)
+- Fixed `samples_recover.txt` format (was 2-line malformed blob → 2 proper
+  EXAMPLE/INPUT/ASSISTANT defensive-transition samples)
+- Fixed `setup_r2k.py:116-118` sample-append logic: strategy-specific samples
+  now override mode samples (was: both appended → contradictory signals for
+  strat_recover)
+- Created `tools/dump_prompt.py` — dry-run prompt inspector (no ROS/Ollama)
+- Updated `test_integration_smoke.py` to check fragments/ instead of strat_*.txt
+- Updated AGENTS.md (2 references to strat_*.txt)
+- Verification: byte-identical prompts for strat_default and strat_aggro
+
+### Phase 1 — Instrumentation
+- LLM trace logger in `r2k_evaluator.py`: every call logged to
+  `logs/llm_trace_<run_id>.jsonl` (world snapshot, raw response, parse code,
+  latency, model, explain flag)
+- World-state trace logger in `state_aggregator.py`: every 10Hz write logged
+  to `logs/world_trace_<run_id>.jsonl` (entities, match_state, tactical_score)
+- Measurement script `tools/analyze_trace.py`: computes 14 KPIs (goals,
+  tactical_score_avg/final, cluster%, goalie_idle%, oob%, possession%,
+  latency p50/p95/max, parse_error_rate, role_diversity, status_distribution)
+- Auto-tag runs: `launch_r2k.sh` exports `R2K_RUN_ID` env var; propagated
+  to Docker evaluator and state_aggregator
+- B3 experiment support: `R2K_INCLUDE_MATCH_STATE` env var in r2k_evaluator.py
+  optionally includes match_state in the LLM payload
+
+### Gazebo headless optimization
+- `soccer_match.launch.py`: added `headless` launch arg — `gzserver` only
+  (no gzclient GUI) when `--headless` is set
+- `launch_r2k.sh`: passes `headless:=true` to launch file for both native
+  and Docker paths
+- Synced launch file to Docker install dir via `docker run --rm -v` copy
+- Expected: 30-50% faster physics-only simulation (no rendering overhead)
+
+### Phase 2 — Experiment matrix (11 experiments × 3 runs × 120s = 33 runs)
+
+Experiment infrastructure:
+- `experiments/baseline/` — frozen snapshot of fragments/ for restore
+- `experiments/B1-B7b/fragments/` — per-experiment fragment variants
+- `tools/swap_fragments.sh` — swap experiment fragments, run, restore
+- `tools/run_experiment.sh` — run 3 repeats with auto-analysis
+- `results/experiment_matrix.md` — results template
+
+Results summary (mean of 3 runs):
+
+| Exp | Goals B:R | Cluster% | OOB% | Lat p50 | Roles | Key finding |
+|-----|-----------|----------|------|---------|-------|-------------|
+| A (baseline) | 0.7:1.0 | 15.7% | 30.6% | 827ms | 4 | High variance |
+| B1 (+2 samples) | 0.7:1.7 | 6.9% | 9.3% | 834ms | 4 | Less cluster, more conceded |
+| B2 (B1 no rule) | 0.7:0.3 | 17.8% | 39.8% | 825ms | 4 | Within noise |
+| B3 (match_state) | 0.7:1.0 | 21.5% | 13.1% | 814ms | 4 | No improvement |
+| B4a (goalie -4.0) | 0.0:0.3 | 1.6% | 19.0% | 815ms | 4 | Fewer conceded |
+| B4b (goalie -4.5) | 0.0:1.0 | 6.7% | 20.2% | 811ms | 4 | Worse than -4.0 |
+| B5 (--explain) | 0.3:1.3 | 24.4% | 1.9% | 1190ms | 7.7 | OOB fixed, latency +44% |
+| B6a (1 sample) | 1.7:1.0 | 2.6% | 16.4% | 742ms | 4.3 | **Best scorer** |
+| B6b (6 samples) | 0.3:1.7 | 18.7% | 15.2% | 792ms | 4 | Diminishing returns |
+| B7a (rules only) | 0.0:2.0 | 0% | 0% | 320ms | 0 | **Total failure** |
+| B7b (samples only) | 0.0:1.0 | 4.3% | 46.3% | 744ms | 3 | OOB explosion |
+
+### Research findings
+
+**RQ1 (rules vs. samples):** Both are necessary. Without samples (B7a),
+the 3B model produces empty/degenerate JSON. Without mode rules (B7b),
+bots leave the field (46% OOB). Samples provide format; rules provide
+boundaries.
+
+**RQ2 (sample-count plateau):** 1 sample (B6a) is the sweet spot.
+More samples (3, 6) dilute focus and increase latency without improving
+behavior. The 3B model copies one pattern; it doesn't learn from diversity.
+
+**RQ3 (alternatives):** Explain mode (B5) reduces OOB to 1.9% via
+explicit reasoning, but costs 44% latency. Adding explicit "STAY INSIDE
+FIELD" text to rules may achieve similar OOB reduction without the latency
+cost (to be tested in Phase 3 consolidation).
+
+**Goalie idle is structural:** 80-100% across all experiments. Not fixable
+via prompts — the bridge PD controller chases a jittery ball-Y setpoint.
+
+**Variance is high:** Within-experiment OOB spread up to 50 percentage
+points. 3 runs gives directional insight; 10+ needed for statistical
+confidence.
+
+**Files touched:**
+- `.gitignore` (strat_*.txt + logs/ entries)
+- `core/AGENTS.md` (strat_*.txt references updated)
+- `core/launch_r2k.sh` (R2K_RUN_ID, gzserver headless, Docker env passthrough)
+- `core/src/ai_tactics/r2k_evaluator.py` (trace logger, R2K_INCLUDE_MATCH_STATE)
+- `core/src/state_aggregator.py` (trace logger)
+- `core/src/setup_r2k.py` (removed strat_*.txt write, fixed sample-append logic)
+- `core/src/strategy/fragments/samples_recover.txt` (rewritten)
+- `core/src/ros2_ws/src/r2k_scenario_spawner/launch/soccer_match.launch.py` (gzserver)
+- `core/src/tests/test_integration_smoke.py` (fragment-based test)
+- `core/src/ros2_ws/install/.../soccer_match.launch.py` (synced via Docker)
+
+**New files (untracked):**
+- `core/src/tools/dump_prompt.py` (prompt inspector)
+- `core/src/tools/analyze_trace.py` (KPI measurement)
+- `core/src/tools/swap_fragments.sh` (experiment swap helper)
+- `core/src/tools/run_experiment.sh` (experiment runner)
+- `core/src/experiments/` (baseline + B1-B7b fragment directories)
+- `core/src/results/` (KPI JSONs, prompt dumps, console logs, experiment_matrix.md)
+- `core/src/logs/` (gitignored — LLM + world trace JSONL files)
+
+**Files deleted:**
+- `core/src/strategy/strat_aggro.txt` (build artifact, gitignored)
+- `core/src/strategy/strat_default.txt` (build artifact, gitignored)
+- `core/src/strategy/strat_recover.txt` (build artifact, gitignored)
+- `core/src/strategy/strat_recovers.txt` (dead file)
+
+**Not yet done:**
+- Phase 3 (consolidated v6.1 prompt): reduce to 1 sample, add explicit
+  boundary text, standardize goalie x=-4.0, default --no-explain
+- C1-C5 stretch experiments (CoT, retrieval, constrained decoding,
+  hierarchical, role-specific) — deferred until consolidated prompt
+  results disappointing
+- 10× repeats for statistical confidence on key experiments
+- Blue LLM still has no set-piece awareness (B3 match_state inconclusive)
+
+**Next:**
+- Phase 3: implement consolidated v6.1 prompt (B6a-based: 1 sample +
+  explicit "STAY INSIDE FIELD" text + goalie x=-4.0 + --no-explain
+  default), run 3× 120s validation
+
+**Blockers:**
+- None — Ollama reachable, Gazebo headless works, instrumentation pipeline
+  end-to-end verified
+- Visualizer blitting refactor still untested with live ROS 2 + Gazebo
+  (orthogonal to this work)

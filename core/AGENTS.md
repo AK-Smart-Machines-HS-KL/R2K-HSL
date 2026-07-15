@@ -103,7 +103,8 @@ No lint/typecheck/format config exists. `r2k_world_model` ships ament lint tests
   see `scenario/README.md`.
 - `core/src/strategy/fragments/` — prompt fragments (`header.txt`, `rules_core.txt`,
   `rules_<mode>.txt`, `samples_<mode>.txt`) assembled by `setup_r2k.py` into
-  `ai_tactics/system_prompt.txt` and `strategy/strat_<name>.txt` on each boot.
+  `ai_tactics/system_prompt.txt` on each boot. `strategy/strat_*.txt` are build artifacts
+  (gitignored) — do NOT hand-edit them; edit `fragments/` instead.
 - `core/src/shared_state/` — runtime state files (`Worldstate.json`, `current_strategy.json`).
   Should be on tmpfs in production; tracked in git as scaffolding.
 - `core/src/ros2_ws/src/brain/msg/` — custom ROS 2 msgs. Rebuild with colcon when changed.
@@ -133,7 +134,8 @@ See `META_KNOWLEDGE_ROUTER.md` §3.
 ## Gotchas
 
 - `launch_r2k.sh` wipes `shared_state/current_strategy.json` and `Worldstate.json` on every start.
-- `setup_r2k.py` overwrites `ai_tactics/system_prompt.txt` and `strategy/strat_<name>.txt` on every boot.
+- `setup_r2k.py` overwrites `ai_tactics/system_prompt.txt` on every boot.
+  `strategy/strat_*.txt` are no longer written (Phase 0 disentanglement); edit `fragments/` instead.
 - The `ros2_ws/build` and `ros2_ws/install` dirs are root-owned (created inside Docker) — may need
   `sudo rm -rf` to rebuild natively on U22.
 - `numpy<2.0` is pinned (install.sh + Dockerfile) — Gazebo compatibility. Don't bump blindly.

@@ -1,0 +1,48 @@
+{
+  "run_id": "3vs3_attack_center_strat_default_20260715_120258",
+  "llm_trace_file": "/home/r-zwei-kickers/R2K-HSL/core/src/logs/llm_trace_3vs3_attack_center_strat_default_20260715_120258.jsonl",
+  "world_trace_file": "/home/r-zwei-kickers/R2K-HSL/core/src/logs/world_trace_3vs3_attack_center_strat_default_20260715_120258.jsonl",
+  "world_kpis": {
+    "frames": 1288,
+    "frames_with_bots": 1288,
+    "duration_s": 128.7,
+    "goals_for_blue": 1,
+    "goals_for_red": 1,
+    "cluster_frames": 44,
+    "cluster_pct": 3.4,
+    "goalie_idle_frames": 1193,
+    "goalie_idle_pct": 92.7,
+    "oob_frames_blue": 166,
+    "oob_pct": 12.9,
+    "ball_possession_blue_pct": 53.2,
+    "tactical_score_avg": 0.24,
+    "tactical_score_final": -3.64,
+    "status_distribution": {
+      "playing": 716,
+      "foul_penalty": 22,
+      "goal": 100,
+      "corner_kick_in": 150,
+      "goal_kick": 100,
+      "ball_out": 200
+    }
+  },
+  "llm_kpis": {
+    "llm_calls": 172,
+    "latency_p50": 742,
+    "latency_p95": 764,
+    "latency_max": 773,
+    "latency_mean": 743.0,
+    "parse_error_rate": 0.0,
+    "role_diversity": 5,
+    "roles": {
+      "goalie": 172,
+      "striker": 170,
+      "midfielder": 170,
+      "passer": 2,
+      "receiver": 2
+    },
+    "avg_response_tokens": 77.0,
+    "explain_mode": false,
+    "model": "qwen2.5-coder:3b"
+  }
+}
