@@ -705,3 +705,131 @@ build scratch, Xid 31) — no v6.1 content to add.
 - None for documentation work — all complete
 - Phase 2b (batch_evaluator fix) requires live Ollama + Gazebo to verify
 - Phase 2c (27-run baseline) requires ~45min compute + working batch_evaluator
+
+## 2026-07-16 — FAQ v6.2 audit, knowledge-base citation cleanup, os.replace consistency
+
+**Goal:** Audit and update the RAG FAQ (`ROS2K_GEM_FAQ.md`) from v5_release to
+v6.2, remove broken citation artifacts across the knowledge base, fix factual
+errors against the actual codebase, and make the `os.replace`/`os.rename`
+documentation consistent with the code.
+
+**Done:**
+
+### FAQ overhaul (`ROS2K_GEM_FAQ.md`: v5_release → v6.2, 123 → 349 lines)
+- Stripped 24 dangling `[cite: 12]`/`[cite: 15]` reference artifacts (no
+  bibliography existed in the repo — all `[cite: N]` were broken since v5).
+- Removed 1 broken Obsidian embed `![[DOCUMENTATION]]` at Q8 (v5 artifact).
+- Removed hallucinated `--debug` flag from Q1 (never existed in
+  `launch_r2k.sh:28-41` — supported flags are `--scenario`, `--strategy`,
+  `--model`, `--relay`, `--explain`, `--no-explain`, `--headless`, `--duration`).
+- Fixed 10 factual errors verified against actual code:
+  1. Q1: `--debug` flag removed (never existed)
+  2. Q1: "verbre" typo (corruption of "verbose") removed with the flag
+  3. Q3: tracker claim "rechnet alles in ein 2D-Raster (X, Y, Yaw)" →
+     corrected: only extracts `position.x`/`position.y`, no Yaw, no
+     quaternion conversion (`tracker_node.py:31-35`)
+  4. Q4: `1vs1_defend` scenario → `1vs1_default` (scenario doesn't exist,
+     `ls core/src/scenario/1vs1_defend.json` → not found)
+  5. Q6: `/bot1/LocoApiTopicReq` → `/Kev1n/LocoApiTopicReq` (actual topic
+     in `relay/hardware_mirror.json`)
+  6. Q8: `os.replace` → corrected (code used `os.rename` at the time;
+     subsequently fixed the code instead — see below)
+  7. Q8: Mermaid diagram `Aggregated_Worldstate.json` → `Worldstate.json`
+     (`state_aggregator.py:26`)
+  8. Q9: stale "in V5" header removed
+  9. Q10: `pkill -9 ollama` claim → corrected: watchdog kills Gazebo, ROS
+     nodes, and bridge — NOT Ollama (`launch_r2k.sh:108-110`). Ollama runs
+     via `nohup ollama serve` (`launch_r2k.sh:155`).
+  10. Q10/Q12: `OLLAMA_NUM_PARALLEL=1`/`OLLAMA_KV_CACHE_TYPE=q8_0` were
+      claimed as system-set; actually not set anywhere in `launch_r2k.sh`
+      (only in `ollama.log` as user-applied env). Corrected to "optional
+      user tuning". Stale "V5" references removed.
+- Added Q13-Q23 (11 new Q&As in German with English technical terms):
+  - Q13: Scoring (momentum OLS, reward node two code paths)
+  - Q14: Set-pieces (unified restart pattern, early termination, field exit exception)
+  - Q15: Foul thresholds + threshold/hysteresis/corridor/probability taxonomy
+  - Q16: Trace logging + `R2K_RUN_ID` + 14 KPIs
+  - Q17: B-study sample-count findings (0/1/3/6 samples, RQ1-RQ3)
+  - Q18: Goalie idle structural limitation (not prompt-fixable)
+  - Q19: Prompt fragment assembly + override logic + `dump_prompt.py`
+  - Q20: What the LLM sees vs what's stripped (`min_ents`, `R2K_INCLUDE_MATCH_STATE`)
+  - Q21: Closed-loop feedback gap (open-loop cognition, Phase 5 roadmap)
+  - Q22: Threshold vs hysteresis vs corridor vs probability (4-row comparison table)
+  - Q23: Multi-GPU isolated-workstation architecture (capabilities + merge problem)
+- Added V6.2 axiom-tension warning to Q12: hardcoded `ROS_DOMAIN_ID=0`
+  conflicts with N participants on the same LAN (workshop-relevant).
+
+### Knowledge-base citation cleanup (`3_AI_LOGIC_AND_EDGE_CASES.md`)
+- Stripped 15 dangling `[cite: 23]` reference artifacts (same broken-bibliography
+  issue as the FAQ).
+- Removed 4 stale v5 markers: `[NEW in v5]` (×2), `(V5)` section header,
+  `v5/v6` → `v5/v6.1` historical reference.
+- Bumped frontmatter v6.1 → v6.2 (title, tags, last_modified, version).
+- Updated `optimization_spec_v6.md` reference → `optimization_spec_v6.2.md`
+  (superseded doc).
+- Knowledge base is now `[cite:]`-free (39 total artifacts removed across
+  both files).
+
+### `os.replace` consistency fix (`state_aggregator.py:56`)
+- `state_aggregator.py:56`: `os.rename` → `os.replace` (one-line code change).
+- Rationale: `r2k_evaluator.py:134` already uses `os.replace`. All 20+ doc
+  references (AGENTS.md, knowledge base ×11, user docs ×16, docs ×4, FAQ ×3)
+  claim `os.replace`. Changing the one code line to match the documented
+  convention is cleaner than changing 20+ doc references.
+- Both `os.rename` and `os.replace` are POSIX-atomic on the same filesystem;
+  `os.replace` is the idiomatic Python choice for atomic swaps.
+- All 91 tests pass after the change.
+
+### Pre-existing dirty files committed (leftover from 2026-07-15 v6.2 overhaul)
+- `docs/optimization_spec_v6.2.md`: Phase 2b TBD clarification (+7/-1) —
+  adds note that `batch_evaluator.py` should wrap `analyze_trace.py` rather
+  than re-implement ROS topic subscriptions.
+- `user doc/.../7_05_CHEATPAGE_Experiment_Guide.md`: KPI label consistency
+  ("Tac Score" → "Score") + 3 "what to look for" bullets (Goals, Score
+  Avg/Final, Status Distribution) (+7/-2).
+
+### Workshop planning (not committed — plan only)
+- Drafted a 5-module workshop structure (~3.5h half-day) for team training:
+  Module 1 (Scoring-Ökosystem), Module 2 (World Model), Module 3 (K1 +
+  thresholds/hysteresis/corridor/probability), Module 4 (Utils/fragments),
+  Module 5 (Research: prompt injection, closed-loop feedback, multi-GPU).
+- Identified FAQ staleness as a workshop opportunity (FAQ was v5_release).
+- Identified `ROS_DOMAIN_ID=0` axiom tension for multi-participant workshops.
+- No deliverable produced yet (user deferred format decision).
+
+**Files touched:**
+- `core/src/ros2k_knowledge/ROS2K_GEM_FAQ.md` (v5_release → v6.2, +288/-56)
+- `core/src/ros2k_knowledge/3_AI_LOGIC_AND_EDGE_CASES.md` (citations + v5 cleanup, +48/-...)
+- `core/src/state_aggregator.py` (os.rename → os.replace, +1/-1)
+- `core/docs/optimization_spec_v6.2.md` (Phase 2b TBD, +7/-1, leftover from 2026-07-15)
+- `core/user doc/rosk2_technical_documentation/7_05_CHEATPAGE_Experiment_Guide.md`
+  (KPI labels + bullets, +7/-2, leftover from 2026-07-15)
+- `core/docs/SESSION_CHANGELOG.md` (this entry)
+
+**Files deleted:**
+- (none)
+
+**Not yet done:**
+- Workshop deliverable not produced (user deferred format decision —
+  German handout doc vs. handout + experiment scripts vs. keep planning only)
+- Module 5 depth not decided (conceptual + one spike vs. add per-bot LLM
+  prototype vs. add merge-dashboard stub)
+- `AGENTS.md:80` still says `os.replace` — now correct (code matches), but
+  worth noting it was part of the consistency fix scope
+- `1_CORE_ARCHITECTURE_AND_SYNC.md:89` shows `os.replace(temp_path, final_path)`
+  in a code example — this was already correct and needed no change
+- Workshop plan itself not committed (plan mode only, no files written)
+
+**Next:**
+- Decide workshop deliverable format and Module 5 depth, then produce the
+  handout/scripts
+- OR: proceed to Phase 2 of v6.2 spec (fix `batch_evaluator.py` KPI
+  collection, run 27-run baseline) — orthogonal to the workshop
+
+**Blockers:**
+- Ollama reachability untested this session (no live runs attempted)
+- Workshop deliverable decision pending (format + Module 5 depth)
+- `batch_evaluator.py` KPI collection still broken (Phase 2b, carried from
+  2026-07-13/15)
+- Visualizer blitting refactor still untested with live ROS 2 + Gazebo
+  (carried from 2026-07-14)
