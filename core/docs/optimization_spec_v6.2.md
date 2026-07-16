@@ -433,12 +433,17 @@ All infrastructure from v6.1 Phase 0 plus:
 - Verify with `dump_prompt.py`
 - Status: fragments already match — just needs snapshot + label
 
-**2b: Fix `batch_evaluator.py` KPI collection** ⬜ (critical blocker)
+**2b: Fix `batch_evaluator.py` KPI collection** ⬜ (critical blocker, TBD)
 - After each `run_single_config()` call, extract `R2K_RUN_ID` from the run's console log
 - Call `python3 tools/analyze_trace.py --run-id <ID> --output results/kpis_<ID>.json`
 - Read KPI JSON, inject into `results["results"][scenario][strategy][model]["runs"][]`
 - Add `momentum_series` from `world_trace` (optional)
 - Test: single run produces KPIs in `eval_results.json`
+- **TBD:** The manual batch loop in `7_05_CHEATPAGE_Experiment_Guide.md` §5 already works
+  (shell script calls `analyze_trace.py` after each run). Consider whether `batch_evaluator.py`
+  is still needed as a Python orchestrator, or if the manual shell approach is sufficient.
+  If keeping `batch_evaluator.py`, it should wrap `analyze_trace.py` — not re-implement
+  ROS topic subscriptions as the v6.1 spec originally intended.
 
 **2c: Run 9-scenario baseline** ⬜ (depends on 2a, 2b)
 - 9 scenarios × consolidated prompt × `qwen2.5-coder:3b` × 3 runs = 27 runs

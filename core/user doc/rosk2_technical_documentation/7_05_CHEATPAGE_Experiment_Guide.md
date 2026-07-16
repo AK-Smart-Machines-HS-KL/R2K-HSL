@@ -79,8 +79,8 @@ WORLD KPIs:
   Goalie Idle:      95.9%   ← bad (structural, see 7_04 §5)
   OOB:              32.1%    ← bad (> 10%, bots leaving field)
   Possession:       50.0%   ← neutral
-  Tac Score Avg:    -2.23   ← bad (negative = blue losing)
-  Tac Score Final:  -3.9    ← bad
+  Score Avg:        -2.23   ← bad (negative = blue losing, see 7_01)
+  Score Final:      -3.9    ← bad (last tactical score value)
 
 LLM KPIs:
   LLM Calls:        155
@@ -93,11 +93,14 @@ LLM KPIs:
 ```
 
 **What to look for:**
+- `Goals Blue:Red` — the match score. If blue consistently loses (e.g. 0:2), the prompt or scenario is too hard. If blue wins (e.g. 1.7:1.0), the change helped. Compare across experiments.
+- `Score Avg/Final` — tactical scoring (positive = blue advantage, see [[7_01_INTRODUCTION_Scoring_Referee_Gamestate]]). If consistently negative, blue is being outplayed even if goals are close.
 - `OOB%` > 10%: bots leaving the field — check `rules_core.txt` for STAY INSIDE FIELD
 - `Cluster%` > 10%: bots clumping — check anti-clustering rules
 - `Goalie Idle%` > 80%: structural limit, NOT a prompt issue (see [[7_04_SPECIFICATION_Prompt_Architecture]] §5)
 - `Parse Error%` > 5%: LLM producing invalid JSON — check sample format
 - `Latency p50` > 1000ms: consider `--no-explain` or fewer samples
+- `Status Distribution`: how much time was spent in `playing` vs `ball_out` / `foul_penalty` / `goal_kick` — if most of the game is interruptions, the referee is very active (may indicate chaotic bot behavior)
 
 ---
 

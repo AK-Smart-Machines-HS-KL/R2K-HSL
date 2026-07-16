@@ -1,32 +1,42 @@
 ---
-title: "ROS2K Architecture Mentor - System FAQ (V5)"
+title: "ROS2K Architecture Mentor - System FAQ (V6.2)"
 type: DOCUMENTATION
-tags: [faq, onboarding, gem-capabilities, q-and-a, ros2, relay, booster-k1, watchdog, hybrid-os, qwen]
-last_modified: 2026-06-03
-version: v5_release
+tags: [faq, onboarding, gem-capabilities, q-and-a, ros2, relay, booster-k1, watchdog, hybrid-os, qwen, v6, v6.1, v6.2, momentum, reward, trace-logging, set-piece, headless, kpi, analyze-trace, dump-prompt, goalie-idle, closed-loop]
+last_modified: 2026-07-16
+version: v6.2
 ---
 # ROS2K Architecture Mentor: FAQ & Capabilities
 
 Dieses Dokument demonstriert die Fähigkeiten des KI-gestützten ROS2K-Mentors. Die Anfragen sind nach Nutzer-Intention klassifiziert: **[Neugierig]** (Onboarding & Grundlagen), **[Team Mitglied]** (Architektur-Verständnis & Use Cases) und **[Weiterentwicklung]** (Skalierung & Performance).
+
+> [!info] V6.2 Addendum (2026-07-16)
+> Q1-Q12 stammen aus V5 (2026-06-03) und wurden dort, wo nötig, inline aktualisiert
+> (Flags, Szenarien). Q13-Q23 sind neu in V6.2 und decken Scoring/Momentum/Reward,
+> Set-Pieces, Trace-Logging, KPI-Messung, Prompt-Architektur, Goalie-Idle und die
+> Closed-Loop-Feedback-Lücke ab. Autoritative Referenzen: `core/docs/referee_rulebook.md`,
+> `core/docs/optimization_spec_v6.2.md` sowie Section 7 der User-Docs.
 
 ---
 
 ### Q1 [Neugierig]: Wie starte ich das System und welche Optionen bietet das `--help` Menü?
 **User:** "Wie steuere ich das System beim Start und was machen die Parameter aus dem `--help` Menü?"
 
-**Gem:** Das Skript `launch_r2k.sh` ist der einzige Entrypoint des Systems[cite: 12]. Das `--help` Menü listet folgende Parameter zur Steuerung auf[cite: 12]:
-* `--relay [profile]`: Bestimmt das Hardware-Routing[cite: 12]. Nutze z.B. `only_sim_bots` für reine Simulation oder `hardware_mirror` für physische Labor-Hardware[cite: 12].
-* `--scenario [name]`: Wählt das Spielfeld-Szenario (z.B. `1vs1_defend`) und veranlasst `setup_r2k.py`, den System-Prompt dynamisch zu kompilieren[cite: 12].
-* `--no-explain`: Unterdrückt den textuellen Reasoning-Output der KI, um Latenz zu sparen und sofortige Aktionen zu erzwingen[cite: 12].
-* `--debug`: Aktiviert verbale Logs in der `ollama_sandbox_bridge.py` und im `state_aggregator.py` zur Fehlersuche[cite: 12].
-Im Hintergrund aktiviert das Skript völlig autonom die `.bashrc Immunity`, prüft das Host-OS und startet den 0.2s Asynchronous Watchdog[cite: 12].
+**Gem:** Das Skript `launch_r2k.sh` ist der einzige Entrypoint des Systems. Das `--help` Menü listet folgende Parameter zur Steuerung auf:
+* `--relay [profile]`: Bestimmt das Hardware-Routing. Nutze z.B. `only_sim_bots` für reine Simulation oder `hardware_mirror` für physische Labor-Hardware.
+* `--scenario [name]`: Wählt das Spielfeld-Szenario (z.B. `3vs3_attack_center`, TC-01..09) und veranlasst `setup_r2k.py`, den System-Prompt dynamisch zu kompilieren.
+* `--strategy [name]`: Wählt die Strategie-Fragmente (z.B. `strat_default`, `strat_aggro`). V6.1: `strat_*.txt` Build-Artefakte wurden entfernt, nur `strategy/fragments/` zählt.
+* `--no-explain` / `--explain`: Unterdrückt bzw. aktiviert den textuellen Reasoning-Output der KI. `--no-explain` (150 Token Cap, Assignments-only) ist V6.2-Default. `--explain` (600 Token) senkt OOB auf 1.9%, kostet aber +44% Latenz.
+* `--headless`: Startet Gazebo ohne GUI (`gzserver` only). 30-50% schneller, nötig für Batch-Evaluation.
+* `--duration [s]`: Match-Dauer in Sekunden (Auto-Termination nach N Sekunden).
+* `--model [name]`: Überschreibt das Ollama-Modell für diese Sitzung (V6.2, hauptsächlich für `batch_evaluator.py` relevant).
+Im Hintergrund aktiviert das Skript völlig autonom die `.bashrc Immunity`, prüft das Host-OS und startet den 0.2s Asynchronous Watchdog. V6.1: zusätzlich wird `R2K_RUN_ID` exportiert und in Docker-Container propagiert.
 
 ---
 
 ### Q2 [Neugierig]: Was ist ROS2K und wie funktioniert das System grundlegend?
 **User:** "Ich bin neu im Projekt. Kannst du mir einfach erklären, wie die KI und die Roboter zusammenhängen?"
 
-**Gem:** ROS2K ist eine Testumgebung, in der ein KI-Sprachmodell (LLM) physische und simulierte Roboter steuert[cite: 15]. Das System ist extrem simpel gehalten und besteht im Kern aus reinen Python-Skripten[cite: 15]. Das LLM 'liest' eine Textdatei mit den aktuellen Koordinaten, entscheidet über den nächsten Zug und schreibt einen Text zurück[cite: 15]. Unsere Python-Skripte übersetzen diesen Text dann in einfache Motorbefehle für die Roboter[cite: 15].
+**Gem:** ROS2K ist eine Testumgebung, in der ein KI-Sprachmodell (LLM) physische und simulierte Roboter steuert. Das System ist extrem simpel gehalten und besteht im Kern aus reinen Python-Skripten. Das LLM 'liest' eine Textdatei mit den aktuellen Koordinaten, entscheidet über den nächsten Zug und schreibt einen Text zurück. Unsere Python-Skripte übersetzen diesen Text dann in einfache Motorbefehle für die Roboter.
 
 ~~~mermaid
 graph TD
@@ -43,81 +53,297 @@ graph TD
 ### Q3 [Neugierig]: Nutzt die KI normale ROS 2 Odometrie für die Orientierung?
 **User:** "Wie orientiert sich die KI? Bekommt sie klassische ROS 2 Sensordaten oder Koordinatentransformationen gefüttert?"
 
-**Gem:** Nein, wir umgehen klassische Sensordaten-Fusion komplett[cite: 15]. Kleine LLMs scheitern oft an der Mathematik von 3D-Quarternionen[cite: 15]. Unser Wahrnehmungs-Knoten (`tracker_node.py`) liest die globale Wahrheit direkt aus Gazebo (`/gazebo/model_states`)[cite: 15]. Er entfernt die Z-Achse (Höhe), verwirft Pitch und Roll und rechnet alles in ein flaches 2D-Raster (X, Y, Yaw) um[cite: 15]. Der `state_aggregator.py` bündelt dies und das LLM erhält eine perfekt flache 2D-Sichtweise auf das Spielfeld[cite: 15].
+**Gem:** Nein, wir umgehen klassische Sensordaten-Fusion komplett. Kleine LLMs scheitern oft an der Mathematik von 3D-Quarternionen. Unser Wahrnehmungs-Knoten (`tracker_node.py`) liest die globale Wahrheit direkt aus Gazebo (`/gazebo/model_states`). Er extrahiert nur `position.x` und `position.y` — kein Yaw, keine Quaternion-Konvertierung, keine Z-Achse. Der `state_aggregator.py` bündelt dies und das LLM erhält eine perfekt flache 2D-Sichtweise (nur X/Y) auf das Spielfeld.
 
 ---
 
 ### Q4 [Team Mitglied]: Was sind die typischen Use Cases und wie starte ich sie?
 **User:** "Wie wechsle ich zwischen reinen Simulationstests und echten Hardware-Tests?"
 
-**Gem:** Das gesamte System wird über einen einzigen Einstiegspunkt gesteuert: das Skript `launch_r2k.sh`[cite: 15]. Du definierst den Use Case rein über Kommandozeilen-Flags[cite: 15].
-* **Use Case 1 (Reine Simulation):** Für das Testen neuer LLM-Prompts im Simulator[cite: 15].
-  `./launch_r2k.sh --scenario 2vs2_default --relay only_sim_bots`[cite: 15]
-* **Use Case 2 (Sim2Real Hardware Test):** Wenn physische Roboter auf dem Feld stehen, die exakt das tun sollen, was in der Simulation passiert[cite: 15].
-  `./launch_r2k.sh --scenario 1vs1_defend --relay hardware_mirror`[cite: 15]
+**Gem:** Das gesamte System wird über einen einzigen Einstiegspunkt gesteuert: das Skript `launch_r2k.sh`. Du definierst den Use Case rein über Kommandozeilen-Flags.
+* **Use Case 1 (Reine Simulation):** Für das Testen neuer LLM-Prompts im Simulator. V6.2 nutzt 3vs3-Szenarien (TC-01..09, z.B. `3vs3_attack_center`).
+  `./launch_r2k.sh --headless --duration 120 --scenario 3vs3_attack_center --strategy strat_default --relay only_sim_bots`
+* **Use Case 2 (Sim2Real Hardware Test):** Wenn physische Roboter auf dem Feld stehen, die exakt das tun sollen, was in der Simulation passiert.
+  `./launch_r2k.sh --scenario 1vs1_default --relay hardware_mirror`
+* **Use Case 3 (Batch-Evaluation, V6.2):** Headless-Multi-Run-Orchestrierung. Hinweis: `batch_evaluator.py` hat derzeit einen offenen Bug in der KPI-Collection (Phase 2b), Workaround siehe [[7_05_CHEATPAGE_Experiment_Guide]] §5.
+  `python3 ai_tactics/batch_evaluator.py --scenarios 3vs3_attack_center --strategies strat_default --models qwen2.5-coder:3b --runs 3 --duration 120`
 
 ---
 
 ### Q5 [Team Mitglied]: Wie routet das System Befehle an Simulation vs. echte Hardware?
 **User:** "Woher weiß die Ausführungs-Bridge, ob ein Roboter virtuell oder physisch auf dem Feld steht?"
 
-**Gem:** Das wird durch das dynamische **Hardware Relay System** gelöst[cite: 15]. Das Startskript kompiliert eine flüchtige Konfigurationsdatei namens `active_relay.json`[cite: 15]. Die Ausführungs-Bridge (`ollama_sandbox_bridge.py`) ist komplett zustandslos und nutzt **keine OOP HALs** (Hardware Abstraction Layers)[cite: 15]. Die Bridge liest einfach den `hardware_type` und startet dynamische Thread-Closures (`def task`), um generische X/Y-Koordinaten in Standard-ROS-Nachrichten oder proprietäre K1-Payloads zu übersetzen[cite: 15].
+**Gem:** Das wird durch das dynamische **Hardware Relay System** gelöst. Das Startskript kompiliert eine flüchtige Konfigurationsdatei namens `active_relay.json`. Die Ausführungs-Bridge (`ollama_sandbox_bridge.py`) ist komplett zustandslos und nutzt **keine OOP HALs** (Hardware Abstraction Layers). Die Bridge liest einfach den `hardware_type` und startet dynamische Thread-Closures (`def task`), um generische X/Y-Koordinaten in Standard-ROS-Nachrichten oder proprietäre K1-Payloads zu übersetzen.
 
 ---
 
 ### Q6 [Team Mitglied]: Warum reagiert der Booster K1 nicht auf normale Fahrbefehle?
 **User:** "Ich versuche, den physischen Booster K1 Bipeden über normale ROS 2 `cmd_vel` (Twist) Nachrichten zu steuern, aber er bewegt sich nicht."
 
-**Gem:** Der K1 ignoriert Standard-Twist-Nachrichten[cite: 15]. Die Bridge serialisiert die LLM-Befehle stattdessen in spezifische JSON-Strings und sendet sie an das isolierte Hardware-Topic `/bot1/LocoApiTopicReq`[cite: 15]. Wir nutzen API-Code `2001` für die aktive Bewegung und Code `2000` für den Not-Halt (Kinematic Freeze)[cite: 15].
+**Gem:** Der K1 ignoriert Standard-Twist-Nachrichten. Die Bridge serialisiert die LLM-Befehle stattdessen in spezifische JSON-Strings und sendet sie an das isolierte Hardware-Topic (z.B. `/Kev1n/LocoApiTopicReq`, topic-name kommt aus `active_relay.json`). Wir nutzen API-Code `2001` für die aktive Bewegung und Code `2000` für den Not-Halt (Kinematic Freeze).
 
 ---
 
 ### Q7 [Team Mitglied]: Warum stehen die Roboter still, obwohl die KI Ausgaben generiert?
 **User:** "Die KI generiert strategisch sinnvolle Züge, aber die Roboter bewegen sich nicht."
 
-**Gem:** Das ist oft ein Schema-Problem (Parsing Paralysis)[cite: 15]. Unsere Python-Skripte erwarten zwingend ein **absolut flaches** JSON-Format für das `qwen2.5-coder:3b` Modell[cite: 15]. Wenn die KI komplexe Verschachtelungen nutzt, stürzt die Ausführung ab[cite: 15]. Der dynamische Prompt-Compiler (`setup_r2k.py`) muss zwingend exakte, flache Few-Shot-Beispiele übergeben[cite: 15].
+**Gem:** Das ist oft ein Schema-Problem (Parsing Paralysis). Unsere Python-Skripte erwarten zwingend ein **absolut flaches** JSON-Format für das `qwen2.5-coder:3b` Modell. Wenn die KI komplexe Verschachtelungen nutzt, stürzt die Ausführung ab. Der dynamische Prompt-Compiler (`setup_r2k.py`) muss zwingend exakte, flache Few-Shot-Beispiele übergeben.
 
 ---
 
 ### Q8 [Team Mitglied]: Wie verhindert das System Kollisionen beim Lesen der Textdateien?
 **User:** "Die Positionsdaten werden mit 10Hz in die Textdatei geschrieben, während die KI asynchron darauf zugreift. Warum crasht das System nicht beim gleichzeitigen Lesen/Schreiben?"
 
-**Gem:** Wir nutzen einen POSIX-Trick auf Dateisystemebene im `shared_state/` Ordner[cite: 15]. Der Aggregator schreibt die![[DOCUMENTATION]] Daten zunächst in eine temporäre Datei (`Worldstate.json.tmp`)[cite: 15]. Erst wenn der Schreibvorgang abgeschlossen ist, wird die Datei über den Befehl `os.replace` atomar umbenannt[cite: 15].
+**Gem:** Wir nutzen einen POSIX-Trick auf Dateisystemebene im `shared_state/` Ordner. Der Aggregator schreibt die Daten zunächst in eine temporäre Datei (`Worldstate.json.tmp`). Erst wenn der Schreibvorgang abgeschlossen ist, wird die Datei über `os.replace` atomar umbenannt (POSIX atomic rename — `os.replace` ist idiomatisch für atomare Swaps in Python, beide Nodes nutzen es).
 
 ~~~mermaid
 graph LR
-    TMP["Worldstate.json.tmp"] -->|"Atomic Swap (os.replace)"| FIN["Aggregated_Worldstate.json"]
+    TMP["Worldstate.json.tmp"] -->|"Atomic Swap (os.replace)"| FIN["Worldstate.json"]
     FIN -->|"Sicheres asynchrones Lesen"| EVAL["r2k_evaluator.py"]
 ~~~
 
 ---
 
-### Q9 [Weiterentwicklung]: Wie funktioniert die Hybrid OS Topology in V5?
+### Q9 [Weiterentwicklung]: Wie funktioniert die Hybrid OS Topology?
 **User:** "Wie gehen wir mit der Abhängigkeit von Ubuntu 22 (ROS Humble) um, wenn wir auf Ubuntu 24 Hosts arbeiten?"
 
-**Gem:** Die `launch_r2k.sh` nutzt eine dynamische **Hybrid OS Topology**[cite: 15]. Sie liest `lsb_release -rs` aus[cite: 15]:
-* **Auf Ubuntu 22.04:** Startet das System 100% nativ[cite: 15]. Der `micro-ROS-agent` wird lokal im `uros_ws` kompiliert, um FastDDS Shared-Memory (SHM) Blockaden zu umgehen (0ms Latenz)[cite: 15].
-* **Auf Ubuntu 24.04:** Das System kapselt ROS 2 in Docker-Compose, nutzt X11-Forwarding für Gazebo und weist Containern dynamisch Namen via `COMPOSE_PROJECT_NAME` zu, um Kollisionen zu verhindern[cite: 15].
+**Gem:** Die `launch_r2k.sh` nutzt eine dynamische **Hybrid OS Topology**. Sie liest `lsb_release -rs` aus:
+* **Auf Ubuntu 22.04:** Startet das System 100% nativ. Der `micro-ROS-agent` wird lokal im `uros_ws` kompiliert, um FastDDS Shared-Memory (SHM) Blockaden zu umgehen (0ms Latenz).
+* **Auf Ubuntu 24.04:** Das System kapselt ROS 2 in Docker-Compose, nutzt X11-Forwarding für Gazebo und weist Containern dynamisch Namen via `COMPOSE_PROJECT_NAME` zu, um Kollisionen zu verhindern.
 
 ---
 
 ### Q10 [Weiterentwicklung]: Wie drücken wir die LLM-Latenz und umgehen Port-Locks?
 **User:** "Die KI braucht zu lange. Kann ich Ollama als systemd-Dienst optimieren?"
 
-**Gem:** **NEIN! In V5 darf Ollama NICHT als systemd-Dienst laufen**[cite: 15]. Ollama muss im User-Space laufen[cite: 15]. Um die Latenz zu drücken, exportierst du vor dem Start in deiner Shell[cite: 15]:
-`export OLLAMA_NUM_PARALLEL=1` und `export OLLAMA_KV_CACHE_TYPE=q8_0`[cite: 15].
-Dadurch kann unser neuer **0.2s Asynchronous Watchdog** beim Schließen der UI ein hartes `pkill -9 ollama` ausführen, um Zombie-Prozesse und Port 11434-Locks (RCLError Tracebacks) absolut zuverlässig zu vernichten[cite: 15].
+**Gem:** **NEIN! Ollama darf NICHT als systemd-Dienst laufen.** Ollama muss im User-Space laufen, damit der **0.2s Asynchronous Watchdog** beim Schließen der UI Prozesse hart beenden kann (`pkill -9` auf Gazebo, ROS-Nodes und Bridge — nicht auf Ollama selbst, siehe `launch_r2k.sh:108-110`). Das Startskript startet Ollama via `nohup ollama serve` (`launch_r2k.sh:155`).
+
+Optional kann der Nutzer vor dem Start in seiner Shell Latenz-Tuning-Variablen exportieren (nicht vom Startskript gesetzt):
+`export OLLAMA_NUM_PARALLEL=1` und `export OLLAMA_KV_CACHE_TYPE=q8_0`.
+Das verhindert Multi-User-Konkurrenz auf Port 11434 und quantisiert den Attention-Cache für rohe Inferenzgeschwindigkeit.
 
 ---
 
 ### Q11 [Weiterentwicklung]: Warum nutzt die KI plötzlich die CPU statt der GPU?
 **User:** "Nachdem mein Rechner im Standby war, springt die Ollama-Latenz von 200ms auf über 7000ms. Was passiert da?"
 
-**Gem:** Das ist der berüchtigte **Nvidia Xid 31 Suspend-Bug**[cite: 15]. Wenn Linux in den Suspend-to-RAM geht, verliert der Treiber die Page-Directories im VRAM[cite: 15]. Ollama stürzt stumm ab und fällt auf die CPU zurück[cite: 15]. Die Lösung ist *nicht* Skripte umzuschreiben, sondern das Kernel-Feature zu aktivieren: `options nvidia NVreg_PreserveVideoMemoryAllocations=1` und den `nvidia-suspend.service` zu enablen[cite: 15].
+**Gem:** Das ist der berüchtigte **Nvidia Xid 31 Suspend-Bug**. Wenn Linux in den Suspend-to-RAM geht, verliert der Treiber die Page-Directories im VRAM. Ollama stürzt stumm ab und fällt auf die CPU zurück. Die Lösung ist *nicht* Skripte umzuschreiben, sondern das Kernel-Feature zu aktivieren: `options nvidia NVreg_PreserveVideoMemoryAllocations=1` und den `nvidia-suspend.service` zu enablen.
 
 ---
 
 ### Q12 [Weiterentwicklung]: Was tun, wenn Hardware-Roboter im Labor nicht erkannt werden?
 **User:** "Der ESP32 oder K1 verbindet sich nicht mit dem Host-Netzwerk."
 
-**Gem:** Das liegt meistens an kaputten Nutzer-Profilen (DDS-Kollisionen)[cite: 15]. Die V5-Architektur nutzt deshalb die **.bashrc Immunity**[cite: 15]. Das Startskript überschreibt hart `export ROS_DOMAIN_ID=0` und `export RMW_IMPLEMENTATION=rmw_fastrtps_cpp`, um alle toxischen User-Umgebungsvariablen auszusperren[cite: 15].
+**Gem:** Das liegt meistens an kaputten Nutzer-Profilen (DDS-Kollisionen). Die Architektur nutzt deshalb die **.bashrc Immunity**: `launch_r2k.sh:4-6` überschreibt hart `export ROS_DOMAIN_ID=0` und `export RMW_IMPLEMENTATION=rmw_fastrtps_cpp`, um alle toxischen User-Umgebungsvariablen auszusperren.
+
+> [!warning] V6.2 Axiom-Spannung: `ROS_DOMAIN_ID=0` vs. Multi-Participant-Workshops
+> Die `.bashrc Immunity` (Axiom 4) ist für Einzelnutzer-Betrieb korrekt. Wenn aber
+> **mehrere Team-Mitglieder auf isolierten GPUs im selben LAN** arbeiten, kollidiert
+> das shared `ROS_DOMAIN_ID=0` genau so, wie Q12 es zu verhindern sucht. Optionen:
+> (a) `launch_r2k.sh` patchen, sodass ein vorgesetzter `ROS_DOMAIN_ID` respektiert wird,
+> (b) getrennte VLANs/Hosts, (c) Kollisionsrisiko für Teaching-Demos akzeptieren.
+> Siehe Workshop-Diskussion Module 5.
+
+---
+
+## V6.2 Addendum — Neue FAQs (Q13-Q23)
+
+> [!abstract] Scope
+> Diese neuen Einträge decken die V6-Scoring-Engine, V6.1-Trace-Instrumentierung,
+> V6.2-Prompt-Studie, Set-Pieces, Goalie-Idle und die offene Closed-Loop-Feedback-Lücke ab.
+> Quellen: `core/docs/referee_rulebook.md` (autoritativ für Regeln),
+> `core/docs/optimization_spec_v6.2.md` (autoritativ für Spezifikation),
+> User-Docs Section 7 (`7_01`..`7_05`).
+
+---
+
+### Q13 [Team Mitglied]: Wie funktioniert das Scoring in V6? Was sind Momentum und Reward?
+**User:** "Ich höre von `tactical_score`, `momentum_30s` und `tactical_reward`. Was ist der Unterschied?"
+
+**Gem:** Drei Konzepte, drei Nodes, zwei Topics — nicht vermischen.
+
+* **`score_node.py` → `/tactical_score` (10Hz):** Numerischer taktischer Score `-10..+10` (positiv = Blue-Vorteil). Komponenten: Ball-X × 1.5 (±6.75), Ball-Proximity ±2.0, geclamped auf ±10.
+* **Momentum (V6):** `deque(maxlen=300)` Ringbuffer (30s bei 10Hz), OLS lineare Regression über das Fenster → Steigung × `MOMENTUM_SCALE_FACTOR=10.0`, geclamped `-10..+10`. Minimum 10 Samples vor Trend-Klassifikation (Cold-Start: erste 3s = "stable"). Fünf Trend-Klassen: `ascending >2.0`, `improving >0.5`, `stable >-0.5`, `declining >-2.0`, sonst `collapsing`.
+* **`reward_node.py` → `/tactical_reward` (1Hz):** Belohnung `-10..+10`. **Zwei Code-Pfade, nie mischen:**
+  * *Decision Reward:* Pollt `current_strategy.json` mtime. Snapshot vor Aktion, warte 5s (Move) / 2s (Kick), Snapshot nach. `Delta = Reward`.
+  * *Foul Penalty:* Abonniert `/match_state` für Foul-Events. Fixer `-1.0` Penalty (`-0.5` für Ball-Out).
+
+Klassifikation: `> +1.0` positive, `-1.0..+1.0` neutral, `< -1.0` negative. Siehe [[7_01_INTRODUCTION_Scoring_Referee_Gamestate]].
+
+---
+
+### Q14 [Team Mitglied]: Was sind Set-Pieces und wie setzt der Referee sie durch?
+**User:** "Ich sehe Status wie `goal_kick`, `corner_kick_in` und `kickoff` im Match-State. Was passiert da?"
+
+**Gem:** V6.1 hat alle Restart-Typen unter einem **Unified Restart Pattern** zusammengefasst (siehe `referee_rulebook.md` §4). Alle folgen demselben Ablauf:
+
+1. Ball an Restart-Position platzieren (Torarea-Ecke ±3.5/±1.0 für Goal Kick, Eckflagge ±4.3/±2.8 für Corner Kick-In, Zentrum für Kickoff).
+2. Gegner innerhalb 1.5m radial wegwarpen (`WARP_AWAY_DISTANCE=2.0m`).
+3. Gegner-Team 5s einfrieren (Twist-zero auf `cmd_vel`).
+4. `restart_team` setzen (Team, das den Restart ausführt).
+5. **Early Termination:** Sobald ein Bot des Restart-Teams innerhalb 0.3m des Balls ist → `BALL FREE` → Status `playing`. Die 5s sind also ein Maximum, keine feste Dauer.
+
+Kickoff-Semantik (V6.1 Flip): Das **scoring** Team wird 5s eingefroren, das **conceding** Team führt den Kickoff aus. Verhindert sofortiges Pressen durch das Torschieß-Team.
+
+**Field Exit Exception:** Bots dürfen bis zu **1.0m außerhalb des Feldes** stehen, wenn sie der Restart-Team-Bot sind und der Status `ball_out`/`goal_kick`/`corner_kick_in` ist. Normales Spiel erlaubt ±0.5m. Siehe `referee_rulebook.md` §1 Field Exit Exception.
+
+---
+
+### Q15 [Team Mitglied]: Welche Fouls erkennt der Referee und welche Thresholds gelten?
+**User:** "Wann pfeift der Referee? Und was ist der Unterschied zwischen Threshold und Hysterese?"
+
+**Gem:** Zwei Foul-Typen, beide in `referee_node.py:24-30` definiert:
+
+* **Pushing:** Zwei gegnerische Bots näher als `PUSHING_DISTANCE_THRESHOLD=0.3m`, beide mehr als `BALL_PROXIMITY_THRESHOLD=0.8m` vom Ball entfernt. Penalty: Täter zur gegnerischen Sideline warpen (`X=±4.0`, Random-Y). Cooldown 5s pro Bot. Reward `-1.0`.
+* **Blocking without Ball:** Ein Bot blockiert den Gegner-Pfad zum Ball für `BLOCKING_MIN_DURATION=3.0s`, Blocker >0.8m vom Ball entfernt, `OBSTRUCTION_ANGLE=30°`. Penalty: Täter in eigene Hälfte warpen. Reward `-1.0`.
+
+**Threshold vs Hysterese** (zentrales Konzept):
+* **Threshold** = harte binäre Grenze. 0.29m = kein Foul, 0.31m = Foul jeden Frame → Flicker.
+* **Hysterese** = N aufeinanderfolgende Frames / Cooldown zur Bestätigung. `HYSTERESIS_FRAMES=3` (Last-Touch), `DEBOUNCE_FRAMES=5` (Ball-Out), `foul_cooldown=5s`. Verhindert Flicker, kostet Latenz.
+* **Kosten der Hysterese:** `last_toucher` verfällt **nie** — der Kicker bleibt verantwortlich, auch wenn 10s später der Ball ins Aus geht (by Design, `referee_rulebook.md` §6 Stale-Toucher-Warnung).
+
+ROS2K nutzt heute **nur Threshold + Hysterese**. Korridor (Bänder mit gradiertem Wert, z.B. Momentum-Trend-Klassen) kommt nur im Scoring vor. **Probability** (Bayesian/Kalman) fehlt komplett — das ist die Phase-5-Forschungsfront (5.1 Kalman Filter).
+
+---
+
+### Q16 [Team Mitglied]: Was misst `analyze_trace.py` und wie korreliert das mit `R2K_RUN_ID`?
+**User:** "Wie komme ich von einem Match-Lauf zu konkreten KPIs?"
+
+**Gem:** Drei Schritte, alle offline (kein ROS, kein Ollama nötig):
+
+1. **Während des Laufs:** `launch_r2k.sh:82` exportiert `R2K_RUN_ID="${SCENARIO}_${STRATEGY}_$(date +%Y%m%d_%H%M%S)"`. Der `r2k_evaluator.py` schreibt `logs/llm_trace_<run_id>.jsonl` (eine JSON-Zeile pro LLM-Call), der `state_aggregator.py` schreibt `logs/world_trace_<run_id>.jsonl` (eine Zeile pro 10Hz World-State-Write).
+2. **Nach dem Lauf:** `python3 tools/analyze_trace.py --run-id <ID> --output results/kpis_<ID>.json`. Joint beide Trace-Files per Timestamp, berechnet **14 KPIs**.
+3. **Lesen:** `world_kpis` (Goals, Cluster%, OOB%, Goalie-Idle%, Possession, Tactical-Score Avg/Final, Status-Distribution) + `llm_kpis` (LLM-Calls, Latenz p50/p95/max, Parse-Error-Rate, Role-Diversity, Roles-Counter, Avg-Tokens).
+
+**Wichtig:** Trace-Files sind gitignored, werden beim Boot **nicht** gelöscht, akkumulieren sich. Manuell aufräumen: `rm src/logs/*.jsonl`. Wenn `R2K_RUN_ID` nicht gesetzt ist, fallen beide Nodes auf `run_{timestamp}` zurück — Traces lassen sich dann nicht mit dem Console-Log korrelieren. Siehe [[7_03_CHEATPAGE_Tools_and_Utils]].
+
+---
+
+### Q17 [Team Mitglied]: Wie viele Samples soll der System-Prompt enthalten?
+**User:** "Mehr Few-Shot-Beispiele = bessere KI? Oder stören sie?"
+
+**Gem:** **Nein.** Die B-Studie (Phase 1, 2026-07-15, 11 Experimente × 3 Runs × 120s) hat das getestet. Ergebnis:
+
+| Samples | Goals B:R | OOB% | Lat p50 | Fazit |
+|---|---|---|---|---|
+| 0 (nur Rules, B7a) | 0.0:2.0 | 0% | 320ms | **Totaler Ausfall** — leeres/degenerates JSON |
+| **1 (B6a)** | **1.7:1.0** | 16.4% | **742ms** | **Sweet Spot** — bester Scorer |
+| 3 (Baseline A) | 0.7:1.0 | 30.6% | 827ms | Mehr Varianz, mehr OOB |
+| 6 (B6b) | 0.3:1.7 | 15.2% | 792ms | Diminishing returns |
+
+**Forschungsschluss (RQ2):** Das 3B-Modell kopiert **ein** Muster; es lernt nicht von Diversität. Mehr Samples verwässern den Fokus und erhöhen die Latenz. **1 Sample ist V6.2-Default.**
+
+**RQ1 (Rules vs. Samples):** Beide nötig. Ohne Samples (B7a) → leeres JSON. Ohne Rules (B7b) → 46% OOB (Bots verlassen das Feld). Samples liefern das **Format**, Rules die **Grenzen**.
+
+**RQ3 (`--explain`):** Explain-Mode senkt OOB auf 1.9% durch explizites Reasoning, kostet aber +44% Latenz (1190ms vs. 815ms). Die konsolidierte V6.2 nutzt stattdessen expliziten "STAY INSIDE FIELD AT ALL TIMES"-Text im `rules_core.txt` — ähnliche OOB-Reduktion ohne Latenz-Kosten.
+
+> [!warning] Hohe Varianz
+> Within-Experiment OOB-Spread bis zu 50 Prozentpunkte über 3 Runs. 3 Runs geben nur
+> **directional insight**. Für statistische Confidence sind 10+ Runs nötig (D8). Siehe [[7_04_SPECIFICATION_Prompt_Architecture]].
+
+---
+
+### Q18 [Team Mitglied]: Warum bewegt sich der Goalie kaum, obwohl die KI Befehle sendet?
+**User:** "Goalie-Idle-Rate ist 80-100% in allen Experimenten. Ist das ein Prompt-Problem?"
+
+**Gem:** **Nein, und nicht per Prompt fixbar.** Goalie-Idle ist eine **strukturelle Grenze**, kein Prompt-Problem.
+
+**Root Cause:** Der `ollama_sandbox_bridge.py` PD-Controller verfolgt einen jitterigen ball-Y-Setpoint. Die `smooth_membership` + Low-Pass-Filter reagieren überempfindlich auf Ballpositionsrauschen. Ergebnis: Mikro-Oszillationen, der Goalie "bewegt sich" ohne echte Positionsfortschritte. Die KPI zählt das als Idle (<0.1m Bewegung).
+
+**Implikation:** Goalie-Verhalten **NICHT** durch Prompt-Änderungen, Rollen-Deskriptionen oder Goalie-Positions-Parameter versuchen zu fixen. Die Lösung muss im Bridge-PD-Controller liegen (Smoothing-Faktor, Deadband) — siehe v6.2 Phase 5.1 (Kalman-Filter → glatterer ball-Y-Setpoint → weniger PD-Jitter). Siehe [[7_04_SPECIFICATION_Prompt_Architecture]] §5.
+
+---
+
+### Q19 [Team Mitglied]: Wie baue ich den System-Prompt zusammen und wo leben die Fragments?
+**User:** "Ich sehe kein `system_prompt.txt` im Repo. Wie wird der Prompt erzeugt?"
+
+**Gem:** Es gibt **kein** statisches `system_prompt.txt` in der Versionierung. Es wird zur Boot-Zeit von `setup_r2k.py:111-136` aus Text-Fragmenten in `strategy/fragments/` zusammengesetzt:
+
+```
+header.txt          → ACT_ON_BOTS line + MODE line + {{EXPLAIN_INSTRUCTION}}
+rules_core.txt      → Field Limits, Valid Actions, Strict Laws, Kick-In Exception
+rules_{strat}.txt   → Strategie-spezifische Rules (OVERRIDES rules_{mode}.txt wenn vorhanden)
+samples_{strat}.txt → Strategie-spezifische Samples (OVERRIDES samples_{mode}.txt wenn vorhanden)
+```
+
+**Override-Logik (V6.1 Fix):** Strategie-spezifische Fragmente ersetzen Mode-Fragmente. Wenn `rules_recover.txt` existiert, ersetzt es `rules_3vs3.txt`. Früher wurden beide appended → widersprüchliche Signale. Die `strat_*.txt` Build-Artefakte wurden V6.1 entfernt (gitignored). Die Fragmente sind die einzige Source of Truth.
+
+**Verifikation ohne ROS/Ollama:** `python3 tools/dump_prompt.py --scenario 3vs3_attack_center --strategy strat_default --no-explain` druckt den assemblierten Prompt + Per-Fragment-Breakdown + Token-Schätzung. Siehe [[7_04_SPECIFICATION_Prompt_Architecture]].
+
+---
+
+### Q20 [Team Mitglied]: Was sieht die KI wirklich und was wird ausgeblendet?
+**User:** "Bekommt die KI die volle `Worldstate.json`? Oder eine reduzierte Sicht?"
+
+**Gem:** **Reduziert.** `r2k_evaluator.py:88` strippt die Worldstate zu `min_ents` — ein flaches Dict von Entity-Positionen, gerundet auf 1 Dezimalstelle. Nur X/Y, nichts sonst.
+
+**Was die KI sieht:** `{"blue_1": {"x": -1.5, "y": 0.3}, ..., "soccer_ball": {"x": 0.0, "y": 0.1}}`
+
+**Was ausgeblendet wird:** `match_state` (Score, Status, Fouls, restart_team), `tactical_score` (Momentum, Trend, Possession), `tactical_reward`, alle Yaw-Winkel, alle Geschwindigkeiten.
+
+**Optional:** Mit `export R2K_INCLUDE_MATCH_STATE=1` wird ein `match_state`-Objekt (Status + restart_team) injiziert. **Aber:** B3-Experiment (Phase 1) zeigte **keine Verbesserung** — das 3B-Modell nutzt Game-State-Information nicht effektiv. Dynamic Prompt Selection (Phase 5.5) ist vermutlich der bessere Ansatz. Siehe [[7_02_ARCHITECTURE_World_Model_Components]].
+
+**Staleness-Problem:** Die Positionen sind bis zu 100ms alt (Aggregator-Write) + ~800ms LLM-Latenz ≈ die KI entscheidet über eine ~1s alte Welt. Motiviert Phase 5.2 (Predictive World Model).
+
+---
+
+### Q21 [Weiterentwicklung]: Was ist die "Closed-Loop-Feedback-Lücke"?
+**User:** "Ich höre, das World Model sei 'open-loop'. Was fehlt?"
+
+**Gem:** **Definition:** Closed-Loop-Feedback bedeutet, ein System prüft, ob seine Befehle ausgeführt wurden, und korrigiert bei Abweichung. ROS2K ist heute **open-loop** in der Kognitionsschicht:
+
+```
+LLM sieht Welt → LLM gibt Befehl → Bridge führt aus → (KEINE Rückmeldung an LLM)
+                                                            ↑
+                                              Hier fehlt die Feedback-Schleife
+```
+
+**Konkret:** Die KI sendet `{"blue_2": {"action": "Move", "x": 1.5, "y": 2.0}}`. Ob `blue_2` das Ziel erreichte, ob der Bot auf dem Weg blockiert wurde, ob ein Foul ihn warpte — die KI erfährt es **nicht**. Sie sieht beim nächsten Call nur eine neue Position, aber ohne Kausalzusammenhang zu ihrem Befehl. Sie kann nicht zwischen "Befehl war schlecht" und "Befehl wurde gut erteilt, aber Ausführung scheiterte" unterscheiden.
+
+**Nicht verwechseln mit Datei-I/O-Safety (Q8):** Die atomare `os.replace`-Schreibweise löst das Read/Write-Race. Das ist gelöst. Die **Entscheidungs-Rückkopplung** ist ungelöst.
+
+**Warum das ein Problem ist:** Ohne Feedback kann die KI nicht lernen, dass z.B. ein Block-Pfaden-Weg blockiert ist, oder dass ein Move-Befehl an der Sideline ins Leere läuft. Sie wiederholt fehlerhafte Strategien, weil sie nicht weiß, dass sie fehlerhaft waren.
+
+**Phase-5-Roadmap schließt die Lücke:**
+* **5.1 Kalman Filter:** Geschwindigkeits-Schätzung → die KI kann Bewegung erkennen, nicht nur Positionen.
+* **5.2 Predictive World Model:** Forward-Simulation um N ms → Kompensation der LLM-Latenz.
+* **5.3 Deviation Watchdog:** Vergleicht prädizierte vs. tatsächliche Welt → erkennt Anomalien (Bots fliegen, Ball warpt, Befehl nicht ausgeführt).
+* **5.4 Failsafe Fallback:** Wenn LLM-Latenz >5s oder Parse-Error-Rate >20% oder Watchdog kritisch → Blue schaltet auf regelbasiertes Verhalten (Mirror von `rule_evaluator_red.py`). System hängt nie, produziert nie gefährliche Befehle.
+* **5.9 Temporal Reasoning:** Letzte N World-States im Prompt → KAI kann Bewegung inferieren.
+
+**Read-Order-Empfehlung:** 5.3 + 5.4 zuerst (am billigsten, höchster Sicherheitsgewinn). 5.1 Kalman ist die Foundation und fixt zusätzlich das Goalie-Idle-Problem. Siehe `optimization_spec_v6.2.md` §7 Phase 5 und [[7_02_ARCHITECTURE_World_Model_Components]] §5.
+
+---
+
+### Q22 [Weiterentwicklung]: Was bedeutet "Threshold vs Hysterese vs Korridor vs Probability"?
+**User:** "Ich sehe diese vier Konzepte im Code. Was ist der Unterschied?"
+
+**Gem:** Vier Entwurfsmuster für Entscheidungslogik. ROS2K nutzt heute nur die ersten zwei voll:
+
+| Konzept | Was es ist | Beispiel in ROS2K | Wann es scheitert |
+|---|---|---|---|
+| **Threshold** | Harte binäre Grenze | `PUSHING_DISTANCE_THRESHOLD=0.3m`, `BALL_PROXIMITY=0.8m` | Flicker an der Grenze; 0.29m=kein Foul, 0.31m=Foul jeden Frame |
+| **Hysterese** | N aufeinanderfolgende Frames / Cooldown | `HYSTERESIS_FRAMES=3`, `DEBOUNCE_FRAMES=5`, `foul_cooldown=5s` | Addet Latenz; `last_toucher` verfällt nie (by Design — Kicker bleibt verantwortlich) |
+| **Korridor** | Band mit gradiertem Wert | Momentum-Trend-Klassen (`ascending >2.0` … `collapsing <-2.0`), Goalie-Korridor x=-4.0, Boundary-Clamp ±0.5m normal / ±1.0m Restart | Weite Korridore maskieren Signal, enge Korridore werden spröde |
+| **Probability** | Bayesianische Belief | **Nicht genutzt** — `temperature=0.0` ist deterministisch, kein Kalman, kein Occupancy | Voll crisp-System — Forschungslücke (Phase 5.1) |
+
+**Lehrpunkt:** ROS2K heute = Threshold + Hysterese. Korridor nur im Scoring. Probability fehlt — das ist die Phase-5-Forschungsfront.
+
+---
+
+### Q23 [Weiterentwicklung]: Wenn jeder Team-Member einen eigenen GPU-PC hat, was ändert sich?
+**User:** "Was ändert die Multi-GPU-Topologie an der Architektur?"
+
+**Gem:** Jeder Member läuft den **vollen Stack isoliert** (eigener Gazebo headless + eigener Ollama + eigene `results/`). Vier Capabilities werden freigeschaltet, ein Merge-Problem entsteht:
+
+| Capability | Was sie ermöglicht | Mappt auf |
+|---|---|---|
+| **Parallel Batch-Runs** | Phase 2 (27 Runs) und Phase 3 (135 Runs) aufgeteilt auf N Member → Wall-Clock ÷ N. Jeder Member besitzt einen Slice der Run-Matrix. | Phase 2c/3b |
+| **Per-Bot LLM** | Eine GPU kann 3 parallele 3b-Calls laufen lassen (Goalie/Striker/Supporter) — Latenz bleibt ~800ms, nicht 3×. Jeder Bot bekommt rollenspezifischen Kontext. Passt perfekt zum isolierten Modell. | C5 / Phase 5.5 |
+| **Größere Modelle (7b+)** | Besseres Soccer-Reasoning; Test ob 7b das 3b schlägt (D1 Model-Size-Scaling). Braucht das GPU-Budget. | D1, Phase 3 |
+| **Unabhängige Reproduktion** | Jeder Member hat eigenen Headless-Gazebo+Ollama → kein Contention, keine Port/DDS-Kämpfe (gegeben distinct `ROS_DOMAIN_ID`). | Reproducibility |
+| **Merge-Problem (das eine Shared-Concern)** | Aller `results/kpis_*.json` müssen in einem Dashboard landen. Offline-JSON-Merge — keine Live-Koordination nötig. | Phase 5.6 |
+
+**Wichtiger Hinweis zu `OLLAMA_NUM_PARALLEL`:** Q10 erwähnt `OLLAMA_NUM_PARALLEL=1` als optionales Single-Call-Latenz-Tuning (nicht vom Startskript gesetzt). Für **3 parallele per-bot Calls** muss dieser Wert **≥3** gesetzt werden, sonst serialisiert Ollama sie. Ohne dieses Setting wird aus "parallelen 800ms" serielles 2400ms.
+
+**`ROS_DOMAIN_ID`-Spannung:** Siehe Q12 V6.2-Warnung. Das hardcoded `ROS_DOMAIN_ID=0` (Axiom 4) kollidiert mit N Teilnehmern im selben LAN. Option (a) `launch_r2k.sh` patchen (respektiere vorgesetzten `ROS_DOMAIN_ID`), (b) getrennte VLANs, (c) Kollisionsrisiko akzeptieren. Siehe Workshop-Diskussion Module 5.

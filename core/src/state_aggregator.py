@@ -53,7 +53,7 @@ class StateAggregator(Node):
             tmp_path = self.file_path + '.tmp'
             with open(tmp_path, 'w') as f:
                 json.dump(combined_state, f)
-            os.rename(tmp_path, self.file_path)
+            os.replace(tmp_path, self.file_path)
         except Exception:
             pass
         
