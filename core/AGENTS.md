@@ -24,6 +24,7 @@ One entrypoint: `core/launch_r2k.sh`. Always invoke from `core/`. It `cd`s into 
 
 ```
 # First-time setup (builds ros2_ws, micro-ROS agent, venv on U22; Docker image on U24)
+# Installs host prerequisites including jq (used by launch_r2k.sh to parse relay JSON)
 ./install.sh
 
 # Run a match (sim only)

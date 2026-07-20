@@ -17,6 +17,11 @@ DURATION=0
 TRAP_TRIGGERED=false
 UBUNTU_VERSION=$(lsb_release -rs)
 
+if ! command -v jq >/dev/null 2>&1; then
+    echo "❌ 'jq' is required but not installed. Run: sudo apt install jq  (or rerun ./install.sh)"
+    exit 1
+fi
+
 export SAFE_DIR_NAME=$(basename "$PWD" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9_-')
 export PROJECT_NAME="$SAFE_DIR_NAME"
 export COMPOSE_PROJECT_NAME="$SAFE_DIR_NAME"

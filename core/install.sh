@@ -11,7 +11,7 @@ cd src || { echo "❌ Ordner 'src' nicht gefunden! Bitte Struktur prüfen."; exi
 
 if [ "$UBUNTU_VERSION" == "22.04" ]; then
     echo "🟢 Nativer Modus (Ubuntu 22.04): Richte ROS 2 Repositories ein..."
-    sudo apt update && sudo apt install -y curl gnupg2 lsb-release
+    sudo apt update && sudo apt install -y curl gnupg2 lsb-release jq
     sudo curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg
     echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/ros2.list > /dev/null
     
@@ -54,7 +54,7 @@ if [ "$UBUNTU_VERSION" == "22.04" ]; then
 elif [[ "$UBUNTU_VERSION" == 24.* ]]; then
     echo "🐳 Docker Modus: Installiere Docker-Umgebung für Ubuntu 24.04..."
     sudo apt update
-    sudo apt install -y docker.io docker-buildx docker-compose-v2
+    sudo apt install -y jq docker.io docker-buildx docker-compose-v2
     sudo systemctl enable --now docker
     sudo usermod -aG docker $USER
     
