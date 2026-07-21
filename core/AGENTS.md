@@ -70,23 +70,11 @@ Note: `score_node.py` exists in BOTH `ros2_ws/src/r2k_world_model/` and `core/sr
 No lint/typecheck/format config exists. `r2k_world_model` ships ament lint tests
 (`test_flake8.py`, test_pep257.py`, `test_copyright.py`) under `ros2_ws/.../test/`.
 
-## Architecture axioms (do not violate)
+## Architecture axioms
 
-1. **No OOP HALs.** `ollama_sandbox_bridge.py` is a single `Node` using timer callbacks and
-   dynamic publishers — no `BaseBotDriver` inheritance. Add hardware by extending the
-   relay mapping, not by subclassing.
-2. **Ground truth = `/gazebo/model_states` only.** `tracker_node.py` flattens to 2D (X, Y, Yaw).
-   Never assume per-bot `/odom` or TF2 for spatial awareness.
-3. **Decoupled via tmpfs.** LLM ↔ ROS communicate only through `shared_state/*.json` using
-   atomic `os.replace` writes. `shared_state/` MUST exist or `r2k_evaluator.py` crashes
-   silently (`FileNotFoundError`). `launch_r2k.sh` creates it; standalone script runs won't.
-4. **`ROS_DOMAIN_ID=0` + `rmw_fastrtps_cpp`.** Enforced at the top of `launch_r2k.sh`; it
-   overwrites all local env vars. Don't source other ROS setups into the same shell.
-5. **Ollama runs user-space only.** No systemd service — the watchdog needs to `pkill -9` it.
-6. **Hybrid OS.** Ubuntu 22.04 = native (venv + colcon + micro-ROS). Ubuntu 24.04 = Docker.
-   Never run the micro-ROS agent in Docker on U22 (FastDDS SHM deadlock).
-7. **Suspend bug.** LLM latency >7000ms or silent CPU fallback ⇒ Nvidia Xid 31 MMU fault.
-   Fix: kernel param `NVreg_PreserveVideoMemoryAllocations=1`. Not a Python bug.
+See `core/src/ros2k_knowledge/agent_prompt_de.txt` (10 axioms, German, for the LLM)
+and `core/.github/copilot-instructions.md` (symlink to the same). Loaded into every
+opencode session via `.opencode/opencode.json → instructions`.
 
 ## File layout that isn't obvious from names
 
