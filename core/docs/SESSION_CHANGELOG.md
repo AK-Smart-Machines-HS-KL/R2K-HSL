@@ -1009,3 +1009,105 @@ executed. **The model is still running on CPU as of session end.**
   2026-07-13/15)
 - Visualizer blitting refactor still untested with live ROS 2 + Gazebo
   (carried from 2026-07-14)
+
+## 2026-07-21 — Machine transfer, prompt dedup, cheat page, student projects
+
+**Goal:** Transfer opencode setup to a new U22 machine, unify the agent
+prompt source across opencode/Continue/Copilot (eliminate 3-way duplication),
+and produce team-facing docs (cheat page + student project descriptions).
+
+**Done:**
+
+### Machine transfer (opencode → U22)
+- Pushed 2 unpushed commits (`a418bba`, `fb131bb`) to origin
+- Pulled 1 new commit from remote (`f251147` — jq prerequisite fix from U22
+  session on 2026-07-20)
+- Created `opencode_takeover.tar.gz` (12 MB) at `/home/r-zwei-kickers/`:
+  `~/.config/opencode/` (API keys + config), `~/.local/share/opencode/`
+  (session DB + auth + snapshot). Excludes node_modules, binary, logs,
+  cache, workshop drafts
+- Verified no machine-specific paths in configs (all use `~/`, `127.0.0.1`,
+  or HTTPS endpoints). Session DB contains historical `/home/r-zwei-kickers`
+  paths in metadata only (immutable history, no runtime impact)
+
+### Prompt source dedup (3 tools → 1 canonical source)
+- `core/.github/copilot-instructions.md`: regular file → **symlink** to
+  `../src/ros2k_knowledge/agent_prompt_de.txt` (was byte-identical copy, no
+  sync mechanism — drift risk eliminated)
+- `core/.vscode/continue.json.current`: `systemMessage` field replaced with
+  `@file ~/R2K-HSL/core/src/ros2k_knowledge/agent_prompt_de.txt` (was 68-line
+  inline copy in `continue.expanded.json` + 3-line summary in
+  `continue.json.current`)
+- `.opencode/opencode.json`: added `agent_prompt_de.txt` as 3rd entry in
+  `instructions` array (opencode now loads all 10 axioms + RAG directive +
+  formatting rules + persona, was missing 3 axioms #7/#9/#10)
+- `core/AGENTS.md`: replaced 7-axiom section (lines 73-89) with 3-line
+  cross-reference to `agent_prompt_de.txt` (eliminates redundancy: 7 axioms
+  were appearing twice per opencode session — English from AGENTS.md +
+  German from agent_prompt_de.txt)
+- `core/.vscode/continue.expanded.json`: kept as-is (not documented)
+
+### Team docs
+- `core/docs/cheatpage_r2k_team_workflow.md` (NEW, 5 parts):
+  1. Setup: configs, prompts, providers, startup-chain, impact-isolation
+  2. Applied concepts: session memory, RAG knowledge base, skills alternative
+  3. Knowledge base: when to consult, 10 axioms, anti-patterns (KB + code)
+  4. Best practices: sessions, git, cross-tool, team-workflow
+  5. opencode DX: quick wins (custom commands, permissions, watcher.ignore,
+     small_model, {file:}/{env:} keys) + "bewusst nicht genutzt" (Agent
+     Skills, MCP, plugins, server mode)
+- `core/docs/student_projects_autumn_fair.md` (NEW, untracked — not committed
+  per user decision): 4 student project descriptions (P1 voice interface, P2
+  manufacturing/storage, P3 Yahboom+A0 stand, P4 eye in the sky) with
+  self-contained "Über das Projekt" intro block for physical distribution
+
+### Project planning
+- 13-topic priority grouping for September RoboCup + autumn fair + 6-month
+  internship (v6.2 assumed done): K1 locomotion/kick/walk (Sep dev team),
+  referee robustness (Sep dev team), 4 fair demos (2-mo students), 4 research
+  topics (6-mo intern)
+- Knowledge architecture discussion: audited opencode native features
+  (Agent Skills, custom commands, permissions, agents, LSP, MCP), decided
+  to keep current setup (Option B — power-files as canonical source, no
+  migration to Skills — not portable to Continue)
+
+**Files touched:**
+- `.opencode/opencode.json` (agent_prompt_de.txt added to instructions)
+- `core/AGENTS.md` (axiom section → cross-reference)
+- `core/.github/copilot-instructions.md` (file → symlink)
+- `core/.vscode/continue.json.current` (systemMessage → @file reference)
+- `core/docs/SESSION_CHANGELOG.md` (this entry)
+
+**New files (untracked):**
+- `core/docs/cheatpage_r2k_team_workflow.md` (committed in 3c2382d)
+- `core/docs/student_projects_autumn_fair.md` (not committed — user decision)
+- `core/docs/workshop_invitation.md` (not committed — stays local)
+- `core/docs/workshop_memo.md` (not committed — stays local)
+
+**Files deleted:**
+- (none)
+
+**Not yet done:**
+- `continue.json.current` `@file` resolution not verified in live VSCode
+  (needs user to launch Continue and test — if `@file` doesn't resolve,
+  fall back to inline systemMessage)
+- `student_projects_autumn_fair.md` not committed (user decision — may
+  commit later)
+- Workshop planning (Decision A: deliverable format, Decision B: Module 5
+  depth) still open — workshop_invitation.md + workshop_memo.md stay local
+- opencode DX quick wins (Part 5 of cheat page) not implemented — custom
+  commands, permissions, watcher.ignore, small_model, {file:}/{env:} keys
+- Session changelog entry was nearly forgotten — opencode must remind to
+  append before committing (protocol reinforced this session)
+
+**Next:**
+- Verify `continue.json.current` `@file` resolution in VSCode (launch
+  Continue, say "Hallo", check if onboarding greeting appears with 10 axioms)
+- Then push commit `3c2382d` + this changelog commit to origin
+
+**Blockers:**
+- Ollama stuck on CPU on U22 (carried from 2026-07-20 — `pkill -9` not executed)
+- `batch_evaluator.py` KPI collection still broken (Phase 2b, carried from
+  2026-07-13/15)
+- Visualizer blitting refactor still untested with live ROS 2 + Gazebo
+  (carried from 2026-07-14)
