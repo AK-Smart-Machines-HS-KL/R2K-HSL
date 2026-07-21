@@ -1111,3 +1111,317 @@ and produce team-facing docs (cheat page + student project descriptions).
   2026-07-13/15)
 - Visualizer blitting refactor still untested with live ROS 2 + Gazebo
   (carried from 2026-07-14)
+
+## 2026-07-21 (continued) — RF learning architecture planning: W&B vs custom, Option A scope, dynamic prompt injection
+
+**Goal:** Plan the evolution from manual B-study experiments to a
+semi-automated RF learning loop for prompt optimization. Evaluate W&B as
+the experiment-tracking framework vs a custom ROS2K-internal solution.
+Scope the immediate next step (Option A: redesign `batch_evaluator.py`).
+Plan dynamic prompt injection (game-phase-aware fragment switching) and
+field-test semi-automation.
+
+**Done:**
+
+### Vision sketch (5 layers)
+
+Drafted a 5-layer architecture for the full RF learning vision:
+
+1. **World Model Evolution** — Kalman filter (1a), predictive world model
+   (1b), deviation watchdog (1c), failsafe takeover (1d). Addresses the
+   ~800ms LLM latency by forward-simulating world state. Watchdog detects
+   divergence between predicted and actual state. Failsafe switches blue
+   to rule-based behavior if LLM fails or divergence is critical.
+2. **Prompt Optimization Loop** — `batch_evaluator.py` (2a, Option A),
+   `prompt_mutator.py` (2b), sweep runner (2c), variant ranker (2d),
+   auto-promoter (2e). Closes the loop between prompt variants and KPI
+   measurement.
+3. **Dynamic Prompt Selection** — game-phase classifier (3a), fragment
+   library expansion (3b), runtime prompt switching (3c). Selects
+   context-appropriate prompt based on `match_state.status`.
+4. **Dashboard & Control** — W&B-style dashboard for run comparison, KPI
+   time series, prompt diff viewer, world-model divergence plot, failsafe
+   activation log.
+5. **Full Automation** — auto-sweep scheduler, active learning
+   (scenario generation), promotion gate, continuous operation on A100
+   cluster.
+
+### W&B vs custom infrastructure — detailed evaluation
+
+**W&B concepts mapped to ROS2K needs:**
+
+| W&B concept | ROS2K equivalent | W&B gives us |
+|-------------|-----------------|--------------|
+| `wandb.init(project, config)` | `run_config.json` + batch_evaluator metadata | Hyperparameter tracking, run grouping, auto-naming |
+| `run.log(metrics)` | `kpis_flat_*.json` writer | Time-series logging, auto-plotting |
+| W&B Dashboard | Streamlit dashboard (~200 lines custom) | Zero-code visualization (scatter, bar, parallel coordinates) |
+| W&B Sweeps | `prompt_mutator.py` + `rf_sweep.sh` + `rank_variants.py` | Built-in sweep strategies (grid, random, Bayes), auto-ranking |
+| W&B Artifacts | Fragment snapshotting | Versioned artifacts with diff viewer |
+| W&B Reports | `results/phase2_summary.md` (manual) | Auto-generated reports with embedded charts |
+
+**What W&B eliminates:** `run_config.json`, `kpis_flat_*.json`, Streamlit
+dashboard (~200 lines), custom sweep runner, custom ranker, custom flat
+JSON writer. ~400 lines of custom code replaced by `pip install wandb`.
+
+**What W&B cannot do:**
+- **Prompt fragment mutation:** W&B Sweeps sweep numeric/discrete parameters,
+  not text files. Fragment variant generation requires custom code
+  (`prompt_mutator.py`). W&B only tracks WHICH variant won, doesn't
+  generate variants.
+- **Per-run fragment snapshotting:** W&B logs config dicts, not file trees.
+  Would need W&B Artifacts (separate API, more complexity).
+- **Cross-run reproducibility:** W&B logs config, not actual fragment content.
+  Two runs with same config could have different fragments if someone
+  edited them between runs. Mitigated by fragment hash logging.
+- **Early termination (Hyperband):** Not directly applicable — our "run" is
+  one 120s match, not training epochs. Can't stop a match early based on
+  intermediate KPIs.
+
+**W&B offline vs cloud:**
+- Offline mode (`WANDB_MODE=offline`): no account, no internet, data stays
+  local. View via `wandb server start` at localhost:8080. Recommended
+  default for lab setup.
+- Cloud mode: optional, for team sharing/mentoring. Senior reviews junior
+  runs remotely via wandb.ai.
+
+### Two-tier approach for prompt sweeping
+
+| Tier | What | How | When |
+|------|------|-----|------|
+| **Tier 1: Parameter sweeps** | scenario × model × temperature × num_ctx × relay | W&B Sweeps (sweep.yaml) — built-in, zero custom code | Phase 2c, Phase 3 — numeric/discrete parameters |
+| **Tier 2: Prompt mutation sweeps** | rules_core.txt variants, samples variants | Custom `prompt_mutator.py` + `batch_evaluator.py --variant-dir` | RF learning phase — text mutation |
+
+**Tier 1 uses W&B Sweeps** — zero custom code, just sweep.yaml.
+**Tier 2 uses custom code** — W&B can't mutate text files. `--variant-dir`
+arg in `batch_evaluator.py` copies a variant's fragments to
+`strategy/fragments/` before each run. W&B logs which variant won via
+fragment hash.
+
+### System config sweeping (deferred)
+
+Evaluated whether `system_config.json` (node enable/disable, watchdog
+on/off, future Layer 1 fields) should be part of Option A. Decision:
+**deferred to later project phases.** `launch_r2k.sh` currently hardcodes
+which nodes start — no `--disable` flags, no config file. Adding
+`system_config.json` would require refactoring `launch_r2k.sh` to read
+JSON for each node (~50 lines). The need is real (sweep "Gazebo without
+watchdog", "referee off", "predictor on/off") but it's a separate work
+stream from Option A.
+
+### Dynamic prompt injection — design correction
+
+Initial assessment was wrong on three points, corrected during discussion:
+
+1. **"No runtime prompt switching"** — WRONG. `r2k_evaluator.py` sends
+   `sys_prompt` in every Ollama API call (line 107: `"system": sys_prompt`).
+   Ollama is stateless — it doesn't cache the system prompt. We CAN change
+   `sys_prompt` between calls without restarting anything.
+2. **"Requires new `prompt_selector.py` module"** — WRONG.
+   `r2k_evaluator.py` already reads `Worldstate.json` every 20ms, which
+   contains `match_state.status`. Dynamic injection is just: read status
+   → pick fragment set → assemble prompt → send to Ollama. ~20 lines in
+   `r2k_evaluator.py`, no new module.
+3. **"setup_r2k.py assembles at boot, not runtime"** — MISLEADING.
+   `setup_r2k.py` writes `system_prompt.txt` at boot, but
+   `r2k_evaluator.py` reads it into a variable and sends it per-call. We
+   just need to stop caching it at startup and re-assemble on status change.
+
+**Fragment taxonomy for dynamic injection:**
+
+| Type | When it loads | When it swaps | Examples |
+|------|--------------|---------------|---------|
+| **Static** | Boot, stays for entire match | Never | `header.txt`, `rules_core.txt` |
+| **Game-phase** | Runtime, when `match_state.status` changes | On status transition | `rules_<status>.txt`, `samples_<status>.txt` |
+
+Game-phase fragment mapping to referee statuses:
+- `playing` → `rules_playing.txt` + `samples_playing.txt` (majority of match)
+- `ball_out` → `rules_ball_out.txt` + `samples_ball_out.txt`
+- `goal_kick` → `rules_goal_kick.txt` + `samples_goal_kick.txt`
+- `corner_kick_in` → `rules_corner_kick_in.txt` + `samples_corner_kick_in.txt`
+- `kickoff` → `rules_kickoff.txt` + `samples_kickoff.txt` (after goal)
+- `foul_penalty` → `rules_foul_penalty.txt` + `samples_foul_penalty.txt`
+
+Backward compatibility: if `rules_<status>.txt` doesn't exist → fall back
+to `rules_playing.txt`. If no game-phase fragments at all → current
+behavior (static prompt).
+
+**Content authoring task:** Creating the 10 new fragment files
+(`rules_<status>.txt` + `samples_<status>.txt` for 5 non-playing statuses)
+is a student/intern content task, not a code task.
+
+### Field test semi-automation — assessment
+
+**What works with Option A:**
+- `--relay hardware_mirror` supports K1 + Yahboom hardware
+- KPI collection via `analyze_trace.py` works on hardware (reads JSON
+  traces, not ROS2 topics)
+- W&B logging works the same for sim and hardware
+- `--runs 1` mode: student runs one match, resets field, runs again
+
+**Fundamental limitation:** Field tests are **semi**-automated, not fully.
+A human must place robots in starting positions, place the ball at
+kickoff, reset between runs. Hardware can't run 27 times unattended.
+K1 ignores `cmd_vel` for freeze — set-piece freezes are sim-only.
+
+### Cross-platform support (U22 + U24)
+
+Identified that `batch_evaluator.py` runs on the host, but on U24 the
+ROS2 nodes run inside Docker. Trace files written inside the container
+at `/workspace/logs/` are not visible on the host. Fix: mount `logs/`
+as a Docker volume in `docker-compose.yml` (~2 lines).
+
+`batch_evaluator.py` is already ROS2-abstracted — it shells out to
+`launch_r2k.sh` (which handles ROS2/Docker/native) and calls
+`analyze_trace.py` (which reads JSON files, not ROS2 topics). Only
+fix needed: auto-detect platform (U22 native vs U24 Docker) for trace
+file path.
+
+### Env var accounting (final)
+
+| Env var | Status |
+|---------|--------|
+| `R2K_OLLAMA_MODEL` | Keep (existing) |
+| `R2K_RUN_ID` | Keep (set by launch_r2k.sh) |
+| `R2K_OLLAMA_URL` | Keep but don't log (user: won't change) |
+| `R2K_RUN_LABEL` | New (set by batch_evaluator for mnemonic IDs) |
+| `R2K_INCLUDE_MATCH_STATE` | Remove (→ W&B config if ever needed) |
+| `WANDB_MODE` | New, default `offline` |
+
+Net: -1 env var, +2 W&B env vars (both optional), 0 custom config files.
+
+### Option A final scope (LOCKED)
+
+| Step | File | Change | Lines |
+|------|------|--------|-------|
+| 1 | `launch_r2k.sh:87` | Read `R2K_RUN_LABEL` env var → mnemonic run ID | ~5 |
+| 2 | `batch_evaluator.py` | Redesign: W&B logging + `analyze_trace.py` call + `--relay` arg + `--variant-dir` arg + platform auto-detect + fragment hash | ~110 |
+| 3 | `docker-compose.yml` | Mount `logs/` as volume | ~2 |
+| 4 | `install.sh:50` | Add `wandb` to pip install | ~1 |
+
+Total: ~120 lines. Not implemented yet — planning complete, execution
+deferred to next session.
+
+**Deferred (NOT in Option A):**
+- `system_config.json` (node enable/disable) — later project phase
+- Dynamic prompt injection (~20 lines in `r2k_evaluator.py`) — follow-up,
+  independent of Option A
+- Game-phase fragment library (10 new fragment files) — content authoring
+- `prompt_mutator.py` (Tier 2 sweep) — RF learning phase
+- W&B Sweeps (Tier 1 sweep) — Phase 2c
+- Layer 1 (Kalman, predictor, watchdog, failsafe) — 6-month internship
+- Streamlit/W&B dashboard — after baseline data exists
+
+**Not yet done:**
+- Option A NOT implemented — planning complete, code not written
+- Dynamic prompt injection NOT implemented — design complete, code not written
+- `continue.json.current` `@file` resolution not verified in VSCode
+- `student_projects_autumn_fair.md` not committed (user decision)
+- Workshop planning (Decision A: deliverable format, Decision B: Module 5
+  depth) still open
+- opencode DX quick wins (Part 5 of cheat page) not implemented
+
+**Next:**
+- **Open question for tomorrow:** which approach has more benefits — doing
+  the RF learning infrastructure within ROS2K (custom Python, full control,
+  no external dependency) or by exploiting the W&B infrastructure (less
+  code, built-in dashboard/sweeps, but can't mutate text files and adds
+  a dependency)? See "W&B vs custom — the ultimate question" below.
+- Implement Option A (`batch_evaluator.py` redesign, ~120 lines)
+- OR implement dynamic prompt injection first (~20 lines in
+  `r2k_evaluator.py`) — independent of Option A, can be done in parallel
+- Then push all unpushed commits to origin
+
+**Blockers:**
+- Ollama GPU on U22: user reports resolved ("worx") — removed from blocker
+  list
+- `batch_evaluator.py` KPI collection: still broken — Option A fixes it
+- Visualizer blitting: still untested with live ROS 2 + Gazebo — doesn't
+  block Option A (headless runs don't need visualizer)
+
+---
+
+### W&B vs custom — the ultimate question (for tomorrow)
+
+**The question:** Should ROS2K's RF learning infrastructure be built
+within ROS2K (custom Python, file-based, no external framework) or by
+exploiting W&B (pip install, dashboard + sweeps built-in)?
+
+**Arguments for W&B:**
+1. **Dashboard for free** — ~200 lines of Streamlit code eliminated.
+   W&B provides runs table, scatter plots, parallel coordinates, sweep
+   progress UI out of the box. Students see results immediately in a
+   web browser (`wandb server start`).
+2. **Sweeps for free** — grid/random/Bayes search strategies built-in.
+   `sweep.yaml` is ~20 lines vs ~100 lines of custom sweep logic.
+3. **Standard tool** — students may already know W&B from ML courses.
+   Transferable skill. Industry-standard for experiment tracking.
+4. **Offline mode** — no account, no internet, data stays local. Works
+   in the lab without any cloud dependency.
+5. **Cloud sync optional** — for team sharing/mentoring, `wandb sync`
+   pushes to wandb.ai. Senior can review junior's runs remotely.
+6. **Artifact versioning** — W&B Artifacts can track fragment versions
+   with diff viewer (though this requires the Artifacts API, more
+   complexity).
+
+**Arguments against W&B (for custom ROS2K-internal):**
+1. **External dependency** — `wandb` package must be installed, pinned,
+   and kept compatible. Adds ~50MB to the venv. If W&B changes their
+   API or pricing, we're affected.
+2. **Can't mutate text files** — W&B Sweeps sweep numeric/discrete
+   parameters, not text fragments. The core RF learning action
+   (generating and testing prompt variants) requires custom code
+   regardless of whether we use W&B or not. W&B only tracks results,
+   doesn't drive the mutation.
+3. **Abstraction mismatch** — W&B is designed for ML training loops
+   (epochs, loss curves, early termination). ROS2K runs are 120s
+   matches with no intermediate checkpoints. W&B's Hyperband early
+   termination doesn't apply. The fit is imperfect.
+4. **Data leaves the machine** — even in offline mode, W&B writes to
+   its own directory format (`wandb/`), not plain JSON. Data is
+   locked in W&B's format. If we want to process results with custom
+   tools later, we need `wandb` to read them back.
+5. **Student complexity** — students must learn W&B's API
+   (`wandb.init`, `run.log`, `wandb.agent`, sweep config syntax) in
+   addition to ROS2K's architecture. One more thing to learn.
+6. **Full control** — a custom solution gives us full control over
+   data format, visualization, sweep logic. We can tailor it exactly
+   to ROS2K's needs (fragment hashing, game-phase tagging, composite
+   score) without working around W&B's abstractions.
+7. **ROS2K is not ML training** — the W&B mental model (track training
+   metrics over epochs) doesn't match ROS2K's model (run discrete
+   matches, compare KPIs). A custom dashboard could show exactly what
+   matters: per-scenario KPI matrix, fragment diff viewer, referee
+   status timeline, world-model divergence plot. W&B's generic charts
+   would need customization anyway.
+
+**The hybrid middle ground:**
+- Use W&B for **Tier 1** (parameter sweeps: scenario × model ×
+  temperature × num_ctx). These are numeric/discrete — W&B's sweet
+  spot. Zero custom code.
+- Use **custom** for **Tier 2** (prompt mutation). W&B can't do this
+  anyway. `prompt_mutator.py` + `--variant-dir` + fragment hash
+  tracking.
+- Use W&B for **dashboard** (run comparison, KPI plots) — saves ~200
+  lines of Streamlit.
+- Use **custom** for **ROS2K-specific visualizations** (referee status
+  timeline, world-model divergence, fragment diff) — W&B can't show
+  these without custom plugins.
+
+**The real question is:** where on the spectrum from "fully custom" to
+"fully W&B" do we want to be? The hybrid answer uses W&B where it's
+strong (parameter sweeps, generic KPI dashboard) and custom where it's
+weak (prompt mutation, ROS2K-specific visualization). But the hybrid
+also means students learn TWO systems (W&B + ROS2K custom), not one.
+
+**For tomorrow's discussion:** consider which matters more — minimizing
+code/dependency (→ W&B), or maximizing control/simplicity for students
+(→ custom). Also consider the workshop context: if we teach students
+W&B, they learn a transferable industry skill. If we teach them a
+custom ROS2K dashboard, they learn our architecture but not a
+transferable tool.
+
+**Files touched:**
+- `core/docs/SESSION_CHANGELOG.md` (this entry)
+
+**Files deleted:**
+- (none)
