@@ -1,0 +1,1 @@
+../src/ros2k_knowledge/agent_prompt_de.txt

@@ -1,0 +1,22 @@
+KPIs written to results/kpis_3vs3_attack_center_strat_default_20260715_111137.json
+
+============================================================
+KPI SUMMARY — 3vs3_attack_center_strat_default_20260715_111137
+============================================================
+Duration:        129.6s  (1297 frames)
+Goals:           Blue 1 : 2 Red
+Tactical score:  avg=1.38  final=3.25
+Possession:      53.0% blue
+Cluster frames:  26 (2.0%)
+Goalie idle:     1284 (99.1%)
+OOB frames:      209 (16.1%)
+Status dist:     {'playing': 723, 'corner_kick_in': 151, 'goal_kick': 111, 'goal': 150, 'foul_penalty': 60, 'ball_out': 102}
+------------------------------------------------------------
+LLM calls:       155
+Latency p50:     831ms
+Latency p95:     885ms
+Latency max:     912ms
+Parse errors:    0.0%
+Role diversity:  4 distinct roles
+Roles:           {'goalie': 155, 'striker': 155, 'supporter': 111, 'midfielder': 44}
+============================================================

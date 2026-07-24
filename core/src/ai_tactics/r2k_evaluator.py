@@ -4,6 +4,8 @@ import requests
 import os
 import re
 import traceback
+import hashlib
+from datetime import datetime
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 WORLD_STATE_PATH = os.path.join(BASE_DIR, "shared_state", "Worldstate.json")
@@ -13,6 +15,31 @@ PROMPT_PATH = os.path.join(BASE_DIR, "ai_tactics", "system_prompt.txt")
 # FIX 1: Harte Bindung an natives lokales IPv4
 OLLAMA_URL = os.getenv("R2K_OLLAMA_URL", "http://127.0.0.1:11434/api/generate")
 MODEL_NAME = os.getenv("R2K_OLLAMA_MODEL", "qwen2.5-coder:3b")
+
+# --- Phase 1 instrumentation: LLM trace logger ---
+RUN_ID = os.getenv("R2K_RUN_ID", f"run_{int(time.time())}")
+LOG_DIR = os.path.join(BASE_DIR, "logs")
+LLM_TRACE_PATH = os.path.join(LOG_DIR, f"llm_trace_{RUN_ID}.jsonl")
+os.makedirs(LOG_DIR, exist_ok=True)
+
+def log_llm_call(world_snapshot, sys_prompt, raw_response, parse_code, latency_ms, tokens_limit, is_explain):
+    try:
+        prompt_hash = hashlib.sha1(sys_prompt.encode()).hexdigest()[:16]
+        record = {
+            "t": time.time(),
+            "world_snapshot": world_snapshot,
+            "sys_prompt_hash": prompt_hash,
+            "raw_response": raw_response[:2000] if raw_response else "",
+            "parse_code": parse_code,
+            "latency_ms": latency_ms,
+            "model": MODEL_NAME,
+            "num_predict": tokens_limit,
+            "explain": is_explain,
+        }
+        with open(LLM_TRACE_PATH, 'a') as f:
+            f.write(json.dumps(record) + "\n")
+    except Exception:
+        pass
 
 def fast_parse(text):
     start = text.find('{')
@@ -36,6 +63,7 @@ def fast_parse(text):
 
 def main():
     print(f"--- 🟢 R2K Evaluator (Native Edition) ---", flush=True)
+    print(f"📋 Trace log: {LLM_TRACE_PATH}", flush=True)
     last_mtime = 0
     
     while True:
@@ -58,6 +86,15 @@ def main():
                 last_mtime = mtime; continue
                 
             min_ents = {k: {"x": round(v["x"], 1), "y": round(v["y"], 1)} for k, v in ents.items()}
+            
+            # B3 experiment: optionally include match_state in the LLM payload
+            if os.getenv("R2K_INCLUDE_MATCH_STATE", "0") == "1":
+                match_state = world_data.get("match_state", {})
+                if match_state:
+                    min_ents["match_state"] = {
+                        "status": match_state.get("status", "playing"),
+                        "restart_team": match_state.get("restart_team", ""),
+                    }
             
             is_explain = "analysis" in sys_prompt.lower()
             tokens_limit = 600 if is_explain else 150
@@ -95,9 +132,11 @@ def main():
                     data["model_name"] = MODEL_NAME
                     with open(STRATEGY_PATH + ".tmp", 'w') as f: json.dump(data, f)
                     os.replace(STRATEGY_PATH + ".tmp", STRATEGY_PATH)
+                    log_llm_call(min_ents, sys_prompt, raw_response, 0, lat, tokens_limit, is_explain)
                 else:
                     err_preview = raw_response[:150] if raw_response else "EMPTY RESPONSE"
                     print(f"❌ [Parse Error] KI-Antwort zerstört! Rohdaten: {err_preview}", flush=True)
+                    log_llm_call(min_ents, sys_prompt, raw_response, err, lat, tokens_limit, is_explain)
             else:
                 print(f"❌ [HTTP Error] Ollama meldet Code: {resp.status_code}", flush=True)
             

@@ -1,0 +1,14 @@
+{
+  "scenario_name": "3vs3_fast_counter",
+  "mode": "3vs3",
+  "tactical_situation": "Won ball in own half, open space ahead — transition opportunity",
+  "entities": {
+    "soccer_ball": {"x": -1.8, "y": -0.1},
+    "blue_1": {"x": -1.6, "y": 0.1},
+    "blue_2": {"x": -3.5, "y": 0.5},
+    "blue_3": {"x": -4.0, "y": -0.2},
+    "red_1": {"x": 0.5, "y": -0.3},
+    "red_2": {"x": 2.0, "y": 1.0},
+    "red_3": {"x": 3.0, "y": -0.8}
+  }
+}

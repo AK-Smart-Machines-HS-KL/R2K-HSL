@@ -1,0 +1,3 @@
+0vs1 PASSIVE STRATEGY:
+- There are NO blue bots to control. 
+- You MUST output an empty assignments dictionary.

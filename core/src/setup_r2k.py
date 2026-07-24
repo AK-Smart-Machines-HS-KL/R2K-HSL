@@ -108,14 +108,16 @@ def main():
         data = json.load(f)
         blue_bots = sorted([k for k in data.get('entities', {}).keys() if 'blue' in k])
         
-    mode = args.scenario.split('_')[0] if '_' in args.scenario else "3vs3"
+    mode = data.get('mode') or (args.scenario.split('_')[0] if '_' in args.scenario else "3vs3")
     clean_strat = args.strategy.replace('strat_', '')
     frag_path = "strategy/fragments"
     prompt_lines = [f"ACT_ON_BOTS: {', '.join(blue_bots)}", f"MODE: {mode}\n"]
     files = ["header.txt", "rules_core.txt"]
     files.append(f"rules_{clean_strat}.txt" if os.path.exists(f"{frag_path}/rules_{clean_strat}.txt") else f"rules_{mode}.txt")
-    files.append(f"samples_{mode}.txt")
-    if os.path.exists(f"{frag_path}/samples_{clean_strat}.txt"): files.append(f"samples_{clean_strat}.txt")
+    if os.path.exists(f"{frag_path}/samples_{clean_strat}.txt"):
+        files.append(f"samples_{clean_strat}.txt")
+    else:
+        files.append(f"samples_{mode}.txt")
     
     for comp in files:
         c_path = f"{frag_path}/{comp}"
@@ -132,7 +134,6 @@ def main():
             
     final_prompt = '\n'.join(prompt_lines).strip()
     with open('ai_tactics/system_prompt.txt', 'w') as f: f.write(final_prompt)
-    with open(f"strategy/{args.strategy}.txt", 'w') as f: f.write(final_prompt)
     print(f"✅ Setup: {args.scenario} | Relay: {args.relay} | Explain: {args.explain}")
 
 if __name__ == "__main__": main()

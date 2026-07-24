@@ -1,0 +1,34 @@
+# Build artifacts
+build/
+install/
+log/
+core/src/ros2_ws/build/
+core/src/ros2_ws/install/
+core/src/ros2_ws/log/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Editor / IDE
+.obsidian/
+core/.vscode/continue*
+*.inv
+*~
+\#*\#
+
+# Runtime (regenerated on every boot by launch_r2k.sh / setup_r2k.py)
+core/src/ollama.log
+core/src/.env
+core/src/shared_state/
+core/src/ai_tactics/system_prompt.txt
+core/src/ai_tactics/active_scenario.json
+core/src/ai_tactics/active_relay.json
+core/src/strategy/strat_*.txt
+
+# Phase 1 instrumentation logs
+core/src/logs/
+
+# Backup files
+*.bak
+*.nope

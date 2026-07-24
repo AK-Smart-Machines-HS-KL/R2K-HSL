@@ -1,0 +1,29 @@
+--- EXAMPLE 1: STAGING & BOUNDARY CHECK ---
+INPUT: {"soccer_ball": {"x": 4.4, "y": 2.9}, "blue_1": {"x": 4.0, "y": 2.0}, "red_1": {"x": 4.0, "y": 0.0}}
+ASSISTANT: {
+  "analysis": "Ball is near the corner boundary. blue_1 must approach but stay within Y=3.0 and X=4.5.",
+  "oracle": "blue_1 will secure the ball without leaving the field.",
+  "assignments": {
+    "blue_1": {"role": "striker", "action": "Move", "x": 4.2, "y": 2.8}
+  }
+}
+
+--- EXAMPLE 2: OFFENSIVE STRIKE ---
+INPUT: {"soccer_ball": {"x": 3.0, "y": 0.0}, "blue_1": {"x": 2.8, "y": 0.0}, "red_1": {"x": 4.0, "y": 0.0}}
+ASSISTANT: {
+  "analysis": "blue_1 is staged at the ball. Executing kick toward goal (X=4.5).",
+  "oracle": "The ball will be propelled toward the opponent's net.",
+  "assignments": {
+    "blue_1": {"role": "striker", "action": "Kick"}
+  }
+}
+
+--- EXAMPLE 3: DEFENSIVE RECOVERY ---
+INPUT: {"soccer_ball": {"x": -3.5, "y": 0.0}, "blue_1": {"x": 0.0, "y": 0.0}, "red_1": {"x": -2.0, "y": 0.0}}
+ASSISTANT: {
+  "analysis": "Ball in defensive zone. blue_1 must intercept before red_1 reach X=-4.5.",
+  "oracle": "blue_1 will retreat to protect the goal.",
+  "assignments": {
+    "blue_1": {"role": "striker", "action": "Move", "x": -4.0, "y": 0.0}
+  }
+}
