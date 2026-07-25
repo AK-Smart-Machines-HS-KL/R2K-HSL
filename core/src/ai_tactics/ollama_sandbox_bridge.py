@@ -15,6 +15,36 @@ try:
 except ImportError:
     HAS_BOOSTER_MSGS = False
 
+# === Field dimensions (must match referee_node.py) ===
+FIELD_HALF_LENGTH = 4.5   # X: [-4.5, +4.5]
+FIELD_HALF_WIDTH  = 3.0   # Y: [-3.0, +3.0]
+OWN_GOAL_X = -FIELD_HALF_LENGTH   # blue defends left goal
+
+# === Goalie blending parameters (Phase 2a, tunable via trial-and-error) ===
+# All distances are in % of field half-length (X) or half-width (Y) so the
+# goalie logic scales with field size. Absolute meter values are derived at
+# runtime via FIELD_HALF_LENGTH / FIELD_HALF_WIDTH.
+# NOTE (Phase 5): these constants become obsolete once Phase 5.1 (Kalman
+# filter) provides filtered positions + velocity. The bridge override is
+# removed entirely and the LLM makes all goalie decisions with good data.
+GOALIE_NEAR_GOAL_PCT = 0.22   # ball within 22% of half-length = full goal-line mode (~1.0m)
+GOALIE_FAR_GOAL_PCT  = 0.89   # ball beyond 89% of half-length = full angle-block mode (~4.0m)
+GOALIE_TACTICAL_WEIGHT = 0.7  # how much bridge overrides LLM target
+GOALIE_LLM_WEIGHT      = 0.3  # how much LLM target is preserved
+GOALIE_Y_DAMP_NEAR_PCT = 0.50 # Y-tracking dampening when ball near goal (fraction of half-width)
+GOALIE_Y_DAMP_FAR_PCT  = 0.30 # Y-tracking dampening when ball far (fraction of half-width)
+GOALIE_FORWARD_LIMIT_PCT = 0.56     # max forward X for small teams, as fraction of half-length from own goal (~-2.5m)
+GOALIE_FORWARD_LIMIT_LARGE_PCT = 0.89  # max forward X for large teams (5vs5+, future), (~-4.0m)
+GOALIE_DEADBAND_PCT = 0.022    # don't move if change < this (fraction of half-length, ~0.1m)
+GOALIE_LINE_X_PCT = 0.96       # goal-line X as fraction of half-length from center (~-4.3m)
+
+
+def smoothstep(t):
+    """0 when t<=0, 1 when t>=1, S-curve between."""
+    t = max(0.0, min(1.0, t))
+    return t * t * (3 - 2 * t)
+
+
 def get_yaw(q):
     siny_cosp = 2 * (q.w * q.z + q.x * q.y)
     cosy_cosp = 1 - 2 * (q.y * q.y + q.z * q.z)
@@ -106,10 +136,11 @@ class HalBridge(Node):
                 assignments = data.get('assignments', {})
                 for bot, task in assignments.items():
                     action = task.get('action', '').lower()
+                    role = task.get('role', '')
                     if 'x' in task and 'y' in task:
-                        self.targets[bot] = {'x': float(task['x']), 'y': float(task['y']), 'action': action}
+                        self.targets[bot] = {'x': float(task['x']), 'y': float(task['y']), 'action': action, 'role': role}
                     else:
-                        self.targets[bot] = {'action': action}
+                        self.targets[bot] = {'action': action, 'role': role}
         except Exception: pass
 
     def trigger_phantom_kick(self, bot_name, bot_yaw):
@@ -166,12 +197,64 @@ class HalBridge(Node):
                 
                 if action == 'kick':
                     is_attacking = True
-                    aim_yaw = math.atan2(0.0 - self.ball_pos.y, 4.5 - self.ball_pos.x)
+                    # Role-aware kick direction: goalie kicks away from own goal
+                    # (upfield toward opponent half), all other bots aim at
+                    # opponent goal center (X=+4.5, Y=0).
+                    if target.get('role', '') == 'goalie':
+                        # Goalie clear: aim upfield, away from own goal (X=-4.5).
+                        # Kick toward opponent half along ball-goal axis, biased
+                        # toward nearest sideline to avoid red interceptors.
+                        aim_yaw = math.atan2(-self.ball_pos.y * 0.5, 4.5 - self.ball_pos.x)
+                    else:
+                        aim_yaw = math.atan2(0.0 - self.ball_pos.y, 4.5 - self.ball_pos.x)
                     behind_x, behind_y = self.ball_pos.x - math.cos(aim_yaw) * 0.6, self.ball_pos.y - math.sin(aim_yaw) * 0.6
                     dist_to_behind = math.hypot(behind_x - cx, behind_y - cy)
                     target_x, target_y = (behind_x, behind_y) if dist_to_behind > 0.3 and dist_to_ball > 0.5 else (self.ball_pos.x, self.ball_pos.y)
                 else:
                     target_x, target_y = target.get('x', cx), target.get('y', cy)
+
+                # Goalie tactical blending (Approach C, Phase 2a)
+                # NOTE (Phase 5): this block is removed once Phase 5.1 (Kalman
+                # filter) gives the LLM filtered positions + velocity. The
+                # bridge override becomes unnecessary.
+                is_goalie = target.get('role', '') == 'goalie'
+                if is_goalie and action != 'kick' and self.ball_pos:
+                    # Derive absolute meter values from field dimensions
+                    near_dist = GOALIE_NEAR_GOAL_PCT * FIELD_HALF_LENGTH
+                    far_dist  = GOALIE_FAR_GOAL_PCT  * FIELD_HALF_LENGTH
+                    deadband  = GOALIE_DEADBAND_PCT  * FIELD_HALF_LENGTH
+                    line_x    = -(GOALIE_LINE_X_PCT * FIELD_HALF_LENGTH)
+                    fwd_limit = -(GOALIE_FORWARD_LIMIT_PCT * FIELD_HALF_LENGTH)
+                    damp_near = GOALIE_Y_DAMP_NEAR_PCT
+                    damp_far  = GOALIE_Y_DAMP_FAR_PCT
+                    y_clamp   = FIELD_HALF_WIDTH * 0.5
+
+                    ball_dist_to_goal = math.hypot(self.ball_pos.x - OWN_GOAL_X, self.ball_pos.y)
+
+                    # Smooth transition: 0 when ball near goal, 1 when ball far
+                    far_weight = smoothstep((ball_dist_to_goal - near_dist) /
+                                            (far_dist - near_dist))
+
+                    # Goal-line position (ball near): stay at line_x, damped Y
+                    goal_line_x = line_x
+                    goal_line_y = max(-y_clamp, min(y_clamp, self.ball_pos.y * damp_near))
+
+                    # Angle-block position (ball far): on ball-goal line, forward, damped Y
+                    ratio = min(0.5, 2.0 / max(ball_dist_to_goal, 0.1))
+                    angle_x = max(OWN_GOAL_X + (self.ball_pos.x - OWN_GOAL_X) * ratio, fwd_limit)
+                    angle_y = self.ball_pos.y * damp_far
+
+                    # Blend between goal-line (near) and angle-block (far)
+                    tactical_x = goal_line_x * (1 - far_weight) + angle_x * far_weight
+                    tactical_y = goal_line_y * (1 - far_weight) + angle_y * far_weight
+
+                    # Blend: tactical correction + LLM's own target
+                    target_x = tactical_x * GOALIE_TACTICAL_WEIGHT + target_x * GOALIE_LLM_WEIGHT
+                    target_y = tactical_y * GOALIE_TACTICAL_WEIGHT + target_y * GOALIE_LLM_WEIGHT
+
+                    # Deadband: don't issue movement if change < threshold
+                    if math.hypot(target_x - cx, target_y - cy) < deadband:
+                        target_x, target_y = cx, cy  # hold position
 
                 dx, dy = target_x - cx, target_y - cy
                 distance = math.hypot(dx, dy)
