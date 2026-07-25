@@ -1,0 +1,38 @@
+{
+  "scenario_name": "3vs3_attack_center",
+  "composite_score": {
+    "min": 0.4,
+    "max": 1.0,
+    "note": "baseline scenario, expect mid-range"
+  },
+  "oob_pct": {
+    "min": 0.0,
+    "max": 10.0,
+    "note": "STAY INSIDE rule should keep this low"
+  },
+  "cluster_pct": {
+    "min": 0.0,
+    "max": 10.0,
+    "note": "anti-clustering samples should help"
+  },
+  "goalie_idle_pct": {
+    "min": 0.0,
+    "max": 70.0,
+    "note": "after Phase 2a fix"
+  },
+  "latency_p50": {
+    "min": 0,
+    "max": 1000,
+    "note": "qwen2.5-coder:3b on GPU"
+  },
+  "ball_possession_blue_pct": {
+    "min": 40.0,
+    "max": 100.0,
+    "note": "even scenario, ~50% expected"
+  },
+  "goals_for_blue": {
+    "min": 0,
+    "max": 10,
+    "note": "directional, high variance"
+  }
+}

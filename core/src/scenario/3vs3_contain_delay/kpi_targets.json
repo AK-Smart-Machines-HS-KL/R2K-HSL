@@ -1,0 +1,38 @@
+{
+  "scenario_name": "3vs3_contain_delay",
+  "composite_score": {
+    "min": 0.3,
+    "max": 0.75,
+    "note": "defensive, low scoring"
+  },
+  "oob_pct": {
+    "min": 0.0,
+    "max": 10.0,
+    "note": "zoning keeps bots in bounds"
+  },
+  "cluster_pct": {
+    "min": 0.0,
+    "max": 10.0,
+    "note": "zone defense spreads bots"
+  },
+  "goalie_idle_pct": {
+    "min": 0.0,
+    "max": 70.0,
+    "note": "after Phase 2a fix"
+  },
+  "latency_p50": {
+    "min": 0,
+    "max": 1000,
+    "note": "same model"
+  },
+  "ball_possession_blue_pct": {
+    "min": 25.0,
+    "max": 70.0,
+    "note": "defensive = low possession"
+  },
+  "goals_for_blue": {
+    "min": 0,
+    "max": 5,
+    "note": "counter-goals only"
+  }
+}

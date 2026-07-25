@@ -1,0 +1,38 @@
+{
+  "scenario_name": "3vs3_pressing_trap",
+  "composite_score": {
+    "min": 0.3,
+    "max": 0.8,
+    "note": "under pressure, harder to score"
+  },
+  "oob_pct": {
+    "min": 0.0,
+    "max": 15.0,
+    "note": "pressing forces sideline play"
+  },
+  "cluster_pct": {
+    "min": 0.0,
+    "max": 15.0,
+    "note": "pressing can force clustering"
+  },
+  "goalie_idle_pct": {
+    "min": 0.0,
+    "max": 70.0,
+    "note": "after Phase 2a fix"
+  },
+  "latency_p50": {
+    "min": 0,
+    "max": 1000,
+    "note": "same model"
+  },
+  "ball_possession_blue_pct": {
+    "min": 30.0,
+    "max": 80.0,
+    "note": "pressing reduces possession"
+  },
+  "goals_for_blue": {
+    "min": 0,
+    "max": 5,
+    "note": "escape is the priority"
+  }
+}

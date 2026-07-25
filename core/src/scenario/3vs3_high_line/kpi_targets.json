@@ -1,0 +1,38 @@
+{
+  "scenario_name": "3vs3_high_line",
+  "composite_score": {
+    "min": 0.35,
+    "max": 0.95,
+    "note": "high risk, high reward"
+  },
+  "oob_pct": {
+    "min": 0.0,
+    "max": 10.0,
+    "note": "high line keeps bots central"
+  },
+  "cluster_pct": {
+    "min": 0.0,
+    "max": 10.0,
+    "note": "compressed field, some clustering"
+  },
+  "goalie_idle_pct": {
+    "min": 0.0,
+    "max": 50.0,
+    "note": "sweeper goalie must be very active"
+  },
+  "latency_p50": {
+    "min": 0,
+    "max": 1000,
+    "note": "same model"
+  },
+  "ball_possession_blue_pct": {
+    "min": 40.0,
+    "max": 100.0,
+    "note": "high line compresses, more possession"
+  },
+  "goals_for_blue": {
+    "min": 0,
+    "max": 10,
+    "note": "offside trap can create breakaway chances"
+  }
+}

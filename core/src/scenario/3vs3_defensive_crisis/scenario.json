@@ -1,0 +1,14 @@
+{
+  "scenario_name": "3vs3_defensive_crisis",
+  "mode": "3vs3",
+  "tactical_situation": "Ball deep in own zone, under pressure — emergency clear",
+  "entities": {
+    "soccer_ball": {"x": -3.1, "y": 0.45},
+    "blue_1": {"x": -4.0, "y": 0.2},
+    "blue_2": {"x": -2.5, "y": 0.5},
+    "blue_3": {"x": -1.5, "y": -0.3},
+    "red_1": {"x": -3.1, "y": 0.55},
+    "red_2": {"x": -0.7, "y": 0.0},
+    "red_3": {"x": -1.0, "y": 0.8}
+  }
+}

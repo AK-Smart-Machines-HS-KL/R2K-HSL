@@ -1,0 +1,38 @@
+{
+  "scenario_name": "3vs3_def_transition",
+  "composite_score": {
+    "min": 0.3,
+    "max": 0.85,
+    "note": "chaotic, high variance"
+  },
+  "oob_pct": {
+    "min": 0.0,
+    "max": 12.0,
+    "note": "rapid movement, some OOB"
+  },
+  "cluster_pct": {
+    "min": 0.0,
+    "max": 15.0,
+    "note": "transition chaos can cluster"
+  },
+  "goalie_idle_pct": {
+    "min": 0.0,
+    "max": 65.0,
+    "note": "goalie active during recovery"
+  },
+  "latency_p50": {
+    "min": 0,
+    "max": 1000,
+    "note": "same model"
+  },
+  "ball_possession_blue_pct": {
+    "min": 30.0,
+    "max": 80.0,
+    "note": "transition = possession shift"
+  },
+  "goals_for_blue": {
+    "min": 0,
+    "max": 8,
+    "note": "counter-press can create chances"
+  }
+}

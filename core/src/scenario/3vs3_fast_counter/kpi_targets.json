@@ -1,0 +1,38 @@
+{
+  "scenario_name": "3vs3_fast_counter",
+  "composite_score": {
+    "min": 0.4,
+    "max": 1.0,
+    "note": "counter-attack potential is high"
+  },
+  "oob_pct": {
+    "min": 0.0,
+    "max": 12.0,
+    "note": "fast movement, some OOB risk"
+  },
+  "cluster_pct": {
+    "min": 0.0,
+    "max": 10.0,
+    "note": "counter should spread bots"
+  },
+  "goalie_idle_pct": {
+    "min": 0.0,
+    "max": 70.0,
+    "note": "after Phase 2a fix"
+  },
+  "latency_p50": {
+    "min": 0,
+    "max": 1000,
+    "note": "same model"
+  },
+  "ball_possession_blue_pct": {
+    "min": 40.0,
+    "max": 100.0,
+    "note": "counter implies possession"
+  },
+  "goals_for_blue": {
+    "min": 0,
+    "max": 10,
+    "note": "counter-attack scoring potential"
+  }
+}

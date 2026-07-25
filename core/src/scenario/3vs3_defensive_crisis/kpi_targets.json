@@ -1,0 +1,38 @@
+{
+  "scenario_name": "3vs3_defensive_crisis",
+  "composite_score": {
+    "min": 0.25,
+    "max": 0.8,
+    "note": "defensive scenario, lower expected"
+  },
+  "oob_pct": {
+    "min": 0.0,
+    "max": 10.0,
+    "note": "clearance should stay in bounds"
+  },
+  "cluster_pct": {
+    "min": 0.0,
+    "max": 15.0,
+    "note": "panic clustering possible in own zone"
+  },
+  "goalie_idle_pct": {
+    "min": 0.0,
+    "max": 60.0,
+    "note": "goalie should be very active in crisis"
+  },
+  "latency_p50": {
+    "min": 0,
+    "max": 1000,
+    "note": "same model"
+  },
+  "ball_possession_blue_pct": {
+    "min": 20.0,
+    "max": 80.0,
+    "note": "low possession expected \u2014 defensive"
+  },
+  "goals_for_blue": {
+    "min": 0,
+    "max": 5,
+    "note": "survival, not scoring"
+  }
+}
