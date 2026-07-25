@@ -3,8 +3,8 @@ id: 5_HYBRID
 title: "Section 5: Hybrid OS Infrastructure & Deployment (V6.1)"
 type: KNOWLEDGE_BASE_POWER_FILE
 tags: [hybrid-os, docker, ubuntu-24, ubuntu-22, host-mode, fastdds, x11, xid-31, suspend-bug, compose-project-name, v6.1, headless-gzserver, docker-env-passthrough]
-last_modified: 2026-07-15
-version: v6.1
+last_modified: 2026-07-22
+version: v6.2
 ---
 # Section 5: Hybrid OS Infrastructure & Deployment (V5)
 

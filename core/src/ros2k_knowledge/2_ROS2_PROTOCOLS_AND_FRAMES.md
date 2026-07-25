@@ -3,8 +3,8 @@ id: 2_PROTOCOLS
 title: "Section 2: ROS 2 Protocols, Frames & V5 Engine Nodes (V6.1)"
 type: KNOWLEDGE_BASE_POWER_FILE
 tags: [ros2, model_states, quaternions, euler, visualizer, teleop, set_entity_state, v5-engine, referee, score, qwen, v6, v6.1, foul, ball-out, kick-in, hysteresis, last-touch, sideline-warp, set-piece, goal-kick, corner-kick-in, kickoff, own-half-warp, blitting]
-last_modified: 2026-07-15
-version: v6.1
+last_modified: 2026-07-22
+version: v6.2
 ---
 # Section 2: ROS 2 Protocols, Frames & V5 Engine Nodes
 

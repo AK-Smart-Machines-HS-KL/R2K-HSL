@@ -3,8 +3,8 @@ id: META_ROUTER
 title: "Semantic Glossary & Routing Matrix (Inverted Index)"
 type: KNOWLEDGE_BASE_POWER_FILE
 tags: [router, glossary, index, rag, meta, flat-json, phantom-kick, setup_r2k, active_relay, watchdog, hybrid-os, uros_ws, xid-31, mermaid, v6, v6.1, foul, ball-out, kick-in, momentum, reward-node, batch-evaluator, aggression, set-piece, goal-kick, corner-kick-in, kickoff, own-half-warp, blitting, referee-rulebook, trace-logging, llm-trace, world-trace, r2k-run-id, analyze-trace, kpi, prompt-disentanglement, dump-prompt, strat-artifact, goalie-idle, red-p1-p5, blocking-avoidance, headless-gzserver, docker-env-passthrough]
-last_modified: 2026-07-15
-version: v6.1
+last_modified: 2026-07-22
+version: v6.2
 ---
 # Semantic Glossary & Routing Matrix
 
@@ -28,9 +28,9 @@ This section strictly defines architectural components to prevent hallucinated s
 * **V6 Reward Node ('reward_node.py') [NEW in v6]:**
   * *Definition:* 1Hz ROS 2 node publishing tactical rewards (-10..+10 scale) on '/tactical_reward'. Computes decision deltas (score before/after action) and foul penalties (fixed -1).
   * *Constraint:* Two code paths (mtime-polling for decisions, '/match_state' subscription for fouls) must not be mixed.
-* **V6 Batch Evaluator ('batch_evaluator.py') [NEW in v6]:**
-  * *Definition:* Headless orchestrator for automated scenario evaluation. Subscribes to '/tactical_score', '/tactical_reward', '/match_state', '/world_positions' and writes 'eval_results.json'.
-  * *Constraint:* Must NOT kill 'ollama' on teardown — only ROS nodes and Gazebo.
+* **V6 Batch Evaluator ('batch_evaluator.py') [NEW in v6, DEPRECATED in v6.2]:**
+  * *Definition:* Headless orchestrator for automated scenario evaluation. Designed to subscribe to ROS topics and write 'eval_results.json'.
+  * *Constraint:* **KPI collection is broken** (TODO at line 91 — never implemented). The file exists and can launch matches but produces no KPI data. Deprecated in v6.2 — replaced by planned `tests/test_non_functional.py` (shared regression suite, Phase 2b, not yet implemented).
 * **V6.1 Referee Rulebook ('core/docs/referee_rulebook.md') [NEW in v6.1]:**
   * *Definition:* Standalone Markdown document (not a RAG power-file, but referenced by the routing matrix). Complete catalog of every referee decision: triggers, consequences, scoring, timing, freeze enforcement, field layout, state machine, and visualizer event labels. Includes 2D field diagrams and mermaid flowcharts.
   * *Constraint:* Read this BEFORE changing any referee rule, threshold, or visualizer label. The rulebook is the single source of truth — the V6 addendum in `2_ROS2_PROTOCOLS_AND_FRAMES.md` is a summary; the rulebook is authoritative.

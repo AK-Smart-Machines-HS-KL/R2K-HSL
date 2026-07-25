@@ -3,7 +3,7 @@ id: 3_AI_LOGIC
 title: "Section 3: AI Logic, Failsafes & Edge Cases (V6.2)"
 type: KNOWLEDGE_BASE_POWER_FILE
 tags: [qwen, team-blue, team-red, failsafes, bounding-box, hysteresis, orbital-singularity, setup_r2k, phantom-kick, flat-json, ollama-tuning, kv-cache, user-space, v6, v6.1, v6.2, kick-in, prompt-switching, prompt-injection, reward-node, momentum, aggression, prompt-disentanglement, strat-artifact, sample-override, dump-prompt, match-state-injection, goalie-idle, red-p1-p5, blocking-avoidance, freeze-bug]
-last_modified: 2026-07-16
+last_modified: 2026-07-22
 version: v6.2
 ---
 # Section 3: AI Logic, Failsafes & Edge Cases
@@ -249,6 +249,7 @@ The prompt compilation pipeline was restructured in Phase 0 (2026-07-15) to elim
 * Goalie idle rate is 80-100% across all experiments. This is NOT fixable via prompt engineering.
 * **Root cause:** The bridge PD controller chases a jittery ball-Y setpoint. The LLM outputs a goalie Y target, but the bridge's `smooth_membership` + low-pass filter overreacts to ball position noise, producing micro-oscillations that keep the goalie "moving" without actual positional progress.
 * **Implication:** Future agents should NOT attempt to fix goalie behavior by changing prompt text, role descriptions, or goalie position parameters. The fix must be in the bridge's goalie PD controller tuning (smoothing factor, deadband), not in the LLM prompt.
+* **Status (v6.2):** A fix is designed in Phase 2a (smooth blending with tunable `GOALIE_*` constants in the bridge) but NOT yet implemented. The long-term fix is Phase 5.1 (Kalman filter — provides filtered positions + velocity, making the bridge override unnecessary). Until then, goalie idle remains ~95%.
 * The goalie X position (default `-4.0`) is set by the LLM and enforced by the bridge when the ball is in the opponent/midfield half. When the ball enters the own zone (X < -2.0), the LLM's target stands and the goalie may advance.
 
 ### V6.1 Team Red Improvements (rule_evaluator_red.py)
