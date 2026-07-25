@@ -9,6 +9,7 @@ core/src/ros2_ws/log/
 # Python cache
 __pycache__/
 *.pyc
+.pytest_cache/
 
 # Editor / IDE
 .obsidian/
