@@ -1,10 +1,10 @@
 ---
 id: 4_EDGE
-title: "Section 4: Edge Hardware Integration (Sim2Real) (V5)"
+title: "Section 4: Edge Hardware Integration (Sim2Real) (V6.2)"
 type: KNOWLEDGE_BASE_POWER_FILE
 tags: [esp32, booster-k1, sim2real, qos, rpc, micro-ros, set_entity_state, hardware-relay, api-2000, bot1-namespace, dead-reckoning, gazebo-pause-detection, heartbeat, nmcli, foot-slip, uros_ws, watchdog]
-last_modified: 2026-05-31
-version: v5_release
+last_modified: 2026-07-25
+version: v6.2
 ---
 # Section 4: Edge Hardware Integration (Sim2Real)
 
@@ -71,7 +71,7 @@ graph TD
 ### C. Booster K1 Locomotion API (Codes 2000/2001)
 * **Problem:** Bipeds require complex gait state machines (Stand to Trot) and cannot natively ingest ROS 2 primitive vectors.
 * **Constraint:** The Bridge serializes strict JSON payloads wrapped in `std_msgs/String` on the isolated `/bot1/LocoApiTopicReq` namespace.
-  * **Code 2001 (Velocity Control):** Dynamic velocity control providing `linear_velocity_x` and `angular_velocity_z`.
+  * **Code 2001 (Velocity Control):** Dynamic velocity control providing `vx`, `vy`, and `vyaw` (linear-x, linear-y, angular-z).
   * **Code 2000 (State Control):** Hard Emergency Stop & Prep-Mode (`mode: 1`). Executed during teardowns, pauses, or attack maneuvers.
 
 ### D. Network Stability & Asymmetrical QoS
@@ -102,8 +102,9 @@ ros2 topic echo --once --qos-reliability best_effort /bot1/battery
   "api_id": 2001,
   "timestamp_ms": 1779222651443,
   "payload": {
-    "linear_velocity_x": 0.25,
-    "angular_velocity_z": -0.12,
+    "vx": 0.25,
+    "vy": 0.0,
+    "vyaw": -0.12,
     "duration_ms": 500
   }
 }

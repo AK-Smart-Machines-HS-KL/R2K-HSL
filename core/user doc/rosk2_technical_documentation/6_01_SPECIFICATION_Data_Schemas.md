@@ -130,8 +130,9 @@ Wird fortlaufend für aktive Fahrbefehle generiert.
   "api_id": 2001,
   "timestamp_ms": 1779222655448,
   "payload": {
-    "linear_velocity_x": 0.25,
-    "angular_velocity_z": -0.12,
+    "vx": 0.25,
+    "vy": 0.0,
+    "vyaw": -0.12,
     "duration_ms": 500
   }
 }

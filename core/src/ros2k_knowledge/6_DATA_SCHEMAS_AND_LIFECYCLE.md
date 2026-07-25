@@ -3,8 +3,8 @@ id: 6_DATA_LIFECYCLE
 title: "Section 6: Data Schemas & System Lifecycle (V6.1)"
 type: KNOWLEDGE_BASE_POWER_FILE
 tags: [json, schema, rpc, bash, lifecycle, orchestration, setup_r2k, flat-json, relay-profiles, watchdog, cli-ergonomics, active_relay, bashrc-immunity, v6, v6.1, tactical-score, tactical-reward, match-state, eval-results, batch-evaluator, momentum, set-piece, goal-kick, corner-kick-in, own-half-warp, trace-logging, llm-trace, world-trace, r2k-run-id, analyze-trace, kpi]
-last_modified: 2026-07-15
-version: v6.1
+last_modified: 2026-07-22
+version: v6.2
 ---
 # Section 6: Data Schemas & System Lifecycle (V5)
 
@@ -67,7 +67,7 @@ graph TD
 
 ### B. Booster K1 RPC Schemas
 * **Constraint:** If an agent is designated as `hardware_type: "k1"`, the Bridge serializes outputs into strictly formatted JSON strings published to `/bot1/LocoApiTopicReq`.
-  * **API Code 2001:** Active locomotion (`linear_velocity_x`, `angular_velocity_z`).
+  * **API Code 2001:** Active locomotion (`vx`, `vy`, `vyaw`).
   * **API Code 2000:** Failsafe payload (`clear_buffer: true`, `lock_drive: true`). Required during the Watchdog Teardown.
 
 ### C. System Lifecycle: The 0.2s Asynchronous Watchdog
@@ -146,7 +146,13 @@ echo "✅ Teardown complete. Ports released."
 > [!warning] V6 Extension
 > V6 adds three new/extended ROS topics (`/match_state` v6, `/tactical_score` v6,
 > `/tactical_reward`) and the `batch_evaluator.py` orchestrator with `eval_results.json` output.
-> Source: `core/docs/optimization_spec_v6.md`.
+> Source: `core/docs/optimization_spec_v6.2.md`.
+>
+> **Note (v6.2):** `batch_evaluator.py` KPI collection is broken (TODO line 91).
+> The file is deprecated in v6.2. The planned replacement is
+> `tests/test_non_functional.py` (shared regression suite, Phase 2b, not yet
+> implemented). The `eval_results.json` schema below documents the intended
+> structure for reference.
 
 ### `/match_state` V6 Schema (referee_node.py)
 
