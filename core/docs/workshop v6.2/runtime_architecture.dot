@@ -1,0 +1,197 @@
+digraph ROS2K_Runtime {
+    graph [
+        rankdir=TB
+        fontname="FreeSerif"
+        fontsize=11
+        labelloc="t"
+        label="ROS2K v6.2 Runtime Architecture — ROS2 Topics, Python Nodes, Control Flow & Timings\n\nLegend:  ⏱ timing   ▶ pub (source)   ◀ sub (target)   green=ROS2 topic   orange dashed=file poll   dotted=boot setup\nShapes:  cylinder=Gazebo   ▭ .py code   ⬡ .json data   note=.txt prompt   component=Ollama   box3d=sim bot   doubleoct=real bot"
+        compound=true
+        splines=true
+        nodesep=0.25
+        ranksep=0.5
+        size="7.5,10.5!"
+        ratio=compress
+    ]
+    node [fontname="FreeSerif", fontsize=8, margin="0.07,0.04"]
+    edge [fontname="FreeSerif", fontsize=8, color="#555555", arrowsize=0.6]
+
+    // ====== GAZEBO (cylinder) ======
+    GZ [label="Gazebo Simulator\nsrc/ros2_ws/.../soccer_match.launch.py\n\n/gazebo/model_states (3D poses)\n/gazebo/set_entity_state (srv)\n/clock", fillcolor="#FFE082", color="#F9A825", shape=cylinder, style="filled"]
+
+    // ====== PERCEPTION (.py) ======
+    TRACKER [label="tracker_node.py\nros2_ws/.../tracker_node.py\n\nextracts position.x,.y only\nno Yaw, no quaternion\n⏱ event-driven (~10Hz from Gazebo)", fillcolor="#C8E6C9", color="#43A047", shape=box, style="rounded,filled"]
+
+    // ====== ENGINE NODES (.py) ======
+    REFEREE [label="referee_node.py\nsrc/referee_node.py\n\nfoul detection, set-pieces\nfreeze enforcement, early termination\n⏱ event-driven (on /world_positions)", fillcolor="#BBDEFB", color="#1565C0", shape=box, style="rounded,filled"]
+
+    SCORE [label="score_node.py\nsrc/score_node.py\n\ntactical score -10..+10\nmomentum OLS deque(300) = 30s\n⏱ event-driven", fillcolor="#BBDEFB", color="#1565C0", shape=box, style="rounded,filled"]
+
+    REWARD [label="reward_node.py\nsrc/reward_node.py\n\nreward -10..+10, foul penalty -1\n⏱ Timer 1.0s (1Hz)", fillcolor="#BBDEFB", color="#1565C0", shape=box, style="rounded,filled"]
+
+    RED [label="rule_evaluator_red.py\nsrc/rule_evaluator_red.py\n\nalgorithmic red team control\n⏱ event-driven (on /gazebo/model_states)", fillcolor="#BBDEFB", color="#1565C0", shape=box, style="rounded,filled"]
+
+    // ====== AGGREGATOR (.py) ======
+    AGG [label="state_aggregator.py\nsrc/state_aggregator.py\n\ncombines pos + match + score + reward\natomic write: tmp → os.replace\n⏱ Timer 0.1s (10Hz heartbeat)", fillcolor="#E1BEE7", color="#7B1FA2", shape=box, style="rounded,filled"]
+
+    // ====== COGNITION ======
+    EVAL [label="r2k_evaluator.py\nsrc/ai_tactics/r2k_evaluator.py\n\nmtime poll Worldstate.json\nstrip to min_ents (X/Y only)\nPOST to Ollama, fast_parse JSON\nwrites current_strategy.json\n⏱ poll 20ms, timeout 150s\nnum_predict: 150 (no-explain) / 600 (explain)", fillcolor="#FFE0B2", color="#E65100", shape=box, style="rounded,filled"]
+
+    OLLAMA [label="Ollama Server\n127.0.0.1:11434\n\nqwen2.5-coder:3b (1.8 GiB, 37 layers)\ntemperature=0.0, num_ctx=4096\nkeep_alive=1h\n⏱ cold boot 30-40s, warm ~3.5s load\n⏱ steady state 500-650ms/call", fillcolor="#FFCC80", color="#E65100", shape=component, style="filled"]
+
+    // ====== EXECUTION (.py) ======
+    BRIDGE [label="ollama_sandbox_bridge.py\nsrc/ai_tactics/ollama_sandbox_bridge.py\n\nreads current_strategy.json → targets\nPID control per bot\npublishes Twist / RpcReqMsg (K1)\nphantom kick via set_entity_state\n⏱ read 0.5s, pause check 0.2s, clock stale 0.4s\n⏱ state_cb ~10Hz (event-driven)", fillcolor="#C8E6C9", color="#2E7D32", shape=box, style="rounded,filled"]
+
+    // ====== SHARED STATE FILES (.json=hexagon, .txt=note) ======
+    WS [label="Worldstate.json\nsrc/shared_state/\n⏱ written 10Hz (atomic)", fillcolor="#D7CCC8", color="#5D4037", shape=hexagon, style="filled"]
+    STRAT [label="current_strategy.json\nsrc/shared_state/\nwritten on each LLM response", fillcolor="#D7CCC8", color="#5D4037", shape=hexagon, style="filled"]
+
+    // ====== TRACE LOGS (.jsonl=hexagon) ======
+    LLM_TRACE [label="llm_trace_run_id.jsonl\nsrc/logs/\nper LLM call", fillcolor="#F5F5F5", color="#9E9E9E", shape=hexagon, style="filled"]
+    WORLD_TRACE [label="world_trace_run_id.jsonl\nsrc/logs/\nper 10Hz tick", fillcolor="#F5F5F5", color="#9E9E9E", shape=hexagon, style="filled"]
+
+    // ====== SETUP (.py) ======
+    SETUP [label="setup_r2k.py\nsrc/setup_r2k.py\n\n--scenario  --strategy  --relay\nassembles fragments → system_prompt.txt\ncopies relay → active_relay.json\ncopies scenario → active_scenario.json", fillcolor="#CFD8DC", color="#455A64", shape=box, style="rounded,filled"]
+
+    // ====== FRAGMENTS (.txt = note shapes) ======
+    subgraph cluster_fragments {
+        label="strategy/fragments/  (prompt building blocks, .txt)"
+        style="rounded,filled"
+        fillcolor="#FCE4EC"
+        color="#C2185B"
+        fontsize=9
+
+        FRAG_HEADER [label="header.txt\npersona + mode + bot list", fillcolor="#F8BBD0", color="#C2185B", shape=note, style="filled"]
+        FRAG_CORE [label="rules_core.txt\nuniversal rules\n(stay inside, goalie x=-4.0)", fillcolor="#F8BBD0", color="#C2185B", shape=note, style="filled"]
+        FRAG_RULES [label="rules_{mode}.txt or\nrules_{strategy}.txt\n(3vs3, 2vs2, recover...)", fillcolor="#F8BBD0", color="#C2185B", shape=note, style="filled"]
+        FRAG_SAMPLES [label="samples_{mode}.txt or\nsamples_{strategy}.txt\nfew-shot examples (1 sample)\nEXAMPLE/INPUT/ASSISTANT", fillcolor="#F8BBD0", color="#C2185B", shape=note, style="filled"]
+    }
+
+    // ====== STRATEGIES (note shapes) ======
+    subgraph cluster_strategies {
+        label="--strategy flag selects fragment set"
+        style="rounded,filled"
+        fillcolor="#E0F2F1"
+        color="#00695C"
+        fontsize=9
+
+        STRAT_AGGRO [label="strat_aggro (default)\nrules_aggro.txt + samples_aggro.txt\n→ aggressive pressing", fillcolor="#B2DFDB", color="#00695C", shape=note, style="filled"]
+        STRAT_DEFAULT [label="strat_default\nrules_default.txt + samples_default.txt\n→ balanced", fillcolor="#B2DFDB", color="#00695C", shape=note, style="filled"]
+        STRAT_RECOVER [label="strat_recover\nrules_recover.txt + samples_recover.txt\n→ defensive transition", fillcolor="#B2DFDB", color="#00695C", shape=note, style="filled"]
+    }
+
+    // ====== SCENARIOS (.json = hexagon) ======
+    subgraph cluster_scenarios {
+        label="scenario/  (--scenario flag, .json)"
+        style="rounded,filled"
+        fillcolor="#EDE7F6"
+        color="#4527A0"
+        fontsize=9
+
+        SCN_2VS2 [label="2vs2_default.json\n2 blue + 2 red bots", fillcolor="#D1C4E9", color="#4527A0", shape=hexagon, style="filled"]
+        SCN_3VS3 [label="3vs3_attack_center.json\n3vs3_attack_wing, pressing_trap,\ndefensive_crisis, fast_counter...\n(9 tactical scenarios)", fillcolor="#D1C4E9", color="#4527A0", shape=hexagon, style="filled"]
+        SCN_PKG [label="scenario/{name}/ folders\nscenario.json + field_diagram.png\n+ analysis.md + kpi_targets.json", fillcolor="#D1C4E9", color="#4527A0", shape=hexagon, style="filled"]
+    }
+
+    // ====== RELAY PROFILES (.json = hexagon) ======
+    subgraph cluster_relays {
+        label="relay/  (--relay flag, .json)"
+        style="rounded,filled"
+        fillcolor="#FFF3E0"
+        color="#E65100"
+        fontsize=9
+
+        RELAY_SIM [label="only_sim_bots.json\nall bots virtual (Gazebo)\nno hardware sync", fillcolor="#FFE0B2", color="#E65100", shape=hexagon, style="filled"]
+        RELAY_HW [label="hardware_mirror.json\nmaps bots to real hardware:\nYahboom → /cmd_vel\nK1 → /LocoApiTopicReq", fillcolor="#FFE0B2", color="#E65100", shape=hexagon, style="filled"]
+    }
+
+    // ====== RUNTIME JSON (hexagon) ======
+    ACTIVE_RELAY [label="active_relay.json\nsrc/ai_tactics/\ncopied from relay/ at boot", fillcolor="#D7CCC8", color="#5D4037", shape=hexagon, style="filled"]
+    ACTIVE_SCN [label="active_scenario.json\nsrc/ai_tactics/\ncopied from scenario/ at boot", fillcolor="#D7CCC8", color="#5D4037", shape=hexagon, style="filled"]
+    PROMPT [label="system_prompt.txt\nsrc/ai_tactics/\nassembled from fragments at boot", fillcolor="#D7CCC8", color="#5D4037", shape=note, style="filled"]
+
+    // ====== BOT TARGETS ======
+    SIM_BOT [label="Sim Bot\n(Gazebo model)\n\nreceives /cmd_vel (Twist)\non /{bot}/cmd_vel topic", fillcolor="#E8F5E9", color="#43A047", shape=box3d, style="filled"]
+    REAL_BOT [label="Real Bot\nYahboom (wheeled, Twist)\nor K1 (bipedal, RPC)\n\nK1: api_id 2001=move\n     api_id 2000=failsafe", fillcolor="#FFEBEE", color="#C62828", shape=doubleoctagon, style="filled"]
+
+    // ====== EDGES: ROS2 TOPICS (green) ======
+    GZ -> TRACKER [label=" /gazebo/model_states ◀", color="#43A047", fontcolor="#2E7D32", penwidth=1.0]
+    GZ -> RED [label=" /gazebo/model_states ◀", color="#43A047", fontcolor="#2E7D32", penwidth=0.8]
+    GZ -> BRIDGE [label=" /gazebo/model_states ◀\n/clock ◀", color="#43A047", fontcolor="#2E7D32", penwidth=0.8]
+
+    TRACKER -> REFEREE [label=" /world_positions ▶ ⏱~10Hz", color="#43A047", fontcolor="#2E7D32", penwidth=1.0]
+    TRACKER -> SCORE [label=" ▶", color="#43A047", fontcolor="#2E7D32", penwidth=0.8]
+    TRACKER -> AGG [label=" ▶", color="#43A047", fontcolor="#2E7D32", penwidth=0.8]
+
+    REFEREE -> REWARD [label=" /match_state ▶", color="#43A047", fontcolor="#2E7D32", penwidth=0.8]
+    REFEREE -> RED [label=" ▶", color="#43A047", fontcolor="#2E7D32", penwidth=0.8]
+    REFEREE -> AGG [label=" ▶", color="#43A047", fontcolor="#2E7D32", penwidth=0.8]
+
+    SCORE -> REWARD [label=" /tactical_score ▶", color="#43A047", fontcolor="#2E7D32", penwidth=0.8]
+    SCORE -> AGG [label=" ▶", color="#43A047", fontcolor="#2E7D32", penwidth=0.8]
+
+    REWARD -> AGG [label=" /tactical_reward ▶ ⏱1Hz", color="#43A047", fontcolor="#2E7D32", penwidth=0.8]
+
+    // ====== EDGES: FILE POLLING (orange dashed) ======
+    AGG -> WS [label=" atomic write ⏱0.1s", color="#E65100", fontcolor="#BF360C", style=dashed, penwidth=1.0]
+    AGG -> WORLD_TRACE [label=" append ⏱0.1s", color="#9E9E9E", fontcolor="#616161", style=dashed, penwidth=0.6]
+    WS -> EVAL [label=" mtime poll ⏱20ms", color="#E65100", fontcolor="#BF360C", style=dashed, penwidth=1.0]
+    PROMPT -> EVAL [label=" read per call", color="#E65100", fontcolor="#BF360C", style=dashed, penwidth=0.6]
+    EVAL -> STRAT [label=" atomic write", color="#E65100", fontcolor="#BF360C", style=dashed, penwidth=1.0]
+    EVAL -> OLLAMA [label=" HTTP POST\n⏱ timeout=150s", color="#E65100", fontcolor="#BF360C", penwidth=1.0]
+    OLLAMA -> EVAL [label=" JSON response\n⏱ ~600ms warm / 30-40s cold", color="#E65100", fontcolor="#BF360C", penwidth=1.0]
+    EVAL -> LLM_TRACE [label=" append", color="#9E9E9E", fontcolor="#616161", style=dashed, penwidth=0.6]
+    STRAT -> BRIDGE [label=" read ⏱0.5s", color="#E65100", fontcolor="#BF360C", style=dashed, penwidth=1.0]
+    ACTIVE_RELAY -> BRIDGE [label=" read at init", color="#5D4037", fontcolor="#3E2723", style=dashed, penwidth=0.6]
+
+    // ====== EDGES: EXECUTION OUT (blue) ======
+    BRIDGE -> SIM_BOT [label=" /{bot}/cmd_vel (Twist) ▶\n⏱~10Hz (state_cb)", color="#1565C0", fontcolor="#0D47A1", penwidth=1.0]
+    BRIDGE -> REAL_BOT [label=" /{bot}/cmd_vel (Twist) ▶\n/{ns}/LocoApiTopicReq (K1) ▶\n⏱~10Hz", color="#1565C0", fontcolor="#0D47A1", penwidth=1.0]
+    RED -> SIM_BOT [label=" /{red_bot}/cmd_vel ▶\n⏱~10Hz", color="#1565C0", fontcolor="#0D47A1", penwidth=0.8]
+    RED -> REAL_BOT [label=" /{red_bot}/cmd_vel ▶", color="#1565C0", fontcolor="#0D47A1", penwidth=0.6]
+    REFEREE -> SIM_BOT [label=" /{bot}/cmd_vel\n(Twist-zero freeze) ▶", color="#C62828", fontcolor="#B71C1C", penwidth=0.8, style=bold]
+    REFEREE -> REAL_BOT [label=" freeze ▶\n(sim-only for K1)", color="#C62828", fontcolor="#B71C1C", penwidth=0.6, style=bold]
+
+    // ====== EDGES: BOOT SETUP (gray dotted) ======
+    SETUP -> PROMPT [label=" assemble", color="#455A64", fontcolor="#37474F", style=dotted, penwidth=0.8]
+    SETUP -> ACTIVE_RELAY [label=" copy", color="#455A64", fontcolor="#37474F", style=dotted, penwidth=0.8]
+    SETUP -> ACTIVE_SCN [label=" copy", color="#455A64", fontcolor="#37474F", style=dotted, penwidth=0.8]
+
+    // ====== EDGES: FRAGMENT ASSEMBLY (pink dotted) ======
+    FRAG_HEADER -> SETUP [label=" read", color="#C2185B", fontcolor="#880E4F", style=dotted, penwidth=0.6]
+    FRAG_CORE -> SETUP [label=" read", color="#C2185B", fontcolor="#880E4F", style=dotted, penwidth=0.6]
+    FRAG_RULES -> SETUP [label=" read", color="#C2185B", fontcolor="#880E4F", style=dotted, penwidth=0.6]
+    FRAG_SAMPLES -> SETUP [label=" read", color="#C2185B", fontcolor="#880E4F", style=dotted, penwidth=0.6]
+
+    // ====== EDGES: STRATEGY SELECTS FRAGMENTS (teal dotted) ======
+    STRAT_AGGRO -> FRAG_RULES [label=" selects", color="#00695C", fontcolor="#004D40", style=dotted, penwidth=0.5]
+    STRAT_AGGRO -> FRAG_SAMPLES [label=" selects", color="#00695C", fontcolor="#004D40", style=dotted, penwidth=0.5]
+    STRAT_DEFAULT -> FRAG_RULES [label=" fallback", color="#00695C", fontcolor="#004D40", style=dotted, penwidth=0.4]
+    STRAT_RECOVER -> FRAG_RULES [label=" selects", color="#00695C", fontcolor="#004D40", style=dotted, penwidth=0.4]
+
+    // ====== EDGES: SCENARIO & RELAY SELECTION (purple/orange dotted) ======
+    SCN_2VS2 -> SETUP [label=" --scenario", color="#4527A0", fontcolor="#311B92", style=dotted, penwidth=0.6]
+    SCN_3VS3 -> SETUP [label=" --scenario", color="#4527A0", fontcolor="#311B92", style=dotted, penwidth=0.6]
+    SCN_PKG -> SETUP [label=" (future)", color="#4527A0", fontcolor="#311B92", style=dotted, penwidth=0.4]
+
+    RELAY_SIM -> SETUP [label=" --relay", color="#E65100", fontcolor="#BF360C", style=dotted, penwidth=0.6]
+    RELAY_HW -> SETUP [label=" --relay", color="#E65100", fontcolor="#BF360C", style=dotted, penwidth=0.6]
+
+    // ====== VERTICAL GROUPING ======
+    REFEREE -> SCORE [style=invis]
+    SCORE -> REWARD [style=invis]
+    REWARD -> RED [style=invis]
+    RED -> AGG [style=invis]
+    WS -> STRAT [style=invis]
+    LLM_TRACE -> WORLD_TRACE [style=invis]
+    SIM_BOT -> REAL_BOT [style=invis]
+    ACTIVE_RELAY -> ACTIVE_SCN [style=invis]
+    ACTIVE_SCN -> PROMPT [style=invis]
+    STRAT_AGGRO -> STRAT_DEFAULT [style=invis]
+    STRAT_DEFAULT -> STRAT_RECOVER [style=invis]
+    FRAG_HEADER -> FRAG_CORE [style=invis]
+    FRAG_CORE -> FRAG_RULES [style=invis]
+    FRAG_RULES -> FRAG_SAMPLES [style=invis]
+    SCN_2VS2 -> SCN_3VS3 [style=invis]
+    SCN_3VS3 -> SCN_PKG [style=invis]
+    RELAY_SIM -> RELAY_HW [style=invis]
+}
