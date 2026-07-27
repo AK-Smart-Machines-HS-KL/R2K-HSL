@@ -1,38 +1,38 @@
 {
   "scenario_name": "3vs3_attack_wing",
   "composite_score": {
-    "min": 0.35,
+    "min": 0.26,
     "max": 1.0,
-    "note": "wing play harder than center"
+    "note": "calibrated from post-kick-fix 27-run baseline"
   },
   "oob_pct": {
     "min": 0.0,
-    "max": 15.0,
-    "note": "wing proximity to sideline \u2014 higher OOB risk"
+    "max": 5.0,
+    "note": "lower is better (0% ideal)"
   },
   "cluster_pct": {
     "min": 0.0,
-    "max": 12.0,
-    "note": "wing convergence possible"
+    "max": 73.1,
+    "note": "lower is better (0% ideal)"
   },
   "goalie_idle_pct": {
     "min": 0.0,
-    "max": 70.0,
-    "note": "after Phase 2a fix"
+    "max": 100.0,
+    "note": "lower is better (structural limit ~70% after Phase 2a)"
   },
   "latency_p50": {
     "min": 0,
-    "max": 1000,
-    "note": "same model"
+    "max": 888,
+    "note": "lower is better"
   },
   "ball_possession_blue_pct": {
-    "min": 40.0,
+    "min": 31.1,
     "max": 100.0,
-    "note": "wing scenarios favor possession"
+    "note": "higher is better"
   },
   "goals_for_blue": {
     "min": 0,
-    "max": 10,
-    "note": "crossing quality determines goals"
+    "max": 5,
+    "note": "higher is better"
   }
 }

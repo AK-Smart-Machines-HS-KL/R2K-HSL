@@ -32,6 +32,7 @@ core/src/logs/
 
 # KPI test artifacts (regenerated on each slow test run)
 core/src/results/kpis_*/
+core/src/results/kpis_baseline_*.json
 core/src/results/baseline_*.log
 core/src/results/baseline_run*.log
 core/src/results/baseline_summary.md

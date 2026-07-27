@@ -2,37 +2,37 @@
   "scenario_name": "2vs2_default",
   "composite_score": {
     "min": 0.35,
-    "max": 0.9,
-    "note": "simpler, fewer bots"
+    "max": 1.0,
+    "note": "higher is better (0-1 scale)"
   },
   "oob_pct": {
     "min": 0.0,
     "max": 10.0,
-    "note": "less crowded, less OOB"
+    "note": "lower is better (0% ideal)"
   },
   "cluster_pct": {
     "min": 0.0,
     "max": 15.0,
-    "note": "2 bots can converge easily"
+    "note": "lower is better (0% ideal)"
   },
   "goalie_idle_pct": {
     "min": 0.0,
     "max": 70.0,
-    "note": "after Phase 2a fix"
+    "note": "lower is better (0% ideal, but structural limit ~70% after Phase 2a)"
   },
   "latency_p50": {
     "min": 0,
     "max": 800,
-    "note": "fewer bots = faster LLM output"
+    "note": "lower is better"
   },
   "ball_possession_blue_pct": {
     "min": 40.0,
     "max": 100.0,
-    "note": "2vs2 is more possession-based"
+    "note": "higher is better (~50% balanced)"
   },
   "goals_for_blue": {
     "min": 0,
-    "max": 8,
-    "note": "fewer bots = fewer scoring chances"
+    "max": 10,
+    "note": "higher is better"
   }
 }

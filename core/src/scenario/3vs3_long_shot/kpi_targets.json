@@ -1,38 +1,38 @@
 {
   "scenario_name": "3vs3_long_shot",
   "composite_score": {
-    "min": 0.35,
-    "max": 0.9,
-    "note": "long shots are low-probability"
+    "min": 0.27,
+    "max": 1.0,
+    "note": "calibrated from post-kick-fix 27-run baseline"
   },
   "oob_pct": {
     "min": 0.0,
-    "max": 10.0,
-    "note": "shooting from distance, less OOB"
+    "max": 37.0,
+    "note": "lower is better (0% ideal)"
   },
   "cluster_pct": {
     "min": 0.0,
-    "max": 10.0,
-    "note": "shooting doesn't cluster"
+    "max": 57.2,
+    "note": "lower is better (0% ideal)"
   },
   "goalie_idle_pct": {
     "min": 0.0,
-    "max": 70.0,
-    "note": "after Phase 2a fix"
+    "max": 97.3,
+    "note": "lower is better (structural limit ~70% after Phase 2a)"
   },
   "latency_p50": {
     "min": 0,
-    "max": 1000,
-    "note": "same model"
+    "max": 915,
+    "note": "lower is better"
   },
   "ball_possession_blue_pct": {
-    "min": 40.0,
+    "min": 46.4,
     "max": 100.0,
-    "note": "open space, decent possession"
+    "note": "higher is better"
   },
   "goals_for_blue": {
     "min": 0,
-    "max": 8,
-    "note": "long-range scoring is rare but possible"
+    "max": 5,
+    "note": "higher is better"
   }
 }

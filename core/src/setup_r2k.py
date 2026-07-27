@@ -98,7 +98,10 @@ def main():
         fallback = {"relay_id": "fallback", "requires_hardware_sync": False, "mapping": {}}
         with open('ai_tactics/active_relay.json', 'w') as f: json.dump(fallback, f)
 
-    scene_file = f"scenarios/{args.scenario}.json" if os.path.exists(f"scenarios/{args.scenario}.json") else f"scenario/{args.scenario}.json"
+    # Support both package (scenario/<name>/scenario.json) and flat (scenario/<name>.json) formats
+    pkg_scene = f"scenario/{args.scenario}/scenario.json"
+    flat_scene = f"scenarios/{args.scenario}.json" if os.path.exists(f"scenarios/{args.scenario}.json") else f"scenario/{args.scenario}.json"
+    scene_file = pkg_scene if os.path.exists(pkg_scene) else flat_scene
     if not os.path.exists(scene_file): 
         print(f"❌ Szenario {scene_file} nicht gefunden!")
         exit(1)
