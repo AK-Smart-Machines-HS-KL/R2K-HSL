@@ -3,8 +3,8 @@ id: 1_CORE
 title: "Section 1: System Overview, Core Architecture & State Sync (V6.1)"
 type: KNOWLEDGE_BASE_POWER_FILE
 tags: [architecture, tmpfs, threading, race-conditions, decoupled-multiplexing, os.replace, qwen, state-aggregator, v5, v6.1, trace-logging, observability]
-last_modified: 2026-07-15
-version: v6.1
+last_modified: 2026-07-22
+version: v6.2
 ---
 # Section 1: System Overview, Core Architecture & State Sync
 

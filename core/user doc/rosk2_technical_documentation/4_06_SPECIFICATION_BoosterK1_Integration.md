@@ -113,8 +113,9 @@ Wird genutzt, um die Vektoren (vx, vy, vyaw) aktiv zu steuern.
   "api_id": 2001,
   "timestamp_ms": 1779222651443,
   "payload": {
-    "linear_velocity_x": 0.25,
-    "angular_velocity_z": -0.12,
+    "vx": 0.25,
+    "vy": 0.0,
+    "vyaw": -0.12,
     "duration_ms": 500
   }
 }

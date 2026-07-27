@@ -16,6 +16,8 @@ version: v6.2
 > **[DEPRECATED in v4]:** Optimized for `Nemotron-3-nano:4b`.
 > **[NEW in v5]:** Optimized for `qwen2.5-coder:3b` via Ollama REST API.
 > **[NEW in v6.1]:** Trace logging layer (llm_trace, world_trace JSONL), reward_node (1Hz, -10..+10), referee foul detection + set-pieces, momentum OLS regression, headless Gazebo. See [[7_01_INTRODUCTION_Scoring_Referee_Gamestate]] and [[7_02_ARCHITECTURE_World_Model_Components]].
+>
+> **[NEW in v6.2]:** Shared regression suite (`tests/test_non_functional.py`) — two-tier pytest testing (fast `--skip-slow` ~2s, slow `@pytest.mark.slow` ~140s per test), composite score formula, per-scenario `kpi_targets.json` thresholds. Phase 2a goalie smooth blending in bridge + `goalie_tactical_pct` KPI. See [[7_03_CHEATPAGE_Tools_and_Utils]] §6.5.
 
 ## 1. System Topology of the Hybrid Environment
 

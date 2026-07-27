@@ -9,6 +9,7 @@ Computes:
   goals_for_blue / goals_for_red   — score increments
   cluster_frames                    — frames where min pairwise blue-bot dist < 0.5m
   goalie_idle_frames                — frames where goalie moved < 0.05m
+  goalie_tactical_pct               — % frames goalie in tactically useful position
   oob_frames_blue                   — blue bot outside field bounds
   ball_possession_blue_pct          — % frames closest bot to ball is blue
   role_diversity                    — distinct role strings in LLM responses
@@ -34,6 +35,16 @@ FIELD_Y_MIN, FIELD_Y_MAX = -3.0, 3.0
 CLUSTER_THRESHOLD = 0.5
 GOALIE_IDLE_THRESHOLD = 0.05
 OOB_MARGIN = 0.1  # bots slightly outside count as OOB
+
+# Goalie tactical position thresholds (Phase 2a). Must match bridge constants.
+# Ball far from goal => goalie should be forward (angle-block), not parked at line.
+# Ball near goal => goalie should be near goal line and track ball Y.
+GOALIE_NEAR_GOAL_DIST = 1.0   # ball within this = "near" zone
+GOALIE_FAR_GOAL_DIST  = 4.0   # ball beyond this = "far" zone
+GOALIE_LINE_X = -4.3          # expected goalie X when ball near goal
+GOALIE_NEAR_X_MIN = -4.5      # goalie X must be >= this when ball near
+GOALIE_NEAR_X_MAX = -3.5      # goalie X must be <= this when ball near
+GOALIE_Y_TOL = 0.8            # goalie Y must be within this of expected Y
 
 
 def load_jsonl(path):
@@ -90,6 +101,7 @@ def compute_world_kpis(world_records):
     prev_goalie_pos = None
     goalie_idle_frames = 0
     goalie_frames = 0
+    goalie_tactical_frames = 0
 
     tactical_score_avg_sum = 0.0
     tactical_score_avg_count = 0
@@ -186,6 +198,26 @@ def compute_world_kpis(world_records):
             if math.hypot(dx, dy) < GOALIE_IDLE_THRESHOLD:
                 goalie_idle_frames += 1
             goalie_frames += 1
+
+            # Goalie tactical position check (Phase 2a):
+            # Ball far  -> goalie should be forward (angle-block), X > GOALIE_LINE_X
+            # Ball near -> goalie should be near goal line, X in [-4.5, -3.5], Y tracks ball
+            if ball:
+                ball_dist_to_goal = math.hypot(ball.get("x", 0) - FIELD_X_MIN,
+                                                ball.get("y", 0))
+                if ball_dist_to_goal >= GOALIE_FAR_GOAL_DIST:
+                    # Far zone: goalie should not be parked at the line
+                    if gx > GOALIE_LINE_X + 0.2:
+                        goalie_tactical_frames += 1
+                elif ball_dist_to_goal <= GOALIE_NEAR_GOAL_DIST:
+                    # Near zone: goalie near goal line and Y within tolerance of ball Y
+                    expected_y = max(-1.5, min(1.5, ball.get("y", 0) * 0.5))
+                    if GOALIE_NEAR_X_MIN <= gx <= GOALIE_NEAR_X_MAX and \
+                       abs(gy - expected_y) <= GOALIE_Y_TOL:
+                        goalie_tactical_frames += 1
+                else:
+                    # Mid zone: accept either position (transition area)
+                    goalie_tactical_frames += 1
         if goalie_candidate:
             gx = blue_bots[goalie_candidate].get("x", 0)
             gy = blue_bots[goalie_candidate].get("y", 0)
@@ -201,6 +233,7 @@ def compute_world_kpis(world_records):
         "cluster_pct": round(cluster_frames / max(frames_with_bots, 1) * 100, 1),
         "goalie_idle_frames": goalie_idle_frames,
         "goalie_idle_pct": round(goalie_idle_frames / max(goalie_frames, 1) * 100, 1),
+        "goalie_tactical_pct": round(goalie_tactical_frames / max(goalie_frames, 1) * 100, 1),
         "oob_frames_blue": oob_frames,
         "oob_pct": round(oob_frames / max(frames_with_bots, 1) * 100, 1),
         "ball_possession_blue_pct": round(blue_closest_frames / max(frames_with_bots, 1) * 100, 1),

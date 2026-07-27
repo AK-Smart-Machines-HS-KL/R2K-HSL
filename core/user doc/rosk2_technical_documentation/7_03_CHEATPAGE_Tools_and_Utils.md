@@ -25,10 +25,11 @@ version: v6.2
 | Tool | Type | Needs ROS? | Needs Ollama? | Purpose |
 |------|------|-----------|---------------|---------|
 | `tools/dump_prompt.py` | Offline inspector | No | No | Assemble and print prompt fragments |
-| `tools/analyze_trace.py` | Offline analyzer | No | No | Compute 14 KPIs from trace files |
+| `tools/analyze_trace.py` | Offline analyzer | No | No | Compute 15 KPIs from trace files |
 | `tools/swap_fragments.sh` | Experiment helper | No (swap) / Yes (run) | Yes (run) | Swap experiment fragments, run, restore |
 | `tools/run_experiment.sh` | Experiment runner | Yes | Yes | Run 3 repeats with auto-analysis |
-| `ai_tactics/batch_evaluator.py` | Batch orchestrator | Yes | Yes | Run N×M×K configurations headless |
+| `ai_tactics/batch_evaluator.py` | Batch orchestrator (deprecated) | Yes | Yes | Replaced by `test_non_functional.py` (§6.5) |
+| `tests/test_non_functional.py` | Regression suite | Yes | Yes | Two-tier pytest: slow tests assert per-scenario KPI thresholds |
 
 All tools live in `core/src/tools/` except `batch_evaluator.py` which is in
 `core/src/ai_tactics/`.
@@ -138,6 +139,7 @@ must match the `R2K_RUN_ID` env var from the run.
 | `goals_for_blue/red` | Score delta count | blue > red |
 | `cluster_pct` | % frames min pairwise blue distance < 1.5m | < 10% |
 | `goalie_idle_pct` | % frames goalie moved < 0.1m | < 80% (structural limit) |
+| `goalie_tactical_pct` | % frames goalie in tactically useful position (V6.2 Phase 2a) | >= 60% |
 | `oob_pct` | % frames any blue bot > 0.5m outside bounds | < 10% |
 | `ball_possession_blue_pct` | % frames closest bot to ball is blue | > 50% |
 | `tactical_score_avg` | Mean `average_numerical_score` | > -1.0 |
@@ -234,10 +236,103 @@ python3 ai_tactics/batch_evaluator.py \
 | `--duration` | 60 | Seconds per run |
 | `--output` | auto | Output filename (default: `eval_results_<timestamp>.json`) |
 
-> [!warning] KPI collection broken
-> `batch_evaluator.py:91` has `# TODO: Subscribe to ROS topics during run`. The batch
-> pipeline executes but produces no KPI data. Fix planned in v6.2 Phase 2b: call
-> `analyze_trace.py --run-id <ID>` after each run and inject KPIs into results JSON.
+> [!warning] Deprecated in v6.2 — replaced by `test_non_functional.py`
+> `batch_evaluator.py:91` has `# TODO: Subscribe to ROS topics during run`. The KPI
+> collection was never implemented. The file is deprecated in v6.2 — replaced by
+> `tests/test_non_functional.py` (shared regression suite, §6.5 below). The CLI
+> and schema above document the intended structure for reference.
+
+---
+
+## 6.5. `test_non_functional.py` — Shared Regression Suite (Phase 2b)
+
+The shared regression suite runs real headless Gazebo matches and asserts per-scenario
+KPI thresholds. It replaces the deprecated `batch_evaluator.py`.
+
+> [!info] What is a pytest marker?
+> A pytest marker is a label you attach to a test function to categorize it.
+> It's metadata — it doesn't change what the test does, but lets you select,
+> skip, or filter tests by their markers.
+>
+> Example:
+> ```python
+> @pytest.mark.slow
+> def test_attack_center_performance():
+>     ...
+> ```
+>
+> `@pytest.mark.slow` tags the function with `slow`. The marker is registered
+> in `pytest.ini`:
+> ```ini
+> [pytest]
+> markers =
+>     slow: marks tests as slow (run real Gazebo matches, ~140s each)
+> ```
+>
+> Then `--skip-slow` (implemented in `conftest.py`) reads that marker and skips
+> all tests carrying it. That's the entire two-tier mechanism — a marker is
+> pure metadata for selection and filtering, not a test condition or assertion.
+
+### Two-Tier Test System
+
+| Tier | Command | What runs | Time |
+|------|---------|----------|------|
+| **Fast** | `pytest tests/ --skip-slow` | 91 unit tests (rule logic, parsing, set-piece math) | ~2s |
+| **Slow** | `pytest tests/ -v -s` | 91 unit + slow tests (real 120s Gazebo matches) | ~10min |
+
+* Run **fast** after every code change (~2s feedback loop).
+* Run **slow** before commit (~10min, catches regressions).
+* Single slow test: `pytest tests/test_non_functional.py::test_attack_center_latency -v -s`
+
+### Composite Score Formula (spec §5.2)
+
+```
+composite = 0.4 * goal_diff_norm + 0.3 * tac_score_norm
+          + 0.2 * possession_norm + 0.1 * latency_factor
+
+where:
+  goal_diff_norm   = clamp((goals_for_blue - goals_for_red) / 10, 0, 1)
+  tac_score_norm    = clamp((tactical_score_avg + 10) / 20, 0, 1)
+  possession_norm   = ball_possession_blue_pct / 100
+  latency_factor    = max(0, 1 - latency_p50 / 3000)
+```
+
+* Range: [0, 1]. Higher is better.
+* Computed by `compute_composite()` in `test_non_functional.py`.
+
+### Per-Scenario `kpi_targets.json`
+
+Each scenario package (`scenario/<name>/`) contains a `kpi_targets.json` with
+acceptable KPI ranges:
+
+```json
+{
+  "scenario_name": "3vs3_attack_center",
+  "composite_score": { "min": 0.4, "max": 1.0, "note": "baseline scenario" },
+  "oob_pct": { "min": 0.0, "max": 10.0, "note": "STAY INSIDE rule" },
+  "cluster_pct": { "min": 0.0, "max": 10.0, "note": "anti-clustering samples" },
+  "goalie_idle_pct": { "min": 0.0, "max": 70.0, "note": "after Phase 2a fix" },
+  "latency_p50": { "min": 0, "max": 1000, "note": "qwen2.5-coder:3b on GPU" },
+  "ball_possession_blue_pct": { "min": 40.0, "max": 100.0, "note": "even scenario" },
+  "goals_for_blue": { "min": 0, "max": 10, "note": "directional, high variance" }
+}
+```
+
+The test asserts each KPI is within its scenario's `[min, max]` range. Thresholds
+are calibrated from the 27-run baseline (Phase 2e, not yet run — current values
+are estimates from the spec).
+
+### Current Test Scenarios
+
+* `3vs3_attack_center` — baseline midfield (TC-01). Tests composite, OOB, cluster, goalie, latency.
+* `3vs3_default` — same positions, legacy v5 filename. Tests composite, OOB, cluster, goalie.
+* Phase 2f will add the 3 worst-performing scenarios from the baseline.
+
+### `goalie_tactical_pct` KPI (Phase 2a, new in v6.2)
+
+Distinguishes "goalie is tactically positioning" from "goalie is stuck." Ball far
+from goal → goalie should be forward (angle-block). Ball near → goalie near goal
+line + tracking Y. The test asserts `goalie_tactical_pct >= 60%`.
 
 ---
 

@@ -1,0 +1,38 @@
+{
+  "scenario_name": "3vs3_def_transition",
+  "composite_score": {
+    "min": 0.24,
+    "max": 1.0,
+    "note": "calibrated from post-kick-fix 27-run baseline"
+  },
+  "oob_pct": {
+    "min": 0.0,
+    "max": 67.3,
+    "note": "lower is better (0% ideal)"
+  },
+  "cluster_pct": {
+    "min": 0.0,
+    "max": 12.0,
+    "note": "lower is better (0% ideal)"
+  },
+  "goalie_idle_pct": {
+    "min": 0.0,
+    "max": 84.7,
+    "note": "lower is better (structural limit ~70% after Phase 2a)"
+  },
+  "latency_p50": {
+    "min": 0,
+    "max": 909,
+    "note": "lower is better"
+  },
+  "ball_possession_blue_pct": {
+    "min": 29.9,
+    "max": 100.0,
+    "note": "higher is better"
+  },
+  "goals_for_blue": {
+    "min": 0,
+    "max": 3,
+    "note": "higher is better"
+  }
+}

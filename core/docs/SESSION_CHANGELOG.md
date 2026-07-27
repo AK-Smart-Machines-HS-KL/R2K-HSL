@@ -1425,3 +1425,579 @@ transferable tool.
 
 **Files deleted:**
 - (none)
+
+## 2026-07-22 — Optimization spec rewrite (trial-and-error paradigm), scenario packages, field diagrams, workshop docs, framework evaluation, power file updates
+
+**Goal:** Rewrite the v6.2 optimization spec to reflect the chosen paradigm
+(local trial-and-error + shared regression tests, no W&B/DSPy/Optuna). Create
+scenario packages with field diagrams. Rewrite all workshop docs from scratch
+(as-is only, no future features presented as existing). Update power files to
+v6.2. Resolve the W&B vs custom framework question.
+
+**Done:**
+
+### Framework evaluation: W&B vs DSPy vs Optuna vs pytest+git
+
+Evaluated four approaches for experiment tracking and prompt optimization:
+
+- **W&B:** Generic ML experiment tracker. Dashboard + sweeps built-in. But
+  can't mutate text files (fragments), abstraction mismatch (epochs vs
+  matches), data format lock-in. Dropped.
+- **DSPy + GEPA (Stanford NLP):** Prompt optimization framework. Automated
+  prompt mutation via reflection LM. Best fit for Tier 2 (prompt mutation).
+  But requires wrapping `r2k_evaluator.py` as DSPy module (~300 lines),
+  synchronous assumption conflicts with async architecture. Deferred to
+  Phase 5.9 (conditional — only if manual iteration becomes a bottleneck).
+- **Optuna:** Black-box optimization. Better fit than W&B for non-ML
+  workflows. Can sweep discrete variant dirs. But still can't mutate text.
+  Deferred alongside DSPy.
+- **pytest + git (CHOSEN):** Uses tools students already know. Regression
+  protection built-in. Git log = experiment history (meaningful improvements
+  only). Zero external dependencies. Accepted limitation: may end in local
+  minima, requires thoughtful engineering.
+
+**Decision:** pytest + git + local trial-and-error. No W&B, no DSPy, no
+Optuna. Engineers iterate locally (no commit per experiment), run shared
+regression suite, commit only winners. DSPy/Optuna can be added later
+(Phase 5.9) if manual iteration becomes a bottleneck.
+
+### Optimization spec v6.2 — major rewrite
+
+- `optimization_spec_v6.2.md`: 1529 lines (was 789). All version tags
+  normalized to v6.2. Key changes:
+  - **Paradigm:** Local trial-and-error + shared regression tests + commit
+    only winners. No external framework.
+  - **Phase 2 restructured:** 2a = goalie fix (HARD prerequisite before
+    baseline — 95% idle biases all score KPIs), 2b = write
+    `test_non_functional.py`, 2c = pytest markers, 2d = scenario package
+    migration, 2e = 27-run baseline, 2f = identify worst scenarios
+  - **Phase 2a goalie fix:** Smooth blending (no hardcoded if/else
+    thresholds) using `smoothstep()`. LLM keeps 30% influence. All
+    parameters are named constants at top of bridge file
+    (`GOALIE_TACTICAL_WEIGHT`, `GOALIE_FAR_GOAL_DIST`, etc.) — tunable
+    via trial-and-error, part of optimization task (D9 experiment).
+    Documented as "temporary crutch" until Phase 5.1 (Kalman) provides
+    good data.
+  - **§3 Test scenarios:** Reorganized into scenario packages (folders
+    with `scenario.json`, `field_diagram.png`, `analysis.md` with
+    oracle/expert, `kpi_targets.json`). Added `time_index` field. Focus
+    on 3vs3 (primary) + 2vs2 (secondary). Each TC presented one-by-one
+    with embedded field diagram, oracle/expert, KPI targets.
+  - **§4.2 Fragment taxonomy:** Static + game-phase fragments. Mapping
+    to referee statuses. Dynamic injection mechanism explained (Ollama
+    is stateless, sends sys_prompt per call).
+  - **§4.5 Goalie idle:** Rewritten as critical bias (danger callout).
+    Must fix in Phase 2a before any baseline. Tactical positioning rules
+    (angle-block, passing buddy, goal-line) for small vs large teams.
+  - **§5.1 Phase 5.1:** Renamed "Kalman Filter (and goalie fix
+    completion)". Added Option C: once Kalman provides filtered positions
+    + velocity + predictions, bridge goalie blending is removed entirely.
+  - **§5.10:** 5vs5 scale-up added (prompt complexity, latency, fragments,
+    referee thresholds, 3B vs 7B research question).
+  - **§5.11:** LLM output quality evaluation (oracle/expert + --explain).
+    Manual now, automated LLM-as-judge deferred.
+  - **§5.9:** Automated prompt optimization (DSPy/Optuna) — conditional,
+    only if manual iteration becomes a bottleneck.
+  - **D9 experiment:** Goalie blending parameter sweep added.
+  - **§2.4:** Shared regression suite with two-tier speed (fast --skip-slow
+    ~2s, slow full suite ~21min). Clarified `@pytest.mark.slow` / `--skip-slow`.
+
+### Scenario packages created (10 packages)
+
+- `tools/gen_field_diagrams.py` (NEW, ~180 lines): generates 2D field
+  diagrams with colorized bots (blue/red), goal posts, goal areas, ball,
+  center circle, corner flags. Reads `scenario.json`, writes
+  `field_diagram.png`.
+- 10 scenario packages created (TC-01..09 3vs3 + TC-11 2vs2):
+  - `scenario/<name>/scenario.json` (entity positions, copied from flat files)
+  - `scenario/<name>/field_diagram.png` (generated by gen_field_diagrams.py)
+  - `scenario/<name>/analysis.md` (oracle + expert tactical analysis)
+  - `scenario/<name>/kpi_targets.json` (per-scenario acceptable KPI ranges)
+- `setup_r2k.py` not yet updated to read from packages (Phase 2d)
+
+### Workshop docs — rewritten from scratch (as-is only)
+
+All three workshop docs rewritten based on the principle: "describe what we
+HAVE, mention Phase 5 for future directions, don't present planned features
+as existing."
+
+- `workshop_invitation.md` (1-page, team-facing): updated all 5 modules
+  with as-is descriptions. K1 described correctly (ROS2 custom message
+  type). No ROS_DOMAIN_ID seat numbers. No Streamlit/W&B. Module 5 =
+  Phase 5 roadmap walkthrough.
+- `workshop_memo.md` (internal planning): all modules updated with as-is
+  experiments. No regression suite, no blending demo, no dynamic injection
+  experiment (all planned, not implemented). §7: explicit "Planned but
+  NOT yet implemented" list with 11 items. No ROS_DOMAIN_ID patch in
+  checklist.
+- `workshop_lecturer_guide.md` (NEW, lecturer only): term glossary
+  (deque, OLS, staleness, min_ents, fragment, oracle/expert, RPC).
+  opencode example commands (7 use cases). Per-module timing, talking
+  points, expected answers, offline fallbacks. K1 described correctly
+  ("IS controlled via ROS2 using a custom message type"). "Planned but
+  NOT yet implemented" table at end with 11 items.
+
+### Power files updated to v6.2
+
+- All 7 power files: version tags bumped from v6.1 to v6.2, last_modified
+  dates updated to 2026-07-22
+- `META_KNOWLEDGE_ROUTER.md`: batch_evaluator entry updated — marked
+  DEPRECATED, KPI collection broken noted, replacement referenced
+- `6_DATA_SCHEMAS_AND_LIFECYCLE.md`: batch_evaluator section — deprecation
+  note added, source reference updated to v6.2 spec
+- `3_AI_LOGIC_AND_EDGE_CASES.md`: goalie idle section — added status note
+  (Phase 2a fix designed but not implemented, Phase 5.1 Kalman is
+  long-term fix)
+
+**Files touched:**
+- `core/docs/optimization_spec_v6.2.md` (major rewrite, 1529 lines)
+- `core/docs/workshop_invitation.md` (rewritten from scratch)
+- `core/docs/workshop_memo.md` (rewritten from scratch)
+- `core/docs/workshop_lecturer_guide.md` (NEW)
+- `core/docs/SESSION_CHANGELOG.md` (this entry)
+- `core/src/tools/gen_field_diagrams.py` (NEW)
+- `core/src/scenario/3vs3_attack_center/` (NEW: 4 files)
+- `core/src/scenario/3vs3_attack_wing/` (NEW: 4 files)
+- `core/src/scenario/3vs3_defensive_crisis/` (NEW: 4 files)
+- `core/src/scenario/3vs3_fast_counter/` (NEW: 4 files)
+- `core/src/scenario/3vs3_pressing_trap/` (NEW: 4 files)
+- `core/src/scenario/3vs3_long_shot/` (NEW: 4 files)
+- `core/src/scenario/3vs3_contain_delay/` (NEW: 4 files)
+- `core/src/scenario/3vs3_def_transition/` (NEW: 4 files)
+- `core/src/scenario/3vs3_high_line/` (NEW: 4 files)
+- `core/src/scenario/2vs2_default/` (NEW: 4 files)
+- `core/src/ros2k_knowledge/1_CORE_ARCHITECTURE_AND_SYNC.md` (version bump)
+- `core/src/ros2k_knowledge/2_ROS2_PROTOCOLS_AND_FRAMES.md` (version bump)
+- `core/src/ros2k_knowledge/3_AI_LOGIC_AND_EDGE_CASES.md` (version bump +
+  goalie idle status note)
+- `core/src/ros2k_knowledge/5_HYBRID_INFRASTRUCTURE_V5.md` (version bump)
+- `core/src/ros2k_knowledge/6_DATA_SCHEMAS_AND_LIFECYCLE.md` (version bump +
+  batch_evaluator deprecation note)
+- `core/src/ros2k_knowledge/META_KNOWLEDGE_ROUTER.md` (version bump +
+  batch_evaluator deprecation)
+
+**New files (untracked):**
+- `core/docs/workshop_lecturer_guide.md`
+- `core/src/tools/gen_field_diagrams.py`
+- `core/src/scenario/3vs3_attack_center/` (4 files)
+- `core/src/scenario/3vs3_attack_wing/` (4 files)
+- `core/src/scenario/3vs3_defensive_crisis/` (4 files)
+- `core/src/scenario/3vs3_fast_counter/` (4 files)
+- `core/src/scenario/3vs3_pressing_trap/` (4 files)
+- `core/src/scenario/3vs3_long_shot/` (4 files)
+- `core/src/scenario/3vs3_contain_delay/` (4 files)
+- `core/src/scenario/3vs3_def_transition/` (4 files)
+- `core/src/scenario/3vs3_high_line/` (4 files)
+- `core/src/scenario/2vs2_default/` (4 files)
+
+**Files deleted:**
+- (none)
+
+**Not yet done:**
+- Phase 2a goalie fix NOT implemented — smooth blending designed but not
+  coded in `ollama_sandbox_bridge.py`
+- `test_non_functional.py` NOT created — shared regression suite is planned
+  but not implemented
+- Dynamic prompt injection NOT implemented — `r2k_evaluator.py` still caches
+  `sys_prompt` at startup (line 80)
+- `setup_r2k.py` NOT updated to read scenario packages — still reads flat
+  JSON files
+- Workshop handout NOT written (Decision A: deliverable format not resolved)
+- Workshop Decision B (Module 5 depth) not resolved
+- `core/docs/optimization_spec_v6.2 1.md` — accidental duplicate file,
+  should be deleted before commit
+- Nothing committed yet
+
+**Next:**
+- Delete accidental duplicate `optimization_spec_v6.2 1.md`
+- Commit all work (spec + workshop docs + scenario packages + gen_field_diagrams +
+  power file updates + this changelog)
+- Implement Phase 2a (goalie smooth blending in bridge, ~25 lines)
+- Write `test_non_functional.py` (shared regression suite, ~100 lines)
+- Resolve workshop Decision A + B
+- Write workshop handout
+
+**Blockers:**
+- `batch_evaluator.py` KPI collection still broken (deprecated, replacement
+  not yet implemented)
+- Visualizer blitting still untested with live ROS 2 + Gazebo
+- **NVIDIA driver not responding** — `nvidia-smi` fails with "couldn't
+  communicate with the NVIDIA driver." Ollama falls back to CPU (~24s per
+  call vs ~800ms on GPU). Bots don't move because the LLM is too slow to
+  produce strategies. User will reboot to fix. This is the Xid 31 /
+  stale-driver pattern from 2026-07-20. **This machine is Ubuntu 24.04
+  (Docker mode), not U22.** After reboot: verify `nvidia-smi` works,
+  then `pkill -9 -f "ollama runner"; pkill -9 -f "ollama serve";
+  nohup ollama serve > /dev/null 2>&1 &`, warm up model, re-run match.
+- Ollama GPU: was reported resolved ("worx") on U22 but regressed on this
+  machine (U24). Driver communication lost. Re-adding to blocker list.
+## 2026-07-23 — Dead blue team diagnosis, workshop v6.2 material package (diagrams, cheat page, handout, reviewer tar)
+
+**Goal:** Diagnose intermittent dead-blue-team on `--no-explain` launch,
+produce complete workshop v6.2 student material package (diagrams + cheat
+page + handout + reviewer tar).
+
+**Done:**
+
+### Dead blue team diagnosis (trace log + ollama.log forensics)
+
+User reported: (1) `--no-explain` → dead blue team, (2) `--explain` worked,
+(3) second `--no-explain` worked. Diagnosed via trace logs + ollama.log:
+
+- Dead run (17:17:12) had 336 `world_trace` records (33.5s, valid blue
+  entities) but **zero `llm_trace` records** — evaluator never logged a
+  single LLM call. Ruled out `num_predict` truncation theory.
+- `ollama.log` showed cold-boot model load: `ollama serve` started at
+  17:17:12, first POST /api/generate at 17:17:29, model load began 17:17:30
+  (37 layers, 1.8 GiB), **HTTP 499 at 17:18:03** — "client connection
+  closed before server finished loading, aborting load" (33.7s elapsed).
+  The evaluator process was killed (window close or CTRL+C during model
+  load), HTTP connection dropped, Ollama aborted the load.
+- Root cause: **cold-boot race condition**. First match after `ollama serve`
+  triggers 30-40s model load. If user interrupts during load → evaluator
+  killed → no `current_strategy.json` → bridge has no targets → dead blue.
+  Second match works (model warm, `keep_alive: "1h"`).
+- `--explain` didn't "fix" anything — it was launched when model was already
+  warm from the failed first attempt. `num_predict` (150 vs 600) was NOT
+  the cause.
+- Warm-up timeline documented: `t=0` ollama starts → `t=17s` first POST →
+  `t=21.5s` runner loaded (3.47s) → `t=22s` steady state (500-650ms/call).
+- Evidence: `ollama.log` at `core/src/ollama.log`, trace files at
+  `core/src/logs/`, `r2k_evaluator.py:123` (timeout=150s), `:108`
+  (keep_alive="1h"), `:100-111` (num_predict 150/600).
+
+### `num_predict` + warm-up timeline added to workshop material
+
+- `workshop_lecturer_guide.md` term glossary: added `num_predict` definition
+  (line 32) — Ollama token generation cap, 150 (no-explain) / 600 (explain),
+  truncation → dead blue team mechanism
+- `workshop_lecturer_guide.md`: added "Ollama warm-up timeline (cold boot →
+  steady state)" section (lines 57-110) with ASCII timeline, HTTP 499
+  failure mode, 3-step lecturer mitigation, pre-workshop warm-up checklist
+- `workshop_memo.md`: added §2.1a "Warm up Ollama BEFORE the first match"
+  with timeline table (elapsed/event/evidence), failure mode block, curl
+  mitigation command
+- `workshop_memo.md` Module 1 concepts: added `num_predict` explanation
+- `workshop_memo.md` execution checklist: added warm-up step
+
+### Architecture diagrams (Graphviz → PNG/PDF)
+
+Created `core/docs/workshop v6.2/` folder with:
+
+- **`part1_boot_ramp.dot/.png/.pdf`** (7.5×9.9 in, A4 portrait):
+  6-phase boot sequence — CLI flags → env wipe → setup_r2k.py (fragment
+  assembly) → Ollama check → Gazebo launch + spawner → node ignition.
+  Includes fragment library (header/rules_core/rules_{mode}/samples_{mode}),
+  strategies (strat_aggro/default/recover), scenarios (2vs2 + 3vs3 ×9 +
+  package folders), relay profiles (only_sim_bots/hardware_mirror).
+  Handoff marks ①-⑤ at bottom.
+
+- **`part2_running_system.dot/.png/.pdf`** (5.6×10.5 in, A4 portrait):
+  Steady state — Gazebo → tracker → engine nodes (referee/score/reward/red)
+  → aggregator → evaluator ↔ Ollama → bridge → sim/real bots. All timings
+  with ⏱. Watchdog. Handoff marks ①-⑤ at top matching Part 1.
+
+- **`rqt_graph_mockup.dot/.png`** (2048×1604 px): rqt_graph-style ROS2 node
+  graph — 7 nodes (ovals, color-coded) + 9 topics (squares), blue=publish,
+  green=subscribe, dark theme (#2b2b2b).
+
+- **`runtime_architecture.dot/.png/.pdf`**: original combined diagram
+  (superseded by part1+part2 split, kept for reference).
+
+- **`rviz2_mockup.png`**: matplotlib-generated RViz2 look-alike (dark theme,
+  soccer field grid, 4 bots as cylinders, TF frames, Displays tree panel,
+  topic info overlay). Not referenced in handout (visual aid for lecturer).
+
+Diagram conventions: cylinder=Gazebo, rounded box=.py, hexagon=.json,
+note=.txt, component=Ollama, box3d=sim bot, doubleoctagon=real bot.
+⏱=timing, ▶=pub, ◀=sub. Font: FreeSerif (has all unicode glyphs).
+Edge fonts: 8pt (readable on A4 print).
+
+### Cheat page (`workshop v6.2/cheatpage.md`, 187 lines)
+
+6 sections:
+1. Launch flags (8 flags with 1-2 line explanations)
+2. Testing (7 test files, 91 tests, what each covers, how to run)
+3. 14 KPIs (source, target, what it measures) + composite score formula
+4. 10 test scenarios (oracle, KPI targets, what to watch)
+5. Quick-test recipes (11 one-liners)
+6. File locations (where things live in the repo)
+
+### Student handout (`workshop v6.2/handout.md`, 555 lines)
+
+German with English technical terms. 5 modules + front/back matter:
+- Glossary (14 terms: deque, OLS, staleness, min_ents, fragment,
+  oracle/expert, RPC, num_predict, Twist, tmpfs, R2K_RUN_ID, composite
+  score, cold-boot-race, PID-controller)
+- Warm-up box (curl command + cold-boot warning)
+- Diagram reading guide (Part 1 + Part 2, ①-⑤ marks)
+- 5 modules × 3-4 experiments each, with fill-in KPI tables + blank lines
+  for personal observations
+- opencode examples per module (2-4 prompts each, experiment-focused)
+- Key Take-Aways per module (4-6 bullets each)
+- Troubleshooting table (4 common problems)
+- "Wo finde ich was?" index (12-row cross-reference table)
+
+### Lecturer guide updates (`workshop_lecturer_guide.md`)
+
+- Removed central "opencode example commands" section (was lines 114-169)
+- Distributed opencode examples inline per module (Module 1-5)
+- Added `num_predict` to term glossary
+- Added Ollama warm-up timeline section
+- Added warm-up step to pre-workshop checklist
+- Module 3 Experiment 3 already had K1 opencode example
+- Module 4 Experiment 3 expanded: fragment edit + dump_prompt + run match
+  + analyze_trace + compare to baseline + Plan mode demo
+- 6 of 13 opencode examples now involve running experiments (was 2 of 9)
+- Updated Q&A cross-reference
+
+### Invitation update (`workshop_invitation.md`)
+
+- Module 4: added `run_experiment.sh` naming convention (`A`=baseline,
+  `B1`-`B7b`=variants, determines output filenames)
+
+### Reviewer tar package
+
+- `workshop v6.2/README.md` (reviewer orientation: package contents,
+  review questions, exclusions, file dependency map, conventions)
+- Copied `workshop_invitation.md` into `workshop v6.2/`
+- Tar at `/tmp/opencode/ros2k_workshop_v6.2_review.tar.gz` (344 KB, 7 files):
+  README.md, handout.md, cheatpage.md, workshop_invitation.md,
+  part1_boot_ramp.pdf, part2_running_system.pdf, rqt_graph_mockup.png
+- Excluded: lecturer guide, memo, .dot sources, runtime_architecture.*
+  (superseded), rviz2_mockup.png, .png versions of diagrams
+
+**Files touched:**
+- core/docs/workshop_lecturer_guide.md (opencode redistribution, num_predict,
+  warm-up timeline, checklist, Q&A update)
+- core/docs/workshop_memo.md (num_predict, warm-up §2.1a, checklist)
+- core/docs/workshop_invitation.md (run_experiment.sh naming)
+- core/docs/SESSION_CHANGELOG.md (this entry)
+
+**New files (untracked):**
+- core/docs/workshop v6.2/cheatpage.md
+- core/docs/workshop v6.2/handout.md
+- core/docs/workshop v6.2/README.md
+- core/docs/workshop v6.2/part1_boot_ramp.dot
+- core/docs/workshop v6.2/part1_boot_ramp.pdf
+- core/docs/workshop v6.2/part1_boot_ramp.png
+- core/docs/workshop v6.2/part2_running_system.dot
+- core/docs/workshop v6.2/part2_running_system.pdf
+- core/docs/workshop v6.2/part2_running_system.png
+- core/docs/workshop v6.2/rqt_graph_mockup.dot
+- core/docs/workshop v6.2/rqt_graph_mockup.png
+- core/docs/workshop v6.2/runtime_architecture.dot
+- core/docs/workshop v6.2/runtime_architecture.pdf
+- core/docs/workshop v6.2/runtime_architecture.png
+- core/docs/workshop v6.2/rviz2_mockup.png
+- core/docs/workshop v6.2/workshop_invitation.md (copied from docs/)
+- /tmp/opencode/ros2k_workshop_v6.2_review.tar.gz (reviewer package)
+
+**Files deleted:**
+- (none)
+
+**Not yet done:**
+- Nothing committed — all work uncommitted on
+  `feature/ros2k_behavior_optimization`
+- `rviz2_mockup.png` not referenced in handout or cheat page (visual aid
+  only — could add to handout if desired)
+- Workshop Decision A (deliverable format) and Decision B (Module 5 depth)
+  from `workshop_memo.md` §1 are now effectively resolved: handout is
+  written (Decision A=1: single Markdown handout), Module 5 depth is
+  Option 1 (conceptual + one spike). But these decisions haven't been
+  explicitly marked as resolved in `workshop_memo.md`.
+- Warm-up call fix NOT implemented in `launch_r2k.sh` — only documented
+  in workshop material. The actual code fix (curl warm-up after Ollama
+  check, ~3 lines) is deferred.
+- Evaluator retry on HTTP 499/non-200 NOT implemented — only diagnosed.
+- `batch_evaluator.py` KPI collection still broken (carried from
+  2026-07-13/15)
+- Visualizer blitting refactor still untested with live ROS 2 + Gazebo
+  (carried from 2026-07-14)
+- `runtime_architecture.*` (combined diagram) should be deleted from
+  `workshop v6.2/` since it's superseded by part1+part2 — currently kept
+  for reference but not in the reviewer tar
+
+**Next:**
+- Commit all workshop v6.2 material on a dedicated branch
+  (`docs/workshop-v6.2-material`), separate from the larger uncommitted
+  `feature/ros2k_behavior_optimization` body of work
+- Implement the warm-up call fix in `launch_r2k.sh` (~3 lines after
+  Ollama model check at line 176): `curl -s ... /api/generate -d
+  '{"model":"qwen2.5-coder:3b","prompt":"hi","stream":false}' > /dev/null`
+  to prevent cold-boot dead-blue-team for all future users
+
+**Blockers:**
+- `batch_evaluator.py` KPI collection still broken (Phase 2b, carried
+  from 2026-07-13/15)
+- Visualizer blitting still untested with live ROS 2 + Gazebo (carried
+  from 2026-07-14)
+- Ollama GPU on U24: was diagnosed this session (cold-boot race), warm-up
+  mitigation documented but NOT coded in `launch_r2k.sh` yet
+
+## 2026-07-27 — Phase 2 complete: goalie blending, test suite, kick fix, 27-run baseline
+
+**Goal:** Implement Phase 2 (goalie fix + shared test suite + 27-run baseline +
+threshold calibration). Fix broken kicks discovered during baseline. Document
+test infrastructure across KB, FAQ, and user docs.
+
+**Done:**
+
+### Phase 2a — Goalie smooth blending (commit `b5fb120`)
+- `ollama_sandbox_bridge.py`: 10 field-size-relative `GOALIE_*` blending
+  parameters (as % of field half-length/width), `smoothstep()` helper at
+  module scope. Goalie blending block in `state_cb`: smooth transition
+  between goal-line positioning (ball near) and angle-block (ball far),
+  70% tactical + 30% LLM influence, deadband eliminates micro-oscillations.
+  Skips when `action=='kick'` (Part A). Role-aware kick direction: goalie
+  clears upfield, non-goalie bots aim at opponent goal (Part B).
+- `tools/analyze_trace.py`: new `goalie_tactical_pct` KPI — distinguishes
+  "tactically positioning" from "stuck." Ball far → goalie should be
+  forward; ball near → goalie near line + tracking Y.
+- `robocup.world`: removed hardcoded `soccer_ball` model (was always at
+  0,0, blocking scenario-specified ball positions). Ball now spawned solely
+  by `json_spawner.py` from scenario JSON.
+- `football.urdf`: ported world-ball physics (mass 0.4, restitution 1.0,
+  friction 0.01, velocity_decay 0.002, contact kp/kd/max_vel/min_depth).
+- `scenario/3vs3_goal_kick_blue.json`: goal-kick test scenario (ball at
+  -3.5,1.0, goalie at -4.0,1.0, red in own half).
+
+### Phase 2b+2c — Test infrastructure (commit `3266b40`)
+- `tests/test_non_functional.py`: 5 slow tests (2 scenarios), 4 helpers
+  (`run_match_headless`, `compute_composite`, `load_kpi_targets`,
+  `assert_kpi_in_range`). Composite score formula (spec §5.2):
+  `0.4*goal_diff + 0.3*tac_score + 0.2*possession + 0.1*latency`.
+- `pytest.ini`: registers `@pytest.mark.slow` marker.
+- `conftest.py`: `--skip-slow` flag implementation.
+- `scenario/3vs3_default/`: new package (same positions as TC-01).
+- Two-tier: fast (`--skip-slow`, ~2s, 91 unit tests) + slow (~140s/test,
+  real Gazebo matches with KPI assertions).
+
+### Documentation (commit `3266b40`, 19 files)
+- KB power files: `6_DATA` (V6.2 Addendum — test system, composite formula,
+  kpi_targets schema), `META_ROUTER` (2 new routing rows), `3_AI` (goalie
+  idle status update), `5_HYBRID` (Docker colcon rebuild procedure with
+  full numpy/ndarrayobject.h diagnosis).
+- FAQ: Q3 rewritten (batch_evaluator → regression suite), Q16 (14→15 KPIs),
+  Q18 (Phase 2a implemented), Q24 new (regression suite + pytest marker
+  explanation).
+- User docs: `7_03` §6.5 (full pytest marker explanation, two-tier table,
+  composite formula, kpi_targets schema), `7_05` §5.5 (regression suite
+  commands), `00_MASTER_INDEX` (4 new glossary entries), `1_01` (v6.2 note).
+- `AGENTS.md`: test section expanded (two-tier, composite formula), build
+  section expanded (U24 Docker colcon + stale cache fix), gotchas expanded
+  (Docker colcon rebuild with full diagnosis).
+- `Dockerfile`: comment near numpy pin (stale cache fix, cross-refs AGENTS.md).
+
+### Kick fix — Critical bug (commit `1fc480c`)
+- `football.urdf`: removed `libgazebo_ros_planar_move.so` plugin. The plugin
+  was overriding ball velocity to zero every physics tick, killing phantom
+  kicks (ball moved only ~6cm per kick). No code publishes to `/ball/cmd_vel`,
+  so the plugin was dead code that actively harmed the kick mechanism.
+- Verified: 7 kick events in 60s, max ball speed 1.56m/frame (~15m/s),
+  referee ball resets (corner_kick_in, ball_out) work correctly.
+
+### Phase 2d — Scenario package migration (commit `1fc480c`)
+- `setup_r2k.py`: reads `scenario/<name>/scenario.json` (package) first,
+  falls back to `scenario/<name>.json` (flat). Backward compatible.
+
+### Phase 2e — 27-run baseline (commit `1fc480c`)
+- `tools/run_baseline.sh`: 27-run baseline runner (9 scenarios × 3 × 120s).
+  `set +e` (don't exit on watchdog kill), container restart between runs.
+- Run via `systemd-run --user` to survive shell session timeouts.
+- **Before kick fix (broken kicks):** 2 goals scored, 0 conceded, avg
+  composite 0.35, avg goalie idle 95.5%, avg OOB 0.5%.
+- **After kick fix (working kicks):** 8 goals scored, 20 conceded, avg
+  composite 0.33, avg goalie idle 86.5%, avg OOB 12.6%.
+- Composite scores per scenario: attack_center 0.38, attack_wing 0.37,
+  def_transition 0.35, fast_counter 0.32, contain_delay 0.32,
+  defensive_crisis 0.29, pressing_trap 0.30, high_line 0.26,
+  long_shot 0.38.
+
+### Phase 2f — 3 worst scenarios + threshold calibration (commit `1fc480c`)
+- `test_non_functional.py`: +6 slow tests for 3 worst by composite:
+  `3vs3_high_line` (0.26), `3vs3_contain_delay` (0.32), `3vs3_long_shot`
+  (0.38). Tests composite, OOB, cluster, goalie_idle, goalie_tactical_pct.
+- All 11 `kpi_targets.json` recalibrated from post-kick-fix baseline with
+  30-50% margin. min/max semantics fixed: "lower is better" metrics have
+  min=0; "higher is better" metrics have max=upper bound.
+- `def_transition` OOB max 67.3% (high but realistic — bots push forward
+  without defensive cover). `long_shot` OOB max 37% (long kicks fly out).
+
+### Docker colcon rebuild error (diagnosed + documented)
+- `colcon build` failed with `numpy/ndarrayobject.h: No such file or directory`.
+- Root cause: stale cached artifacts in `ros2_ws/build/`. NOT a missing
+  numpy installation.
+- Fix: `rm -rf build install`, then re-run `colcon build`. The rosidl CMake
+  fallback (`python3 -c "import numpy; print(numpy.get_include())"`)
+  resolves the path automatically on a clean build.
+- Red herrings documented: do NOT install `python3-numpy-dev`, set `CFLAGS`,
+  or pass `--cmake-args -DNumPy_INCLUDE_DIR=...`.
+- Full diagnosis documented in AGENTS.md, KB `5_HYBRID_INFRASTRUCTURE_V5.md`,
+  and Dockerfile comment.
+
+**Files touched:**
+- `core/src/ai_tactics/ollama_sandbox_bridge.py` (goalie blending, role-aware kick)
+- `core/src/tools/analyze_trace.py` (goalie_tactical_pct KPI)
+- `core/src/ros2_ws/src/box_bot_description/worlds/robocup.world` (removed ball)
+- `core/src/ros2_ws/src/r2k_scenario_spawner/urdf/football.urdf` (physics port + plugin removal)
+- `core/src/setup_r2k.py` (package folder support)
+- `core/src/tests/test_non_functional.py` (NEW — 11 slow tests)
+- `core/src/pytest.ini` (NEW — slow marker)
+- `core/src/conftest.py` (NEW — --skip-slow)
+- `core/src/tools/run_baseline.sh` (NEW — 27-run baseline runner)
+- `core/src/scenario/3vs3_goal_kick_blue.json` (NEW — goal-kick test scenario)
+- `core/src/scenario/3vs3_default/` (NEW — package: scenario.json, field_diagram.png, analysis.md, kpi_targets.json)
+- `core/src/scenario/*/kpi_targets.json` (11 files — recalibrated thresholds)
+- `core/src/ros2k_knowledge/3_AI_LOGIC_AND_EDGE_CASES.md` (goalie idle status)
+- `core/src/ros2k_knowledge/5_HYBRID_INFRASTRUCTURE_V5.md` (Docker rebuild procedure)
+- `core/src/ros2k_knowledge/6_DATA_SCHEMAS_AND_LIFECYCLE.md` (V6.2 Addendum — test system)
+- `core/src/ros2k_knowledge/META_KNOWLEDGE_ROUTER.md` (routing rows + glossary)
+- `core/src/ros2k_knowledge/ROS2K_GEM_FAQ.md` (Q3/Q16/Q18/Q24)
+- `core/AGENTS.md` (test + build + gotchas sections expanded)
+- `core/src/Dockerfile` (numpy cache comment)
+- `core/user doc/rosk2_technical_documentation/00_MASTER_INDEX.md` (glossary)
+- `core/user doc/rosk2_technical_documentation/1_01_INTRODUCTION_Overall_Architecture.md` (v6.2 note)
+- `core/user doc/rosk2_technical_documentation/7_03_CHEATPAGE_Tools_and_Utils.md` (§6.5)
+- `core/user doc/rosk2_technical_documentation/7_05_CHEATPAGE_Experiment_Guide.md` (§5.5)
+- `.gitignore` (results/kpis_baseline_*.json + baseline logs)
+- `core/docs/SESSION_CHANGELOG.md` (this entry)
+
+**New files (untracked):**
+- `core/src/tests/test_non_functional.py`
+- `core/src/pytest.ini`
+- `core/src/conftest.py`
+- `core/src/tools/run_baseline.sh`
+- `core/src/scenario/3vs3_goal_kick_blue.json`
+- `core/src/scenario/3vs3_default/` (4 files)
+
+**Files deleted:**
+- (none)
+
+**Not yet done:**
+- Warm-up call fix in `launch_r2k.sh` (curl warm-up after Ollama check,
+  ~3 lines) — prevents cold-boot dead-blue-team. Deferred from 2026-07-23.
+- Visualizer blitting refactor still untested with live ROS 2 + Gazebo
+  (carried from 2026-07-14).
+- Goalie-kick prompt rule (Phase 4b — `rules_goal_kick.txt` +
+  `samples_goal_kick.txt`) — deferred to Phase 4 per spec.
+- `run_baseline.sh` container restart between runs is fragile (watchdog
+  kills gzserver, `docker compose down` destroys container). `systemd-run`
+  workaround works but is not robust for unattended runs.
+- Push 3 unpushed commits to origin.
+
+**Next:**
+- Phase 3: Model Comparison — `ollama pull cosmos`, run 135 runs (9 scenarios
+  × 3 models × 5 runs), compare via regression suite, commit winning model.
+- The user asked about which cosmos model is closest to qwen2.5-coder:3b
+  by size — this needs to be resolved before Phase 3 (check Ollama registry
+  for cosmos model sizes).
+
+**Blockers:**
+- `run_baseline.sh` reliability: watchdog + `docker compose down` race
+  condition makes unattended baseline runs fragile. The `systemd-run`
+  approach works but the script needs hardening (e.g., longer sleep after
+  container restart, or suppress watchdog during baseline runs).
+- Phase 3 requires `ollama pull cosmos` — cosmos model size/variant not
+  yet determined. Need to check Ollama registry for available cosmos models
+  closest to qwen2.5-coder:3b (~2GB).

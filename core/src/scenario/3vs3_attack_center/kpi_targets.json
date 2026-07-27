@@ -1,0 +1,38 @@
+{
+  "scenario_name": "3vs3_attack_center",
+  "composite_score": {
+    "min": 0.27,
+    "max": 1.0,
+    "note": "calibrated from post-kick-fix 27-run baseline"
+  },
+  "oob_pct": {
+    "min": 0.0,
+    "max": 6.8,
+    "note": "lower is better (0% ideal)"
+  },
+  "cluster_pct": {
+    "min": 0.0,
+    "max": 67.2,
+    "note": "lower is better (0% ideal)"
+  },
+  "goalie_idle_pct": {
+    "min": 0.0,
+    "max": 100.0,
+    "note": "lower is better (structural limit ~70% after Phase 2a)"
+  },
+  "latency_p50": {
+    "min": 0,
+    "max": 882,
+    "note": "lower is better"
+  },
+  "ball_possession_blue_pct": {
+    "min": 45.1,
+    "max": 100.0,
+    "note": "higher is better"
+  },
+  "goals_for_blue": {
+    "min": 0,
+    "max": 4,
+    "note": "higher is better"
+  }
+}

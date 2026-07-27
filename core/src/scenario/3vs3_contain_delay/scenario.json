@@ -1,0 +1,14 @@
+{
+  "scenario_name": "3vs3_contain_delay",
+  "mode": "3vs3",
+  "tactical_situation": "Red has possession, blue outnumbered — contain and delay",
+  "entities": {
+    "soccer_ball": {"x": -0.9, "y": 0.45},
+    "blue_1": {"x": -3.5, "y": 0.3},
+    "blue_2": {"x": -2.0, "y": 0.5},
+    "blue_3": {"x": -1.5, "y": -0.8},
+    "red_1": {"x": -0.8, "y": 0.5},
+    "red_2": {"x": 0.3, "y": 0.0},
+    "red_3": {"x": 0.5, "y": -0.3}
+  }
+}

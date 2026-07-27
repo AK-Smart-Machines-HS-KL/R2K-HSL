@@ -2,9 +2,11 @@
 id: META_ROUTER
 title: "Semantic Glossary & Routing Matrix (Inverted Index)"
 type: KNOWLEDGE_BASE_POWER_FILE
-tags: [router, glossary, index, rag, meta, flat-json, phantom-kick, setup_r2k, active_relay, watchdog, hybrid-os, uros_ws, xid-31, mermaid, v6, v6.1, foul, ball-out, kick-in, momentum, reward-node, batch-evaluator, aggression, set-piece, goal-kick, corner-kick-in, kickoff, own-half-warp, blitting, referee-rulebook, trace-logging, llm-trace, world-trace, r2k-run-id, analyze-trace, kpi, prompt-disentanglement, dump-prompt, strat-artifact, goalie-idle, red-p1-p5, blocking-avoidance, headless-gzserver, docker-env-passthrough]
-last_modified: 2026-07-15
-version: v6.1
+tags: [router, glossary, index, rag, meta, flat-json, phantom-kick, setup_r2k, active_relay, watchdog, hybrid-os, uros_ws, xid-31, mermaid, v6, v6.1, v6.2, foul, ball-out, kick-in, momentum, reward-node, batch-evaluator, aggression, set-piece, goal-kick, corner-kick-in, kickoff, own-half-warp, blitting, referee-rulebook, trace-logging, llm-trace, world-trace, r2k-run-id, analyze-trace, kpi, prompt-disentanglement, dump-prompt, strat-artifact, goalie-idle, red-p1-p5, blocking-avoidance, headless-gzserver, docker-env-passthrough, test-non-functional, composite-score, pytest, regression-suite, kpi-targets, skip-slow]
+last_modified: 2026-07-25
+version: v6.2
+last_modified: 2026-07-22
+version: v6.2
 ---
 # Semantic Glossary & Routing Matrix
 
@@ -28,9 +30,12 @@ This section strictly defines architectural components to prevent hallucinated s
 * **V6 Reward Node ('reward_node.py') [NEW in v6]:**
   * *Definition:* 1Hz ROS 2 node publishing tactical rewards (-10..+10 scale) on '/tactical_reward'. Computes decision deltas (score before/after action) and foul penalties (fixed -1).
   * *Constraint:* Two code paths (mtime-polling for decisions, '/match_state' subscription for fouls) must not be mixed.
-* **V6 Batch Evaluator ('batch_evaluator.py') [NEW in v6]:**
-  * *Definition:* Headless orchestrator for automated scenario evaluation. Subscribes to '/tactical_score', '/tactical_reward', '/match_state', '/world_positions' and writes 'eval_results.json'.
-  * *Constraint:* Must NOT kill 'ollama' on teardown — only ROS nodes and Gazebo.
+* **V6 Batch Evaluator ('batch_evaluator.py') [NEW in v6, DEPRECATED in v6.2]:**
+  * *Definition:* Headless orchestrator for automated scenario evaluation. Designed to subscribe to ROS topics and write 'eval_results.json'.
+  * *Constraint:* **KPI collection is broken** (TODO at line 91 — never implemented). The file exists and can launch matches but produces no KPI data. Deprecated in v6.2 — replaced by `tests/test_non_functional.py` (shared regression suite, implemented Phase 2b, 2026-07-25).
+* **V6.2 Shared Regression Suite ('tests/test_non_functional.py') [NEW in v6.2]:**
+  * *Definition:* Pytest-based regression suite of real 120s Gazebo matches with per-scenario KPI assertions. Two-tier: fast (`--skip-slow`, ~2s, 91 unit tests) and slow (`@pytest.mark.slow`, ~140s per test, real matches). Helpers: `run_match_headless()`, `compute_composite()`, `load_kpi_targets()`, `assert_kpi_in_range()`. Asserts per-scenario `kpi_targets.json` thresholds.
+  * *Constraint:* Slow tests require live ROS 2 + Gazebo + Ollama. Fast tests skip gracefully. Thresholds calibrated from the 27-run baseline (Phase 2e, not yet run — current values are spec estimates). `goalie_tactical_pct` (Phase 2a KPI, distinguishes positioning from stuck) is asserted `>= 60%`.
 * **V6.1 Referee Rulebook ('core/docs/referee_rulebook.md') [NEW in v6.1]:**
   * *Definition:* Standalone Markdown document (not a RAG power-file, but referenced by the routing matrix). Complete catalog of every referee decision: triggers, consequences, scoring, timing, freeze enforcement, field layout, state machine, and visualizer event labels. Includes 2D field diagrams and mermaid flowcharts.
   * *Constraint:* Read this BEFORE changing any referee rule, threshold, or visualizer label. The rulebook is the single source of truth — the V6 addendum in `2_ROS2_PROTOCOLS_AND_FRAMES.md` is a summary; the rulebook is authoritative.
@@ -70,6 +75,8 @@ If the user query involves [SYMPTOM / KEYWORD], explicitly retrieve and referenc
 | **[V6.1]** `llm_trace`, `world_trace`, trace logging, `R2K_RUN_ID`, `analyze_trace.py`, KPI measurement, latency p50/p95, parse_error_rate, role_diversity, cluster_pct, goalie_idle_pct, oob_pct, ball possession, observability layer, third decoupled channel | **'6_DATA_SCHEMAS_AND_LIFECYCLE.md' §V6.1 Addendum** + **'1_CORE_ARCHITECTURE_AND_SYNC.md' §V6.1 Addendum** |
 | **[V6.1]** `strat_*.txt` removal, prompt disentanglement, `dump_prompt.py`, sample-override, strategy-specific samples, fragment assembly order, `R2K_INCLUDE_MATCH_STATE`, match_state injection, goalie idle structural limitation, bridge PD controller, red P1-P5, red boundary clamp, red blocking avoidance, red freeze bug, `restart_team` freeze check | **'3_AI_LOGIC_AND_EDGE_CASES.md' §V6.1 Addendum** |
 | **[V6.1]** Headless Gazebo, `gzserver` only, `--headless` flag, `headless:=true`, Docker env passthrough, `R2K_RUN_ID` Docker, `R2K_OLLAMA_MODEL` Docker, `docker exec -e` | **'5_HYBRID_INFRASTRUCTURE_V5.md' §V6.1 Addendum** |
+| **[V6.2]** `test_non_functional`, `pytest`, `--skip-slow`, regression suite, slow marker, fast tier, slow tier, composite score, `compute_composite`, `goal_diff_norm`, `tac_score_norm`, `possession_norm`, `latency_factor`, `kpi_targets.json`, per-scenario thresholds, `run_match_headless`, `goalie_tactical_pct` | **'6_DATA_SCHEMAS_AND_LIFECYCLE.md' §V6.2 Addendum** |
+| **[V6.2]** Docker colcon rebuild, `numpy/ndarrayobject.h` not found, stale build cache, `rm -rf build install`, rosidl CMake numpy fallback, `docker compose up -d`, `docker exec colcon build` | **'5_HYBRID_INFRASTRUCTURE_V5.md' §V6.2 Addendum** |
 
 ## 3. Mermaid Rendering Constraints
 > **CRITICAL DIRECTIVE FOR LLMs:** To prevent fatal parsing errors in our documentation renderer, all Mermaid `graph TD` diagrams MUST strictly adhere to the following syntax limitations. DO NOT use advanced brackets.
