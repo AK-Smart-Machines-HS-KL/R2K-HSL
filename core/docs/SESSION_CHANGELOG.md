@@ -1834,3 +1834,170 @@ German with English technical terms. 5 modules + front/back matter:
   from 2026-07-14)
 - Ollama GPU on U24: was diagnosed this session (cold-boot race), warm-up
   mitigation documented but NOT coded in `launch_r2k.sh` yet
+
+## 2026-07-27 — Phase 2 complete: goalie blending, test suite, kick fix, 27-run baseline
+
+**Goal:** Implement Phase 2 (goalie fix + shared test suite + 27-run baseline +
+threshold calibration). Fix broken kicks discovered during baseline. Document
+test infrastructure across KB, FAQ, and user docs.
+
+**Done:**
+
+### Phase 2a — Goalie smooth blending (commit `b5fb120`)
+- `ollama_sandbox_bridge.py`: 10 field-size-relative `GOALIE_*` blending
+  parameters (as % of field half-length/width), `smoothstep()` helper at
+  module scope. Goalie blending block in `state_cb`: smooth transition
+  between goal-line positioning (ball near) and angle-block (ball far),
+  70% tactical + 30% LLM influence, deadband eliminates micro-oscillations.
+  Skips when `action=='kick'` (Part A). Role-aware kick direction: goalie
+  clears upfield, non-goalie bots aim at opponent goal (Part B).
+- `tools/analyze_trace.py`: new `goalie_tactical_pct` KPI — distinguishes
+  "tactically positioning" from "stuck." Ball far → goalie should be
+  forward; ball near → goalie near line + tracking Y.
+- `robocup.world`: removed hardcoded `soccer_ball` model (was always at
+  0,0, blocking scenario-specified ball positions). Ball now spawned solely
+  by `json_spawner.py` from scenario JSON.
+- `football.urdf`: ported world-ball physics (mass 0.4, restitution 1.0,
+  friction 0.01, velocity_decay 0.002, contact kp/kd/max_vel/min_depth).
+- `scenario/3vs3_goal_kick_blue.json`: goal-kick test scenario (ball at
+  -3.5,1.0, goalie at -4.0,1.0, red in own half).
+
+### Phase 2b+2c — Test infrastructure (commit `3266b40`)
+- `tests/test_non_functional.py`: 5 slow tests (2 scenarios), 4 helpers
+  (`run_match_headless`, `compute_composite`, `load_kpi_targets`,
+  `assert_kpi_in_range`). Composite score formula (spec §5.2):
+  `0.4*goal_diff + 0.3*tac_score + 0.2*possession + 0.1*latency`.
+- `pytest.ini`: registers `@pytest.mark.slow` marker.
+- `conftest.py`: `--skip-slow` flag implementation.
+- `scenario/3vs3_default/`: new package (same positions as TC-01).
+- Two-tier: fast (`--skip-slow`, ~2s, 91 unit tests) + slow (~140s/test,
+  real Gazebo matches with KPI assertions).
+
+### Documentation (commit `3266b40`, 19 files)
+- KB power files: `6_DATA` (V6.2 Addendum — test system, composite formula,
+  kpi_targets schema), `META_ROUTER` (2 new routing rows), `3_AI` (goalie
+  idle status update), `5_HYBRID` (Docker colcon rebuild procedure with
+  full numpy/ndarrayobject.h diagnosis).
+- FAQ: Q3 rewritten (batch_evaluator → regression suite), Q16 (14→15 KPIs),
+  Q18 (Phase 2a implemented), Q24 new (regression suite + pytest marker
+  explanation).
+- User docs: `7_03` §6.5 (full pytest marker explanation, two-tier table,
+  composite formula, kpi_targets schema), `7_05` §5.5 (regression suite
+  commands), `00_MASTER_INDEX` (4 new glossary entries), `1_01` (v6.2 note).
+- `AGENTS.md`: test section expanded (two-tier, composite formula), build
+  section expanded (U24 Docker colcon + stale cache fix), gotchas expanded
+  (Docker colcon rebuild with full diagnosis).
+- `Dockerfile`: comment near numpy pin (stale cache fix, cross-refs AGENTS.md).
+
+### Kick fix — Critical bug (commit `1fc480c`)
+- `football.urdf`: removed `libgazebo_ros_planar_move.so` plugin. The plugin
+  was overriding ball velocity to zero every physics tick, killing phantom
+  kicks (ball moved only ~6cm per kick). No code publishes to `/ball/cmd_vel`,
+  so the plugin was dead code that actively harmed the kick mechanism.
+- Verified: 7 kick events in 60s, max ball speed 1.56m/frame (~15m/s),
+  referee ball resets (corner_kick_in, ball_out) work correctly.
+
+### Phase 2d — Scenario package migration (commit `1fc480c`)
+- `setup_r2k.py`: reads `scenario/<name>/scenario.json` (package) first,
+  falls back to `scenario/<name>.json` (flat). Backward compatible.
+
+### Phase 2e — 27-run baseline (commit `1fc480c`)
+- `tools/run_baseline.sh`: 27-run baseline runner (9 scenarios × 3 × 120s).
+  `set +e` (don't exit on watchdog kill), container restart between runs.
+- Run via `systemd-run --user` to survive shell session timeouts.
+- **Before kick fix (broken kicks):** 2 goals scored, 0 conceded, avg
+  composite 0.35, avg goalie idle 95.5%, avg OOB 0.5%.
+- **After kick fix (working kicks):** 8 goals scored, 20 conceded, avg
+  composite 0.33, avg goalie idle 86.5%, avg OOB 12.6%.
+- Composite scores per scenario: attack_center 0.38, attack_wing 0.37,
+  def_transition 0.35, fast_counter 0.32, contain_delay 0.32,
+  defensive_crisis 0.29, pressing_trap 0.30, high_line 0.26,
+  long_shot 0.38.
+
+### Phase 2f — 3 worst scenarios + threshold calibration (commit `1fc480c`)
+- `test_non_functional.py`: +6 slow tests for 3 worst by composite:
+  `3vs3_high_line` (0.26), `3vs3_contain_delay` (0.32), `3vs3_long_shot`
+  (0.38). Tests composite, OOB, cluster, goalie_idle, goalie_tactical_pct.
+- All 11 `kpi_targets.json` recalibrated from post-kick-fix baseline with
+  30-50% margin. min/max semantics fixed: "lower is better" metrics have
+  min=0; "higher is better" metrics have max=upper bound.
+- `def_transition` OOB max 67.3% (high but realistic — bots push forward
+  without defensive cover). `long_shot` OOB max 37% (long kicks fly out).
+
+### Docker colcon rebuild error (diagnosed + documented)
+- `colcon build` failed with `numpy/ndarrayobject.h: No such file or directory`.
+- Root cause: stale cached artifacts in `ros2_ws/build/`. NOT a missing
+  numpy installation.
+- Fix: `rm -rf build install`, then re-run `colcon build`. The rosidl CMake
+  fallback (`python3 -c "import numpy; print(numpy.get_include())"`)
+  resolves the path automatically on a clean build.
+- Red herrings documented: do NOT install `python3-numpy-dev`, set `CFLAGS`,
+  or pass `--cmake-args -DNumPy_INCLUDE_DIR=...`.
+- Full diagnosis documented in AGENTS.md, KB `5_HYBRID_INFRASTRUCTURE_V5.md`,
+  and Dockerfile comment.
+
+**Files touched:**
+- `core/src/ai_tactics/ollama_sandbox_bridge.py` (goalie blending, role-aware kick)
+- `core/src/tools/analyze_trace.py` (goalie_tactical_pct KPI)
+- `core/src/ros2_ws/src/box_bot_description/worlds/robocup.world` (removed ball)
+- `core/src/ros2_ws/src/r2k_scenario_spawner/urdf/football.urdf` (physics port + plugin removal)
+- `core/src/setup_r2k.py` (package folder support)
+- `core/src/tests/test_non_functional.py` (NEW — 11 slow tests)
+- `core/src/pytest.ini` (NEW — slow marker)
+- `core/src/conftest.py` (NEW — --skip-slow)
+- `core/src/tools/run_baseline.sh` (NEW — 27-run baseline runner)
+- `core/src/scenario/3vs3_goal_kick_blue.json` (NEW — goal-kick test scenario)
+- `core/src/scenario/3vs3_default/` (NEW — package: scenario.json, field_diagram.png, analysis.md, kpi_targets.json)
+- `core/src/scenario/*/kpi_targets.json` (11 files — recalibrated thresholds)
+- `core/src/ros2k_knowledge/3_AI_LOGIC_AND_EDGE_CASES.md` (goalie idle status)
+- `core/src/ros2k_knowledge/5_HYBRID_INFRASTRUCTURE_V5.md` (Docker rebuild procedure)
+- `core/src/ros2k_knowledge/6_DATA_SCHEMAS_AND_LIFECYCLE.md` (V6.2 Addendum — test system)
+- `core/src/ros2k_knowledge/META_KNOWLEDGE_ROUTER.md` (routing rows + glossary)
+- `core/src/ros2k_knowledge/ROS2K_GEM_FAQ.md` (Q3/Q16/Q18/Q24)
+- `core/AGENTS.md` (test + build + gotchas sections expanded)
+- `core/src/Dockerfile` (numpy cache comment)
+- `core/user doc/rosk2_technical_documentation/00_MASTER_INDEX.md` (glossary)
+- `core/user doc/rosk2_technical_documentation/1_01_INTRODUCTION_Overall_Architecture.md` (v6.2 note)
+- `core/user doc/rosk2_technical_documentation/7_03_CHEATPAGE_Tools_and_Utils.md` (§6.5)
+- `core/user doc/rosk2_technical_documentation/7_05_CHEATPAGE_Experiment_Guide.md` (§5.5)
+- `.gitignore` (results/kpis_baseline_*.json + baseline logs)
+- `core/docs/SESSION_CHANGELOG.md` (this entry)
+
+**New files (untracked):**
+- `core/src/tests/test_non_functional.py`
+- `core/src/pytest.ini`
+- `core/src/conftest.py`
+- `core/src/tools/run_baseline.sh`
+- `core/src/scenario/3vs3_goal_kick_blue.json`
+- `core/src/scenario/3vs3_default/` (4 files)
+
+**Files deleted:**
+- (none)
+
+**Not yet done:**
+- Warm-up call fix in `launch_r2k.sh` (curl warm-up after Ollama check,
+  ~3 lines) — prevents cold-boot dead-blue-team. Deferred from 2026-07-23.
+- Visualizer blitting refactor still untested with live ROS 2 + Gazebo
+  (carried from 2026-07-14).
+- Goalie-kick prompt rule (Phase 4b — `rules_goal_kick.txt` +
+  `samples_goal_kick.txt`) — deferred to Phase 4 per spec.
+- `run_baseline.sh` container restart between runs is fragile (watchdog
+  kills gzserver, `docker compose down` destroys container). `systemd-run`
+  workaround works but is not robust for unattended runs.
+- Push 3 unpushed commits to origin.
+
+**Next:**
+- Phase 3: Model Comparison — `ollama pull cosmos`, run 135 runs (9 scenarios
+  × 3 models × 5 runs), compare via regression suite, commit winning model.
+- The user asked about which cosmos model is closest to qwen2.5-coder:3b
+  by size — this needs to be resolved before Phase 3 (check Ollama registry
+  for cosmos model sizes).
+
+**Blockers:**
+- `run_baseline.sh` reliability: watchdog + `docker compose down` race
+  condition makes unattended baseline runs fragile. The `systemd-run`
+  approach works but the script needs hardening (e.g., longer sleep after
+  container restart, or suppress watchdog during baseline runs).
+- Phase 3 requires `ollama pull cosmos` — cosmos model size/variant not
+  yet determined. Need to check Ollama registry for available cosmos models
+  closest to qwen2.5-coder:3b (~2GB).
