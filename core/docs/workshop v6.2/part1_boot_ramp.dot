@@ -1,0 +1,229 @@
+digraph ROS2K_Boot {
+    graph [
+        rankdir=TB
+        fontname="FreeSerif"
+        fontsize=11
+        labelloc="t"
+        label="ROS2K v6.2 — Part 1/2: Boot & Ramp Phase\nlaunch_r2k.sh → setup_r2k.py → fragment assembly → node ignition\n\nLegend:  ⏱ timing   ▶ output   ◀ input   dotted=boot setup   ⬡ .json   note=.txt\nShapes:  ▭ .py code   ⬡ .json data   note=.txt prompt   component=Ollama\n\ntop of Part 2 = bottom of Part 1 (match the ① ② ③ ④ ⑤ marks)"
+        compound=true
+        splines=true
+        nodesep=0.15
+        ranksep=0.6
+        size="7.5,10.5!"
+        ratio=compress
+    ]
+    node [fontname="FreeSerif", fontsize=8, margin="0.07,0.04"]
+    edge [fontname="FreeSerif", fontsize=8, color="#555555", arrowsize=0.6]
+
+    // ====== HANDOFF HEADER (matches Part 2 bottom) ======
+    subgraph cluster_handoff_top {
+        label=""
+        style=invis
+        HANDOFF_TOP [label="① Gazebo launched   ② Bots spawned   ③ Ollama warmed   ④ system_prompt.txt assembled   ⑤ active_relay.json + active_scenario.json copied", shape=box, style="rounded,filled", fillcolor="#FFFDE7", color="#F9A825", fontsize=7, fontcolor="#5D4037"]
+    }
+
+    // ====== PHASE 1: CLI FLAGS ======
+    subgraph cluster_cli {
+        label="Phase 1: CLI Flags (launch_r2k.sh:10-58)"
+        style="rounded,filled"
+        fillcolor="#ECEFF1"
+        color="#455A64"
+        fontsize=9
+
+        CLI [label="launch_r2k.sh\nsrc/launch_r2k.sh\n\n--scenario 2vs2_default\n--strategy strat_aggro\n--model qwen2.5-coder:3b\n--relay only_sim_bots\n--explain / --no-explain\n--headless  --duration N", fillcolor="#CFD8DC", color="#455A64", shape=box, style="rounded,filled"]
+    }
+
+    // ====== PHASE 2: ENVIRONMENT & STATE WIPE ======
+    subgraph cluster_env {
+        label="Phase 2: Environment & Wipe (launch_r2k.sh:82-88)"
+        style="rounded,filled"
+        fillcolor="#E8EAF6"
+        color="#283593"
+        fontsize=9
+
+        ENV [label="export ROS_DOMAIN_ID=0\nexport RMW_IMPLEMENTATION=rmw_fastrtps_cpp\nexport R2K_RUN_ID={scenario}_{strategy}_{timestamp}\nmkdir -p shared_state logs\n⏱ wipe shared_state/Worldstate.json\n     + current_strategy.json", fillcolor="#C5CAE9", color="#283593", shape=box, style="rounded,filled"]
+    }
+
+    // ====== PHASE 3: SETUP_R2K.PY (prompt assembly) ======
+    subgraph cluster_setup {
+        label="Phase 3: Prompt Assembly (setup_r2k.py)"
+        style="rounded,filled"
+        fillcolor="#FCE4EC"
+        color="#C2185B"
+        fontsize=9
+
+        SETUP [label="setup_r2k.py\nsrc/setup_r2k.py\n\nreads --scenario --strategy --relay\nassembles fragments → system_prompt.txt\ncopies relay → active_relay.json\ncopies scenario → active_scenario.json", fillcolor="#F8BBD0", color="#C2185B", shape=box, style="rounded,filled"]
+    }
+
+    // ====== FRAGMENTS (prompt building blocks) ======
+    subgraph cluster_fragments {
+        label="strategy/fragments/  (.txt building blocks)"
+        style="rounded,filled"
+        fillcolor="#FFF3E0"
+        color="#E65100"
+        fontsize=9
+
+        FRAG_HEADER [label="header.txt\npersona + mode + bot list\n+ {{EXPLAIN_INSTRUCTION}}", fillcolor="#FFE0B2", color="#E65100", shape=note, style="filled"]
+        FRAG_CORE [label="rules_core.txt\nuniversal rules\n(stay inside, goalie x=-4.0)", fillcolor="#FFE0B2", color="#E65100", shape=note, style="filled"]
+        FRAG_RULES [label="rules_{strategy}.txt\nor rules_{mode}.txt\n(3vs3, 2vs2, aggro, recover...)", fillcolor="#FFE0B2", color="#E65100", shape=note, style="filled"]
+        FRAG_SAMPLES [label="samples_{strategy}.txt\nor samples_{mode}.txt\nfew-shot EXAMPLE/INPUT/ASSISTANT\n(B-study: 1 sample optimal)", fillcolor="#FFE0B2", color="#E65100", shape=note, style="filled"]
+    }
+
+    // ====== STRATEGIES ======
+    subgraph cluster_strategies {
+        label="--strategy selects fragment set"
+        style="rounded,filled"
+        fillcolor="#E0F2F1"
+        color="#00695C"
+        fontsize=9
+
+        STRAT_AGGRO [label="strat_aggro (default)\nrules_aggro + samples_aggro\n→ aggressive pressing", fillcolor="#B2DFDB", color="#00695C", shape=note, style="filled"]
+        STRAT_DEFAULT [label="strat_default\nrules_default + samples_default\n→ balanced", fillcolor="#B2DFDB", color="#00695C", shape=note, style="filled"]
+        STRAT_RECOVER [label="strat_recover\nrules_recover + samples_recover\n→ defensive transition", fillcolor="#B2DFDB", color="#00695C", shape=note, style="filled"]
+    }
+
+    // ====== SCENARIOS ======
+    subgraph cluster_scenarios {
+        label="scenario/  (--scenario, .json)"
+        style="rounded,filled"
+        fillcolor="#EDE7F6"
+        color="#4527A0"
+        fontsize=9
+
+        SCN_2VS2 [label="2vs2_default.json\n2 blue + 2 red bots", fillcolor="#D1C4E9", color="#4527A0", shape=hexagon, style="filled"]
+        SCN_3VS3 [label="3vs3_attack_center.json\n+ 8 more tactical scenarios\n(pressing_trap, defensive_crisis...)", fillcolor="#D1C4E9", color="#4527A0", shape=hexagon, style="filled"]
+        SCN_PKG [label="scenario/{name}/ packages\nscenario.json + field_diagram.png\n+ analysis.md + kpi_targets.json", fillcolor="#D1C4E9", color="#4527A0", shape=hexagon, style="filled"]
+    }
+
+    // ====== RELAY PROFILES ======
+    subgraph cluster_relays {
+        label="relay/  (--relay, .json)"
+        style="rounded,filled"
+        fillcolor="#FFF8E1"
+        color="#F9A825"
+        fontsize=9
+
+        RELAY_SIM [label="only_sim_bots.json\nall bots virtual (Gazebo)\nno hardware sync", fillcolor="#FFE082", color="#F9A825", shape=hexagon, style="filled"]
+        RELAY_HW [label="hardware_mirror.json\nYahboom → /cmd_vel\nK1 → /LocoApiTopicReq", fillcolor="#FFE082", color="#F9A825", shape=hexagon, style="filled"]
+    }
+
+    // ====== ASSEMBLED OUTPUT FILES ======
+    subgraph cluster_outputs {
+        label="Phase 3 Output: Assembled Runtime Files (ai_tactics/)"
+        style="rounded,filled"
+        fillcolor="#EFEBE9"
+        color="#5D4037"
+        fontsize=9
+
+        PROMPT [label="④ system_prompt.txt\nai_tactics/system_prompt.txt\nassembled from 4 fragments\nregenerated every boot — don't hand-edit", fillcolor="#D7CCC8", color="#5D4037", shape=note, style="filled"]
+        ACTIVE_RELAY [label="⑤ active_relay.json\nai_tactics/active_relay.json\ncopied from relay/{profile}.json", fillcolor="#D7CCC8", color="#5D4037", shape=hexagon, style="filled"]
+        ACTIVE_SCN [label="⑤ active_scenario.json\nai_tactics/active_scenario.json\ncopied from scenario/{name}.json", fillcolor="#D7CCC8", color="#5D4037", shape=hexagon, style="filled"]
+    }
+
+    // ====== PHASE 4: OLLAMA BOOT ======
+    subgraph cluster_ollama_boot {
+        label="Phase 4: Ollama Check & Warm-up (launch_r2k.sh:153-177)"
+        style="rounded,filled"
+        fillcolor="#FFF3E0"
+        color="#E65100"
+        fontsize=9
+
+        OLLAMA_CHECK [label="Ollama Check\ncurl 127.0.0.1:11434/api/tags\nif down → nohup ollama serve\n⏱ sleep 5s if booting", fillcolor="#FFE0B2", color="#E65100", shape=box, style="rounded,filled"]
+        OLLAMA_MODEL [label="Model Check\ncurl /api/tags | grep model\nif missing → exit 1 (pull first)\n⏱ cold boot: model load 30-40s", fillcolor="#FFE0B2", color="#E65100", shape=box, style="rounded,filled"]
+        OLLAMA [label="③ Ollama Server\n127.0.0.1:11434\nqwen2.5-coder:3b (1.8 GiB)\n⏱ warm-up recommended before first match\n(see workshop memo §2.1a)", fillcolor="#FFCC80", color="#E65100", shape=component, style="filled"]
+    }
+
+    // ====== PHASE 5: GAZEBO LAUNCH ======
+    subgraph cluster_gazebo_boot {
+        label="Phase 5: Gazebo Launch (launch_r2k.sh:191-217)"
+        style="rounded,filled"
+        fillcolor="#FFF8E1"
+        color="#F9A825"
+        fontsize=9
+
+        GZ_LAUNCH [label="ros2 launch r2k_scenario_spawner\nsoccer_match.launch.py\n(headless:=true if --headless)\n⏱ sleep 2s for Gazebo API", fillcolor="#FFE082", color="#F9A825", shape=box, style="rounded,filled"]
+        SPAWNER [label="json_spawner.py\nai_tactics/json_spawner.py\nspawns bots from active_scenario.json\ninto Gazebo via /spawn_entity", fillcolor="#FFE082", color="#F9A825", shape=box, style="rounded,filled"]
+        GZ_READY [label="① Gazebo + bots ready\n/gazebo/model_states publishing\n/clock ticking", fillcolor="#FFE082", color="#F9A825", shape=cylinder, style="filled"]
+    }
+
+    // ====== PHASE 6: NODE IGNITION ======
+    subgraph cluster_ignition {
+        label="Phase 6: Node Ignition (launch_r2k.sh:246-256)"
+        style="rounded,filled"
+        fillcolor="#E8F5E9"
+        color="#2E7D32"
+        fontsize=9
+
+        IGNITE [label="⚡ Igniting Realtime Nodes & AI\n⏱ all nodes started in parallel (background &)\n\nros2 run r2k_world_model tracker\npython3 referee_node.py\npython3 score_node.py\npython3 reward_node.py\npython3 state_aggregator.py\npython3 rule_evaluator_red.py\npython3 ollama_sandbox_bridge.py\npython3 -u r2k_evaluator.py", fillcolor="#C8E6C9", color="#2E7D32", shape=box, style="rounded,filled"]
+    }
+
+    // ====== HANDOFF FOOTER (matches Part 2 top) ======
+    subgraph cluster_handoff_bottom {
+        label=""
+        style=invis
+        HANDOFF_BOTTOM [label="═══ HANDOFF TO PART 2: RUNNING SYSTEM ═══\n① Gazebo + bots running   ② Bots spawned   ③ Ollama warmed   ④ system_prompt.txt ready   ⑤ relay+scenario copied\n↓ ↓ ↓ ↓ ↓\nPart 2 starts here: tracker → engine → aggregator → evaluator → bridge → bots", shape=box, style="rounded,filled", fillcolor="#FFFDE7", color="#F9A825", fontsize=8, fontcolor="#5D4037"]
+    }
+
+    // ====== EDGES: BOOT FLOW ======
+    CLI -> ENV [label=" parse flags", color="#455A64", fontcolor="#37474F", penwidth=1.0]
+    ENV -> SETUP [label=" setup env", color="#455A64", fontcolor="#37474F", penwidth=1.0]
+
+    // Fragment assembly
+    FRAG_HEADER -> SETUP [label=" read", color="#E65100", fontcolor="#BF360C", style=dotted, penwidth=0.6]
+    FRAG_CORE -> SETUP [label=" read", color="#E65100", fontcolor="#BF360C", style=dotted, penwidth=0.6]
+    FRAG_RULES -> SETUP [label=" read", color="#E65100", fontcolor="#BF360C", style=dotted, penwidth=0.6]
+    FRAG_SAMPLES -> SETUP [label=" read", color="#E65100", fontcolor="#BF360C", style=dotted, penwidth=0.6]
+
+    // Strategy selects fragments
+    STRAT_AGGRO -> FRAG_RULES [label=" selects", color="#00695C", fontcolor="#004D40", style=dotted, penwidth=0.5]
+    STRAT_AGGRO -> FRAG_SAMPLES [label=" selects", color="#00695C", fontcolor="#004D40", style=dotted, penwidth=0.5]
+    STRAT_DEFAULT -> FRAG_RULES [label=" fallback", color="#00695C", fontcolor="#004D40", style=dotted, penwidth=0.4]
+    STRAT_RECOVER -> FRAG_RULES [label=" selects", color="#00695C", fontcolor="#004D40", style=dotted, penwidth=0.4]
+
+    // Scenario & relay selection
+    SCN_2VS2 -> SETUP [label=" --scenario", color="#4527A0", fontcolor="#311B92", style=dotted, penwidth=0.6]
+    SCN_3VS3 -> SETUP [label=" --scenario", color="#4527A0", fontcolor="#311B92", style=dotted, penwidth=0.6]
+    SCN_PKG -> SETUP [label=" (future)", color="#4527A0", fontcolor="#311B92", style=dotted, penwidth=0.4]
+    RELAY_SIM -> SETUP [label=" --relay", color="#F9A825", fontcolor="#F57F17", style=dotted, penwidth=0.6]
+    RELAY_HW -> SETUP [label=" --relay", color="#F9A825", fontcolor="#F57F17", style=dotted, penwidth=0.6]
+
+    // Setup outputs
+    SETUP -> PROMPT [label=" ④ assemble ▶", color="#C2185B", fontcolor="#880E4F", style=dotted, penwidth=0.8]
+    SETUP -> ACTIVE_RELAY [label=" ⑤ copy ▶", color="#C2185B", fontcolor="#880E4F", style=dotted, penwidth=0.8]
+    SETUP -> ACTIVE_SCN [label=" ⑤ copy ▶", color="#C2185B", fontcolor="#880E4F", style=dotted, penwidth=0.8]
+
+    // Ollama boot
+    ENV -> OLLAMA_CHECK [label=" check AI", color="#E65100", fontcolor="#BF360C", penwidth=1.0]
+    OLLAMA_CHECK -> OLLAMA_MODEL [label=" online?", color="#E65100", fontcolor="#BF360C", penwidth=0.8]
+    OLLAMA_MODEL -> OLLAMA [label=" ③ ready", color="#E65100", fontcolor="#BF360C", penwidth=1.0]
+
+    // Gazebo boot
+    ENV -> GZ_LAUNCH [label=" start sim", color="#F9A825", fontcolor="#F57F17", penwidth=1.0]
+    GZ_LAUNCH -> SPAWNER [label=" ⏱ sleep 2s", color="#F9A825", fontcolor="#F57F17", penwidth=0.8]
+    ACTIVE_SCN -> SPAWNER [label=" read", color="#5D4037", fontcolor="#3E2723", style=dashed, penwidth=0.6]
+    SPAWNER -> GZ_READY [label=" ① spawn ▶", color="#F9A825", fontcolor="#F57F17", penwidth=1.0]
+
+    // Node ignition
+    GZ_READY -> IGNITE [label=" ② bots ready", color="#2E7D32", fontcolor="#1B5E20", penwidth=1.0]
+    OLLAMA -> IGNITE [label=" ③ AI ready", color="#E65100", fontcolor="#BF360C", penwidth=1.0]
+    PROMPT -> IGNITE [label=" ④ prompt ready", color="#C2185B", fontcolor="#880E4F", style=dotted, penwidth=0.6]
+    ACTIVE_RELAY -> IGNITE [label=" ⑤ relay ready", color="#5D4037", fontcolor="#3E2723", style=dotted, penwidth=0.6]
+
+    // Handoff
+    IGNITE -> HANDOFF_BOTTOM [label=" all nodes started", color="#2E7D32", fontcolor="#1B5E20", penwidth=1.5]
+    HANDOFF_TOP -> CLI [style=invis]
+
+    // Vertical grouping (stack vertically, not horizontally)
+    FRAG_HEADER -> FRAG_CORE [style=invis]
+    FRAG_CORE -> FRAG_RULES [style=invis]
+    FRAG_RULES -> FRAG_SAMPLES [style=invis]
+    STRAT_AGGRO -> STRAT_DEFAULT [style=invis]
+    STRAT_DEFAULT -> STRAT_RECOVER [style=invis]
+    SCN_2VS2 -> SCN_3VS3 [style=invis]
+    SCN_3VS3 -> SCN_PKG [style=invis]
+    RELAY_SIM -> RELAY_HW [style=invis]
+    PROMPT -> ACTIVE_RELAY [style=invis]
+    ACTIVE_RELAY -> ACTIVE_SCN [style=invis]
+    OLLAMA_CHECK -> OLLAMA_MODEL [style=invis]
+    GZ_LAUNCH -> SPAWNER [style=invis]
+}
