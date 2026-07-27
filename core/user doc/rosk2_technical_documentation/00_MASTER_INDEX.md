@@ -156,11 +156,25 @@ All RAG files are at `core/src/ros2k_knowledge/` and are at version `v6.1`:
 * **`R2K_RUN_ID`**: Env var exported by `launch_r2k.sh` as
   `${SCENARIO}_${STRATEGY}_$(date)`. Correlates trace files across evaluator and aggregator.
 * **`tools/analyze_trace.py`**: Offline KPI analyzer. Reads `llm_trace` + `world_trace`
-  JSONL files, computes 14 KPIs (goals, cluster%, OOB%, latency p50/p95, etc.).
+  JSONL files, computes 15 KPIs (goals, cluster%, OOB%, goalie_idle%, **goalie_tactical_pct** [V6.2],
+  latency p50/p95, etc.).
 * **`tools/dump_prompt.py`**: Dry-run prompt inspector. Assembles fragments identically
   to `setup_r2k.py` without requiring ROS or Ollama.
-* **`batch_evaluator.py`**: Headless batch orchestrator for systematic evaluation across
-  scenarios, strategies, and models.
+* **`batch_evaluator.py`**: Deprecated in v6.2 (KPI collection never implemented).
+  Replaced by `tests/test_non_functional.py` (shared regression suite).
+* **`tests/test_non_functional.py`**: Shared regression suite (Phase 2b). Two-tier
+  pytest testing: fast (`--skip-slow`, ~2s, unit tests only) and slow
+  (`@pytest.mark.slow`, ~140s per test, real Gazebo matches with KPI assertions).
+  Per-scenario thresholds from `kpi_targets.json`. See
+  [[7_03_CHEATPAGE_Tools_and_Utils]] §6.5.
+* **Composite score**: Weighted KPI formula: `0.4 × goal_diff_norm +
+  0.3 × tac_score_norm + 0.2 × possession_norm + 0.1 × latency_factor`.
+  Computed by `compute_composite()` in `test_non_functional.py`. Range [0, 1].
+* **`--skip-slow`**: pytest flag (via `conftest.py`) that skips all tests
+  carrying the `@pytest.mark.slow` marker. Runs only fast unit tests (~2s).
+* **`@pytest.mark.slow`**: pytest marker (metadata label) tagging tests that
+  run real Gazebo matches. Registered in `pytest.ini`. See
+  [[7_03_CHEATPAGE_Tools_and_Utils]] §6.5.
 * **0.2s Asynchronous Watchdog**: Replaces old `kill_r2k.sh`. Fast-polling loop detecting
   UI closure, fires Kinematic Freeze (Twist-zero / API 2000), then `pkill -9`.
 * **Kinematic Freeze**: Failsafe publishing zero-velocity vectors or API 2000 standby

@@ -1,8 +1,8 @@
 ---
 title: "ROS2K Architecture Mentor - System FAQ (V6.2)"
 type: DOCUMENTATION
-tags: [faq, onboarding, gem-capabilities, q-and-a, ros2, relay, booster-k1, watchdog, hybrid-os, qwen, v6, v6.1, v6.2, momentum, reward, trace-logging, set-piece, headless, kpi, analyze-trace, dump-prompt, goalie-idle, closed-loop]
-last_modified: 2026-07-16
+tags: [faq, onboarding, gem-capabilities, q-and-a, ros2, relay, booster-k1, watchdog, hybrid-os, qwen, v6, v6.1, v6.2, momentum, reward, trace-logging, set-piece, headless, kpi, analyze-trace, dump-prompt, goalie-idle, closed-loop, test-non-functional, composite-score, pytest, regression-suite, kpi-targets, skip-slow]
+last_modified: 2026-07-25
 version: v6.2
 ---
 # ROS2K Architecture Mentor: FAQ & Capabilities
@@ -65,8 +65,9 @@ graph TD
   `./launch_r2k.sh --headless --duration 120 --scenario 3vs3_attack_center --strategy strat_default --relay only_sim_bots`
 * **Use Case 2 (Sim2Real Hardware Test):** Wenn physische Roboter auf dem Feld stehen, die exakt das tun sollen, was in der Simulation passiert.
   `./launch_r2k.sh --scenario 1vs1_default --relay hardware_mirror`
-* **Use Case 3 (Batch-Evaluation, V6.2):** Headless-Multi-Run-Orchestrierung. Hinweis: `batch_evaluator.py` hat derzeit einen offenen Bug in der KPI-Collection (Phase 2b), Workaround siehe [[7_05_CHEATPAGE_Experiment_Guide]] §5.
-  `python3 ai_tactics/batch_evaluator.py --scenarios 3vs3_attack_center --strategies strat_default --models qwen2.5-coder:3b --runs 3 --duration 120`
+* **Use Case 3 (Regression Suite, V6.2):** Headless-Multi-Run mit KPI-Assertions. Ersetzt den deprecated `batch_evaluator.py` (dessen KPI-Collection nie funktionierte). Die Shared Regression Suite (`tests/test_non_functional.py`) nutzt pytest-Marker für Two-Tier-Testing — siehe Q24.
+  `python3 -m pytest tests/test_non_functional.py -v -s  # slow tier (real Gazebo matches)`
+  `python3 -m pytest tests/ --skip-slow -v               # fast tier (unit tests only, ~2s)`
 
 ---
 
@@ -212,8 +213,8 @@ ROS2K nutzt heute **nur Threshold + Hysterese**. Korridor (Bänder mit gradierte
 **Gem:** Drei Schritte, alle offline (kein ROS, kein Ollama nötig):
 
 1. **Während des Laufs:** `launch_r2k.sh:82` exportiert `R2K_RUN_ID="${SCENARIO}_${STRATEGY}_$(date +%Y%m%d_%H%M%S)"`. Der `r2k_evaluator.py` schreibt `logs/llm_trace_<run_id>.jsonl` (eine JSON-Zeile pro LLM-Call), der `state_aggregator.py` schreibt `logs/world_trace_<run_id>.jsonl` (eine Zeile pro 10Hz World-State-Write).
-2. **Nach dem Lauf:** `python3 tools/analyze_trace.py --run-id <ID> --output results/kpis_<ID>.json`. Joint beide Trace-Files per Timestamp, berechnet **14 KPIs**.
-3. **Lesen:** `world_kpis` (Goals, Cluster%, OOB%, Goalie-Idle%, Possession, Tactical-Score Avg/Final, Status-Distribution) + `llm_kpis` (LLM-Calls, Latenz p50/p95/max, Parse-Error-Rate, Role-Diversity, Roles-Counter, Avg-Tokens).
+2. **Nach dem Lauf:** `python3 tools/analyze_trace.py --run-id <ID> --output results/kpis_<ID>.json`. Joint beide Trace-Files per Timestamp, berechnet **15 KPIs** (V6.2: +`goalie_tactical_pct`).
+3. **Lesen:** `world_kpis` (Goals, Cluster%, OOB%, Goalie-Idle%, **Goalie-Tactical%** [V6.2], Possession, Tactical-Score Avg/Final, Status-Distribution) + `llm_kpis` (LLM-Calls, Latenz p50/p95/max, Parse-Error-Rate, Role-Diversity, Roles-Counter, Avg-Tokens).
 
 **Wichtig:** Trace-Files sind gitignored, werden beim Boot **nicht** gelöscht, akkumulieren sich. Manuell aufräumen: `rm src/logs/*.jsonl`. Wenn `R2K_RUN_ID` nicht gesetzt ist, fallen beide Nodes auf `run_{timestamp}` zurück — Traces lassen sich dann nicht mit dem Console-Log korrelieren. Siehe [[7_03_CHEATPAGE_Tools_and_Utils]].
 
@@ -250,7 +251,9 @@ ROS2K nutzt heute **nur Threshold + Hysterese**. Korridor (Bänder mit gradierte
 
 **Root Cause:** Der `ollama_sandbox_bridge.py` PD-Controller verfolgt einen jitterigen ball-Y-Setpoint. Die `smooth_membership` + Low-Pass-Filter reagieren überempfindlich auf Ballpositionsrauschen. Ergebnis: Mikro-Oszillationen, der Goalie "bewegt sich" ohne echte Positionsfortschritte. Die KPI zählt das als Idle (<0.1m Bewegung).
 
-**Implikation:** Goalie-Verhalten **NICHT** durch Prompt-Änderungen, Rollen-Deskriptionen oder Goalie-Positions-Parameter versuchen zu fixen. Die Lösung muss im Bridge-PD-Controller liegen (Smoothing-Faktor, Deadband) — siehe v6.2 Phase 5.1 (Kalman-Filter → glatterer ball-Y-Setpoint → weniger PD-Jitter). Siehe [[7_04_SPECIFICATION_Prompt_Architecture]] §5.
+**Status (V6.2, Phase 2a implementiert 2026-07-25):** Die Bridge nutzt jetzt **Smooth Blending** — 10 feldgrößen-relative `GOALIE_*`-Konstanten + `smoothstep()` für sanften Übergang zwischen Torlinie (Ball nah) und Angle-Block (Ball fern). 70% taktischer Override + 30% LLM-Einfluss. Deadband eliminiert Mikro-Oszillationen. Neue KPI `goalie_tactical_pct` unterscheidet "taktisch positioniert" von "feststecken" — der Goalie IST an der richtigen Position, bewegt sich nur nicht chasen. Die `goalie_idle_pct` bleibt hoch (Deadband hält Position), aber `goalie_tactical_pct` ist 100%. `test_non_functional.py` assertiert `goalie_tactical_pct >= 60%`.
+
+**Implikation:** Goalie-Verhalten **NICHT** durch Prompt-Änderungen, Rollen-Deskriptionen oder Goalie-Positions-Parameter versuchen zu fixen. Die Lösung muss im Bridge-PD-Controller liegen — siehe v6.2 Phase 5.1 (Kalman-Filter → glatterer ball-Y-Setpoint → weniger PD-Jitter). Siehe [[7_04_SPECIFICATION_Prompt_Architecture]] §5.
 
 ---
 
@@ -347,3 +350,43 @@ LLM sieht Welt → LLM gibt Befehl → Bridge führt aus → (KEINE Rückmeldung
 **Wichtiger Hinweis zu `OLLAMA_NUM_PARALLEL`:** Q10 erwähnt `OLLAMA_NUM_PARALLEL=1` als optionales Single-Call-Latenz-Tuning (nicht vom Startskript gesetzt). Für **3 parallele per-bot Calls** muss dieser Wert **≥3** gesetzt werden, sonst serialisiert Ollama sie. Ohne dieses Setting wird aus "parallelen 800ms" serielles 2400ms.
 
 **`ROS_DOMAIN_ID`-Spannung:** Siehe Q12 V6.2-Warnung. Das hardcoded `ROS_DOMAIN_ID=0` (Axiom 4) kollidiert mit N Teilnehmern im selben LAN. Option (a) `launch_r2k.sh` patchen (respektiere vorgesetzten `ROS_DOMAIN_ID`), (b) getrennte VLANs, (c) Kollisionsrisiko akzeptieren. Siehe Workshop-Diskussion Module 5.
+
+---
+
+### Q24 [Team Mitglied]: Was ist die Shared Regression Suite und wie nutze ich sie?
+**User:** "Wie stelle ich sicher, dass meine Code-Änderung nichts kaputt macht?"
+
+**Gem:** Die **Shared Regression Suite** (`tests/test_non_functional.py`, V6.2 Phase 2b) ist ein Two-Tier-pytest-System:
+
+| Tier | Kommando | Was läuft | Dauer |
+|------|----------|-----------|-------|
+| **Fast** | `pytest tests/ --skip-slow` | 91 Unit-Tests (Rule-Logic, Parsing, Set-Piece-Math) | ~2s |
+| **Slow** | `pytest tests/ -v -s` | 91 Unit + reale 120s Gazebo-Matches mit KPI-Assertions | ~10min |
+
+**Was ist ein pytest-Marker?** Ein Marker ist ein Metadaten-Label, das man an eine Test-Funktion hängt. Er ändert nicht, was der Test tut, sondern erlaubt Selektion/Filterung:
+
+```python
+@pytest.mark.slow
+def test_attack_center_performance():
+    ...
+```
+
+`@pytest.mark.slow` taggt die Funktion. Der Marker ist in `pytest.ini` registriert. Das Flag `--skip-slow` (implementiert in `conftest.py`) liest diesen Marker und überspringt alle Tests, die ihn tragen. Das ist der komplette Two-Tier-Mechanismus — ein Marker ist reine Metadaten für Selektion, keine Test-Bedingung oder Assertion.
+
+**Composite Score (spec §5.2):** Jeder Slow-Test berechnet einen gewichteten KPI-Score:
+
+```
+composite = 0.4 * goal_diff_norm + 0.3 * tac_score_norm
+          + 0.2 * possession_norm + 0.1 * latency_factor
+```
+
+Range [0, 1]. Höher ist besser. Gewichtung: 40% Tor-Differenz, 30% Tactical-Score, 20% Possession, 10% Latenz.
+
+**Per-Szenario-Thresholds:** Jedes Szenario-Paket (`scenario/<name>/`) enthält eine `kpi_targets.json` mit akzeptablen KPI-Ranges. Der Test assertet, dass jeder KPI innerhalb seiner Szenario-spezifischen `[min, max]`-Range liegt. Die Thresholds werden in Phase 2e (27-Run-Baseline) aus echten Daten kalibriert — aktuelle Werte sind Spec-Schätzungen.
+
+**Wann was laufen:**
+- Nach jeder Code-Änderung: `pytest tests/ --skip-slow` (Fast-Tier, ~2s Feedback-Loop)
+- Vor Commit: `pytest tests/ -v -s` (Full-Tier, ~10min, fängt Regressionen)
+- Einzelner Slow-Test: `pytest tests/test_non_functional.py::test_attack_center_latency -v -s`
+
+Siehe [[7_03_CHEATPAGE_Tools_and_Utils]] §6.5 für Details.

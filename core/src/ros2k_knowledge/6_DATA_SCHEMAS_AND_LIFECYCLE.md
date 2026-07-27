@@ -1,8 +1,8 @@
 ---
 id: 6_DATA_LIFECYCLE
-title: "Section 6: Data Schemas & System Lifecycle (V6.1)"
+title: "Section 6: Data Schemas & System Lifecycle (V6.2)"
 type: KNOWLEDGE_BASE_POWER_FILE
-tags: [json, schema, rpc, bash, lifecycle, orchestration, setup_r2k, flat-json, relay-profiles, watchdog, cli-ergonomics, active_relay, bashrc-immunity, v6, v6.1, tactical-score, tactical-reward, match-state, eval-results, batch-evaluator, momentum, set-piece, goal-kick, corner-kick-in, own-half-warp, trace-logging, llm-trace, world-trace, r2k-run-id, analyze-trace, kpi]
+tags: [json, schema, rpc, bash, lifecycle, orchestration, setup_r2k, flat-json, relay-profiles, watchdog, cli-ergonomics, active_relay, bashrc-immunity, v6, v6.1, v6.2, tactical-score, tactical-reward, match-state, eval-results, batch-evaluator, momentum, set-piece, goal-kick, corner-kick-in, own-half-warp, trace-logging, llm-trace, world-trace, r2k-run-id, analyze-trace, kpi, test-non-functional, composite-score, pytest, regression-suite, kpi-targets, skip-slow]
 last_modified: 2026-07-22
 version: v6.2
 ---
@@ -149,10 +149,9 @@ echo "✅ Teardown complete. Ports released."
 > Source: `core/docs/optimization_spec_v6.2.md`.
 >
 > **Note (v6.2):** `batch_evaluator.py` KPI collection is broken (TODO line 91).
-> The file is deprecated in v6.2. The planned replacement is
-> `tests/test_non_functional.py` (shared regression suite, Phase 2b, not yet
-> implemented). The `eval_results.json` schema below documents the intended
-> structure for reference.
+> The file is deprecated in v6.2 — replaced by `tests/test_non_functional.py`
+> (shared regression suite, implemented in Phase 2b, 2026-07-25). The
+> `eval_results.json` schema below documents the intended structure for reference.
 
 ### `/match_state` V6 Schema (referee_node.py)
 
@@ -410,3 +409,66 @@ python3 tools/analyze_trace.py --run-id <ID> --output results/kpis_<ID>.json
 * `launch_r2k.sh` does NOT wipe `logs/` on start — trace files accumulate. Manual cleanup: `rm src/logs/*.jsonl`.
 * Trace files are append-only within a run. Multiple runs with the same `R2K_RUN_ID` (should not happen) would interleave lines.
 * The `R2K_RUN_ID` encodes scenario + strategy + timestamp, so trace files are self-identifying.
+
+## V6.2 Addendum: Shared Regression Suite (test_non_functional.py)
+
+> [!warning] V6.2 Extension
+> V6.2 replaces the deprecated `batch_evaluator.py` with `tests/test_non_functional.py` —
+> a shared regression suite of real Gazebo matches with per-scenario KPI assertions.
+> Source: `core/docs/optimization_spec_v6.2.md` §2.4, §5.2.
+
+### Two-Tier Test System
+
+| Tier | Command | What runs | Time |
+|------|---------|----------|------|
+| Fast | `pytest tests/ --skip-slow` | 91 unit tests (rule logic, parsing, set-piece math) | ~2s |
+| Slow | `pytest tests/ -v -s` | 91 unit + slow tests (real 120s Gazebo matches) | ~10min |
+
+* **`@pytest.mark.slow`** — pytest marker (metadata label) tagging tests that run real Gazebo matches. Registered in `pytest.ini`.
+* **`--skip-slow`** — pytest flag (implemented in `conftest.py`) that skips all tests carrying the `@pytest.mark.slow` marker. Runs only fast unit tests.
+* Run fast tier after every code change. Run slow tier before commit (full regression).
+
+### `run_match_headless(scenario, duration)` — Test Helper
+
+* Calls `launch_r2k.sh --headless --duration N` with the given scenario.
+* Extracts `R2K_RUN_ID` from launch output.
+* Calls `analyze_trace.py --run-id <ID> --output <dir>` to compute KPIs.
+* Returns a merged KPI dict (`world_kpis` + `llm_kpis` fields).
+* Used by all slow tests as the "run a match + measure" pipeline.
+
+### `compute_composite(kpis)` — Composite Score Formula (spec §5.2)
+
+```
+composite = 0.4 * goal_diff_norm + 0.3 * tac_score_norm
+          + 0.2 * possession_norm + 0.1 * latency_factor
+
+where:
+  goal_diff_norm   = clamp((goals_for_blue - goals_for_red) / 10, 0, 1)
+  tac_score_norm    = clamp((tactical_score_avg + 10) / 20, 0, 1)
+  possession_norm   = ball_possession_blue_pct / 100
+  latency_factor    = max(0, 1 - latency_p50 / 3000)
+```
+
+* Range: [0, 1]. Higher is better.
+* Weighted: 40% goal differential, 30% tactical score, 20% possession, 10% latency.
+
+### Per-Scenario `kpi_targets.json`
+
+* Each scenario package (`scenario/<name>/`) contains a `kpi_targets.json` with acceptable KPI ranges.
+* Schema: `{ "scenario_name": "...", "<kpi_name>": { "min": N, "max": N, "note": "..." } }`.
+* KPIs covered: `composite_score`, `oob_pct`, `cluster_pct`, `goalie_idle_pct`, `latency_p50`, `ball_possession_blue_pct`, `goals_for_blue`.
+* `test_non_functional.py` asserts each KPI is within its scenario's `[min, max]` range.
+* Thresholds are calibrated from the 27-run baseline (Phase 2e, not yet run). Current values are estimates from the spec.
+
+### Current Test Scenarios (grows in Phase 2f)
+
+* `3vs3_attack_center` — baseline midfield scenario (TC-01). Tests composite, OOB, cluster, goalie, latency.
+* `3vs3_default` — same positions as TC-01, legacy v5 filename. Tests composite, OOB, cluster, goalie.
+* Phase 2f will add the 3 worst-performing scenarios from the 27-run baseline.
+
+### `goalie_tactical_pct` KPI (Phase 2a, new in v6.2)
+
+* Distinguishes "goalie is tactically positioning" from "goalie is stuck."
+* Ball far from goal → goalie should be forward (angle-block). Ball near → goalie near goal line + tracking Y.
+* Computed by `analyze_trace.py` alongside `goalie_idle_pct` (which is kept for backward comparison).
+* `test_non_functional.py` asserts `goalie_tactical_pct >= 60%`.

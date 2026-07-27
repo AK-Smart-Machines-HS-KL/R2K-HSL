@@ -177,9 +177,11 @@ done
 
 ## 5. Run a Full Batch
 
-> [!warning] batch_evaluator.py KPI collection is broken (v6.2 Phase 2b)
-> The batch evaluator runs matches but doesn't yet collect KPIs. Use the manual
-> approach below until Phase 2b is complete.
+> [!info] batch_evaluator.py deprecated (v6.2 Phase 2b)
+> The batch evaluator is replaced by `tests/test_non_functional.py`, the shared
+> regression suite. See [[7_03_CHEATPAGE_Tools_and_Utils]] §6.5 for the two-tier
+> test concept (pytest markers, `--skip-slow`). The manual batch below still
+> works for one-off baselines.
 
 **Manual batch (works now):**
 ```bash
@@ -203,17 +205,29 @@ for scenario in 3vs3_attack_center 3vs3_attack_wing 3vs3_defensive_crisis \
 done
 ```
 
-**Batch evaluator (after Phase 2b fix):**
+---
+
+## 5.5. Run the Regression Suite
+
+The shared regression suite (`tests/test_non_functional.py`) runs real Gazebo
+matches and asserts per-scenario KPI thresholds.
+
 ```bash
 cd core/src
-python3 ai_tactics/batch_evaluator.py \
-    --scenarios 3vs3_attack_center,3vs3_defensive_crisis,3vs3_fast_counter \
-    --strategies strat_default \
-    --models qwen2.5-coder:3b \
-    --runs 3 \
-    --duration 120 \
-    --output eval_results_baseline_v6.2.json
+
+# Fast tier (unit tests only, after every code change, ~2s):
+python3 -m pytest tests/ --skip-slow -v
+
+# Slow tier (real Gazebo matches, before commit, ~10min):
+python3 -m pytest tests/ -v -s
+
+# Single slow test (debugging one scenario, ~2min):
+python3 -m pytest tests/test_non_functional.py::test_attack_center_latency -v -s
 ```
+
+The slow tests assert per-scenario KPI thresholds from `scenario/<name>/kpi_targets.json`.
+See [[7_03_CHEATPAGE_Tools_and_Utils]] §6.5 for the pytest marker concept and
+composite score formula.
 
 ---
 

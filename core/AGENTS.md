@@ -42,14 +42,32 @@ Teardown is autonomous: closing the Gazebo window (or CTRL+C) triggers the 0.2s 
 inside `launch_r2k.sh` which sends Kinematic Freeze (Twist-zero / K1 API 2000) then `pkill -9`.
 Do not run `kill_r2k.sh` manually — it is deprecated.
 
-Tests (pytest, no config file — invoke explicitly):
+Tests (pytest, `pytest.ini` + `conftest.py` configure markers):
 
 ```
 # From core/src/ with venv active (U22) or inside the Docker container (U24):
+
+# Fast tier (unit tests only, ~2s) — run after every code change:
+python3 -m pytest tests/ --skip-slow -v
+
+# Slow tier (unit + non-functional, ~10min) — run before commit:
 python3 -m pytest tests/ -v -s
-python3 tests/test_integration_smoke.py        # single file
-python3 -m pytest tests/test_foul_detection.py -v -s
+
+# Single slow test (real 120s Gazebo match + KPI assertions):
+python3 -m pytest tests/test_non_functional.py::test_attack_center_latency -v -s
 ```
+
+Two-tier test system:
+- **Fast** (`--skip-slow`): 91 unit tests (rule logic, parsing, set-piece math). ~2s.
+- **Slow** (default): 91 unit + `test_non_functional.py` (real 120s Gazebo matches with
+  per-scenario KPI assertions). ~140s per slow test.
+- `@pytest.mark.slow` marker registered in `pytest.ini`; `--skip-slow` implemented in
+  `conftest.py`.
+- Composite score formula (spec §5.2): `composite = 0.4*goal_diff_norm +
+  0.3*tac_score_norm + 0.2*possession_norm + 0.1*latency_factor`. Range [0, 1].
+  Computed by `compute_composite()` in `test_non_functional.py`.
+- Per-scenario thresholds in `scenario/<name>/kpi_targets.json`. Asserted by
+  `test_non_functional.py` slow tests.
 
 Tests gracefully skip when `rclpy` is missing, but the integration smoke tests that
 actually exercise the stack require a running ROS 2 + Gazebo environment.
@@ -57,9 +75,21 @@ actually exercise the stack require a running ROS 2 + Gazebo environment.
 ROS 2 workspace build (only when msg definitions or `r2k_world_model` change):
 
 ```
-# From core/src/
+# From core/src/ (U22, native):
 source /opt/ros/humble/setup.bash
 cd ros2_ws && colcon build && cd ..
+
+# U24 (Docker): container must be running first, then exec colcon inside:
+docker compose up -d                    # start container (if not running)
+docker exec core_gazebo bash -c "source /opt/ros/humble/setup.bash && cd /workspace/ros2_ws && colcon build"
+
+# If colcon fails with "numpy/ndarrayobject.h not found" (stale cached build):
+docker exec core_gazebo bash -c "cd /workspace/ros2_ws && rm -rf build install"
+# Then re-run the colcon build command above. The clean build resolves the
+# numpy header path via the rosidl CMake fallback (python3 -c "import numpy").
+# Do NOT install python3-numpy-dev or set CFLAGS — these are red herrings.
+# Do NOT use --packages-select for the first rebuild after editing world files
+# or URDFs — a full clean build is needed to propagate installed resources.
 ```
 
 The `brain` package contains only `.msg` files (`GoToBallAndKickCmd.msg`, `Kick.msg`) — no source.
@@ -128,6 +158,18 @@ See `META_KNOWLEDGE_ROUTER.md` §3.
 - The `ros2_ws/build` and `ros2_ws/install` dirs are root-owned (created inside Docker) — may need
   `sudo rm -rf` to rebuild natively on U22.
 - `numpy<2.0` is pinned (install.sh + Dockerfile) — Gazebo compatibility. Don't bump blindly.
+- **Docker colcon rebuild (U24):** After editing files under `ros2_ws/src/`
+  (world files, URDFs, msg definitions, `r2k_world_model`), the container must
+  be running (`docker compose up -d`) before `docker exec ... colcon build`.
+  If `colcon build` fails with `numpy/ndarrayobject.h: No such file or directory`,
+  the cause is stale cached artifacts in `ros2_ws/build/` — NOT a missing numpy
+  installation. Fix: `docker exec core_gazebo bash -c "cd /workspace/ros2_ws && rm -rf build install"`
+  then re-run `colcon build`. Do NOT install `python3-numpy-dev`, set `CFLAGS`,
+  or pass `--cmake-args -DNumPy_INCLUDE_DIR=...` — the rosidl CMake fallback
+  (`execute_process` calling `python3 -c "import numpy; print(numpy.get_include())"`)
+  resolves the path automatically on a clean build. The `docker compose up -d --build`
+  flag rebuilds the Docker image (re-copies source) — unnecessary for code edits;
+  use plain `docker compose up -d` then `docker exec ... colcon build` instead.
 - `r2k_evaluator.py` polls `Worldstate.json` mtime every 20ms; it only POSTs to Ollama when the file
   changes. A stale `Worldstate.json` ⇒ no AI output. Check `state_aggregator.py` is running first.
 - `temperature: 0.0` and `num_predict` (150 no-explain / 600 explain) are hardcoded in

@@ -1,9 +1,9 @@
 ---
 id: 5_HYBRID
-title: "Section 5: Hybrid OS Infrastructure & Deployment (V6.1)"
+title: "Section 5: Hybrid OS Infrastructure & Deployment (V6.2)"
 type: KNOWLEDGE_BASE_POWER_FILE
-tags: [hybrid-os, docker, ubuntu-24, ubuntu-22, host-mode, fastdds, x11, xid-31, suspend-bug, compose-project-name, v6.1, headless-gzserver, docker-env-passthrough]
-last_modified: 2026-07-22
+tags: [hybrid-os, docker, ubuntu-24, ubuntu-22, host-mode, fastdds, x11, xid-31, suspend-bug, compose-project-name, v6.1, v6.2, headless-gzserver, docker-env-passthrough, colcon-rebuild, stale-build-cache, numpy-fallback]
+last_modified: 2026-07-25
 version: v6.2
 ---
 # Section 5: Hybrid OS Infrastructure & Deployment (V5)
@@ -148,3 +148,44 @@ fi
 * Docker path: `R2K_RUN_ID` is explicitly passed via `docker exec -d -e R2K_RUN_ID="$R2K_RUN_ID"` to `state_aggregator.py` (`launch_r2k.sh:357`) and `r2k_evaluator.py` (`launch_r2k.sh:362`).
 * Without this explicit passthrough, Docker containers do NOT inherit host env vars by default, and trace files would be named with the fallback `run_{timestamp}` instead of the correlated run ID.
 * `R2K_OLLAMA_MODEL` and `R2K_OLLAMA_URL` are also passed through (`launch_r2k.sh:362`) to allow per-run model selection.
+
+## V6.2 Addendum: Docker Colcon Rebuild Procedure
+
+> [!warning] V6.2 Extension
+> After editing files under `ros2_ws/src/` (world files, URDFs, msg definitions,
+> `r2k_world_model`), the ROS 2 workspace must be rebuilt. On U24 (Docker), this
+> requires the container to be running. Stale cached build artifacts can cause
+> a numpy header error — the fix is a clean rebuild, NOT installing numpy-dev.
+> Source: `AGENTS.md` "Docker colcon rebuild (U24)".
+
+### Correct Rebuild Procedure (U24 Docker)
+
+```bash
+# 1. Start container (if not running):
+docker compose up -d
+
+# 2. Rebuild inside container:
+docker exec core_gazebo bash -c "source /opt/ros/humble/setup.bash && cd /workspace/ros2_ws && colcon build"
+```
+
+### Stale Build Cache — numpy/ndarrayobject.h Error
+
+**Symptom:** `colcon build` fails with `fatal error: numpy/ndarrayobject.h: No such file or directory`.
+
+**Root cause:** Stale cached artifacts in `ros2_ws/build/` from a previous broken build state. The rosidl CMake logic (`rosidl_generator_py_generate_interfaces.cmake:186-208`) has a two-stage numpy header lookup:
+1. `find_file(_numpy_h numpy/numpyconfig.h PATHS ${PythonExtra_INCLUDE_DIRS})` — checks default include paths.
+2. If not found (stage 1), falls back to `execute_process(COMMAND python3 -c "import numpy; print(numpy.get_include())")` — resolves the pip-installed numpy path.
+
+When cached artifacts exist from a failed build, stage 1 may find a stale reference while the actual `ndarrayobject.h` is at the pip path. The fallback never runs. A clean rebuild forces stage 2, which correctly resolves `/usr/local/lib/python3.10/dist-packages/numpy/core/include`.
+
+**Fix:**
+```bash
+docker exec core_gazebo bash -c "cd /workspace/ros2_ws && rm -rf build install"
+# Then re-run the colcon build command above.
+```
+
+**Do NOT:**
+* Install `python3-numpy-dev` — already present, does not fix the issue.
+* Set `CFLAGS` / `CXXFLAGS` / `--cmake-args -DNumPy_INCLUDE_DIR=...` — CMake does not propagate these to the rosidl generator's `execute_process`. Red herring.
+* Use `--packages-select` for the first rebuild after editing world files or URDFs — a full clean build is needed to propagate installed resources (world files, URDFs are installed by `box_bot_description` + `r2k_scenario_spawner` into `install/share/`).
+* Use `docker compose up -d --build` for code edits — this rebuilds the Docker image (re-copies source into the image layer), which is unnecessary. Use plain `docker compose up -d` then `docker exec ... colcon build`. The `--build` flag is only needed when the `Dockerfile` itself changes.
