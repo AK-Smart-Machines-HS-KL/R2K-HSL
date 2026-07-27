@@ -2001,3 +2001,150 @@ test infrastructure across KB, FAQ, and user docs.
 - Phase 3 requires `ollama pull cosmos` — cosmos model size/variant not
   yet determined. Need to check Ollama registry for available cosmos models
   closest to qwen2.5-coder:3b (~2GB).
+
+## 2026-07-27 (continued) — Ollama bind-address bug: root cause + permanent fix
+
+**Goal:** Diagnose recurring "blue bots don't move" on new U24 machine
+(RTX 5090). Find the actual root cause (not the cold-boot race from
+2026-07-23). Implement a permanent fix so future fresh installs don't hit
+this.
+
+**Done:**
+
+### Root cause analysis (in-depth)
+
+Symptom: blue bots frozen at start positions, zero `llm_trace` records,
+no `current_strategy.json`, red bots move (algorithmic). Identical
+symptom to 2026-07-23 cold-boot race — but different root cause.
+
+**Forensic evidence chain:**
+1. `world_trace` showed 490 records over 48.9s with valid blue entities
+   at start positions — world model working, blue just not moving.
+2. **Zero `llm_trace` records** — evaluator never logged a single LLM
+   call. Not a parse error, not a timeout — the call never happened.
+3. `ollama` journal (`journalctl -t ollama`): only ONE `/api/generate`
+   call at 16:16:36 (my diagnostic curl from the previous session,
+   30.587s cold load). During the match window (16:37-16:38): only
+   `/api/tags` calls (model existence check from `launch_r2k.sh:155`),
+   **zero `/api/generate` calls**. Evaluator never POSTed.
+4. `shared_state/current_strategy.json` missing — evaluator never wrote
+   a strategy → bridge had no targets → blue frozen.
+5. `ss -tlnp | grep 11434`: `LISTEN 0 4096 127.0.0.1:11434` — Ollama
+   bound to **loopback only**, not `0.0.0.0`.
+6. `curl http://172.17.0.1:11434/api/tags` from host: **exit 7
+   (connection refused)**. Ollama not listening on the Docker bridge
+   gateway.
+7. `curl http://172.17.0.1:11434/api/tags` from inside container:
+   **connection refused**. Container cannot reach host's loopback.
+
+**Root cause:** Ollama was started by the official installer's systemd
+service (`ollama.service`, `Restart=always`, user `ollama`). The unit
+file has no `OLLAMA_HOST` env var, so Ollama defaults to `127.0.0.1`
+(loopback). The Docker container cannot reach the host's loopback — it
+needs `172.17.0.1` (Docker bridge gateway), which requires
+`OLLAMA_HOST=0.0.0.0`.
+
+**Why `launch_r2k.sh` didn't catch it:** The Ollama check at
+`launch_r2k.sh:155` only tests `127.0.0.1` (host loopback), which
+succeeds. It prints "✅ Ollama ist bereits online" and moves on. The
+container-reachability check (`172.17.0.1`) didn't exist. The evaluator
+inside the container then silently fails with `ConnectionError` on every
+poll loop → dead blue team.
+
+**Why it wasn't the cold-boot race (2026-07-23):** That session had an
+HTTP 499 (model load aborted by client disconnect). This session had
+zero `/api/generate` calls at all — the evaluator never reached Ollama.
+Same symptom, different cause. The cold-boot race is a *timing* issue;
+this is a *network binding* issue.
+
+**Why previous machines didn't hit this:** On U22 (native), the evaluator
+runs on the host where `127.0.0.1` works. On U24 machines where
+`launch_r2k.sh` started Ollama itself, the `export OLLAMA_HOST=0.0.0.0`
+(line 159, inside the `else` branch) set the bind correctly. This machine
+had Ollama started by systemd (not by `launch_r2k.sh`), so the `else`
+branch was never taken, and the env var was never set.
+
+### Immediate fix (user-applied)
+- `sudo systemctl edit ollama` → added drop-in:
+  `[Service]\nEnvironment="OLLAMA_HOST=0.0.0.0"`
+- `sudo systemctl daemon-reload && sudo systemctl restart ollama`
+- Verified: `ss -tlnp` now shows `*:11434` (all interfaces, was
+  `127.0.0.1:11434`). Container can reach `172.17.0.1:11434` ✅.
+
+### Permanent fix (code)
+
+**`install.sh` (U24 branch, after `docker compose down`):**
+- New block: detects `ollama.service` via `systemctl cat`. If present,
+  creates systemd drop-in override at
+  `/etc/systemd/system/ollama.service.d/override.conf` with
+  `Environment="OLLAMA_HOST=0.0.0.0"`, reloads daemon, restarts
+  service, verifies bind is `0.0.0.0:11434`. If `ollama.service` not
+  found, prints warning to start Ollama manually with
+  `OLLAMA_HOST=0.0.0.0`.
+- Fully automated — no manual step needed on future fresh U24 installs.
+- Idempotent — running `install.sh` twice doesn't break anything.
+
+**`launch_r2k.sh` (two changes):**
+1. Moved `export OLLAMA_HOST=0.0.0.0` from inside the `else` branch
+   (line 159) to before the check (line 155). Now always set, so if
+   `launch_r2k.sh` ever starts Ollama itself, it inherits the bind
+   address. (Minor improvement — the main fix is the install.sh block.)
+2. New container-reachability guard (after line 177, U24 only): tests
+   `curl http://172.17.0.1:11434/api/tags`. If refused, prints
+   actionable error (systemd fix + manual fix commands) and exits 1.
+   This makes the failure **loud** instead of silent dead-blue-team.
+
+**What this does NOT change:**
+- Does NOT disable the systemd service (keeps auto-restart, aligns with
+  AGENTS.md axiom 5 in spirit — service runs as user `ollama`, watchdog
+  `pkill -9 ollama` still works, systemd just restarts it).
+- Does NOT touch U22 (native mode, `127.0.0.1` works fine there).
+- Does NOT require any manual step on future fresh installs.
+
+### Three distinct "dead blue team" root causes (now disambiguated)
+
+| Session | OS | Root cause | Fix |
+|---|---|---|---|
+| 2026-07-20 | U22 native | Stale GPU runner / CPU fallback (Xid 31) | `pkill -9 ollama` + restart |
+| 2026-07-23 | U24 Docker | Cold-boot race (model still loading, HTTP 499) | Warm-up curl before launch (deferred) |
+| 2026-07-27 | U24 Docker | Ollama bound to `127.0.0.1`, container needs `172.17.0.1` | `OLLAMA_HOST=0.0.0.0` systemd override (this session) |
+
+All three produce the same symptom (dead blue, no `llm_trace`). The
+`launch_r2k.sh` container-reachability guard now catches the third one
+loudly. The first two require different mitigations (GPU restart,
+warm-up curl) and are not fixed by this change.
+
+**Files touched:**
+- `core/install.sh` (U24 branch: +24 lines, Ollama bind-override block)
+- `core/launch_r2k.sh` (OLLAMA_HOST export moved, +18 lines
+  container-reachability guard)
+- `core/docs/SESSION_CHANGELOG.md` (this entry)
+
+**New files (untracked):**
+- (none)
+
+**Files deleted:**
+- (none)
+
+**Not yet done:**
+- Warm-up call fix in `launch_r2k.sh` (curl warm-up after Ollama check,
+  ~3 lines) — prevents cold-boot dead-blue-team (2026-07-23 root cause).
+  Still deferred. Now distinct from the bind-address fix (this session).
+- Visualizer blitting refactor still untested with live ROS 2 + Gazebo
+  (carried from 2026-07-14).
+- Slow test tier not run this session (user chose fast-only earlier).
+- Live match not yet re-run after the bind fix — user should verify
+  blue bots now move.
+- Push unpushed commits to origin.
+
+**Next:**
+- User re-launches match to verify blue bots move with the bind fix.
+- Implement warm-up call fix in `launch_r2k.sh` (~3 lines) for the
+  cold-boot race (2026-07-23 root cause) — independent of this fix.
+- Commit on `feature/ollama-bind-address-fix` (separate from the larger
+  uncommitted body of work).
+
+**Blockers:**
+- `run_baseline.sh` reliability (carried from 2026-07-27).
+- Phase 3 requires `ollama pull cosmos` — model size/variant not yet
+  determined (carried from 2026-07-27).

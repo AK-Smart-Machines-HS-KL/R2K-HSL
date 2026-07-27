@@ -69,7 +69,30 @@ elif [[ "$UBUNTU_VERSION" == 24.* ]]; then
     CONTAINER_NAME="${SAFE_DIR_NAME}_gazebo"
     docker exec $CONTAINER_NAME bash -c "source /opt/ros/humble/setup.bash && cd /workspace/ros2_ws && colcon build"
     docker compose down
-    
+
+    # Configure Ollama to bind to 0.0.0.0 so Docker containers can reach it
+    # via the bridge gateway (172.17.0.1). Without this, the evaluator inside
+    # the container cannot reach Ollama on 127.0.0.1 (host loopback only),
+    # resulting in silent dead-blue-team. See AGENTS.md axiom 5.
+    if systemctl cat ollama.service &>/dev/null; then
+        echo "🔧 Configuring Ollama systemd service for Docker bridge access..."
+        sudo mkdir -p /etc/systemd/system/ollama.service.d
+        echo -e '[Service]\nEnvironment="OLLAMA_HOST=0.0.0.0"' | \
+            sudo tee /etc/systemd/system/ollama.service.d/override.conf > /dev/null
+        sudo systemctl daemon-reload
+        sudo systemctl restart ollama
+        sleep 2
+        if ss -tlnp | grep -q "0.0.0.0:11434"; then
+            echo "✅ Ollama now listens on 0.0.0.0:11434 (Docker bridge accessible)."
+        else
+            echo "⚠️ WARNING: Ollama bind override did not take effect. Manual fix needed:"
+            echo "   sudo systemctl edit ollama  →  [Service]  →  Environment=\"OLLAMA_HOST=0.0.0.0\""
+        fi
+    else
+        echo "⚠️ NOTE: ollama.service not found. If you start Ollama manually,"
+        echo "   use: OLLAMA_HOST=0.0.0.0 ollama serve"
+    fi
+
     echo "✅ Docker installiert und Workspace kompiliert!"
     echo "Nun kannst du das System mit './launch_r2k.sh' aus dem Hauptverzeichnis starten."
 else
