@@ -117,7 +117,9 @@ def compute_attack_kpis(world_records, llm_records):
 
     # Build a time-indexed list of world frames for the post-action lookup.
     # world_records are ~10Hz (0.1s apart); llm_records have a `t` timestamp.
-    world_times = [r.get("t", 0) for r in world_records]
+    # Use t_wall (wall-clock) as the common timeline — sim-time (t) is 0.0
+    # in existing traces (libgazebo_ros_init.so not yet rebuilt into container).
+    world_times = [r.get("t_wall", r.get("t", 0)) for r in world_records]
 
     def find_world_frame_after(t, n_frames):
         """Return the index of the first world frame at or after time t, plus
@@ -261,7 +263,7 @@ def compute_attack_kpis(world_records, llm_records):
                 prev_status = status
                 continue
             bx, by = ball.get("x", 0), ball.get("y", 0)
-            t_start = rec.get("t", 0)
+            t_start = rec.get("t_wall", rec.get("t", 0))
             for j in range(i, len(world_records)):
                 frame = world_records[j]
                 fents = frame.get("entities", {})
@@ -275,7 +277,7 @@ def compute_attack_kpis(world_records, llm_records):
                     d = math.hypot(bpos.get("x", 0) - fbx, bpos.get("y", 0) - fby)
                     if d <= RESTART_TOUCH_DIST:
                         restart_events += 1
-                        restart_recovery_times.append(frame.get("t", 0) - t_start)
+                        restart_recovery_times.append(frame.get("t_wall", frame.get("t", 0)) - t_start)
                         break
                 else:
                     continue

@@ -1,38 +1,58 @@
 {
-  "scenario_name": "3vs3_defensive_crisis",
-  "composite_score": {
-    "min": 0.2,
-    "max": 1.0,
-    "note": "calibrated from post-kick-fix 27-run baseline"
-  },
-  "oob_pct": {
-    "min": 0.0,
-    "max": 9.9,
-    "note": "lower is better (0% ideal)"
-  },
-  "cluster_pct": {
-    "min": 0.0,
-    "max": 27.9,
-    "note": "lower is better (0% ideal)"
-  },
-  "goalie_idle_pct": {
-    "min": 0.0,
-    "max": 100.0,
-    "note": "lower is better (structural limit ~70% after Phase 2a)"
-  },
-  "latency_p50": {
-    "min": 0,
-    "max": 890,
-    "note": "lower is better"
-  },
-  "ball_possession_blue_pct": {
-    "min": 37.2,
-    "max": 100.0,
-    "note": "higher is better"
-  },
-  "goals_for_blue": {
-    "min": 0,
-    "max": 3,
-    "note": "higher is better"
-  }
+    "scenario_name": "3vs3_defensive_crisis",
+    "composite_score": {
+        "min": 0.2,
+        "max": 1.0,
+        "note": "calibrated from post-kick-fix 27-run baseline"
+    },
+    "oob_pct": {
+        "min": 0.0,
+        "max": 9.9,
+        "note": "lower is better (0% ideal)"
+    },
+    "cluster_pct": {
+        "min": 0.0,
+        "max": 27.9,
+        "note": "lower is better (0% ideal)"
+    },
+    "goalie_idle_pct": {
+        "min": 0.0,
+        "max": 100.0,
+        "note": "lower is better (structural limit ~70% after Phase 2a)"
+    },
+    "latency_p50": {
+        "min": 0,
+        "max": 890,
+        "note": "lower is better"
+    },
+    "ball_possession_blue_pct": {
+        "min": 37.2,
+        "max": 100.0,
+        "note": "higher is better"
+    },
+    "goals_for_blue": {
+        "min": 0,
+        "max": 3,
+        "note": "higher is better"
+    },
+    "shots_on_goal": {
+        "min": 0,
+        "max": 12,
+        "note": "higher is better (v6.3 baseline mean=7.7)"
+    },
+    "shots_on_target": {
+        "min": 0,
+        "max": 2,
+        "note": "higher is better (v6.3 baseline mean=1.3)"
+    },
+    "pass_completion_pct": {
+        "min": 44.8,
+        "max": 100.0,
+        "note": "higher is better (v6.3 baseline mean=89.6%)"
+    },
+    "restart_recovery_time_s": {
+        "min": 0.0,
+        "max": 30.1,
+        "note": "lower is better (v6.3 baseline mean=20.0s)"
+    }
 }

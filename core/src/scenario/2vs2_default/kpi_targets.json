@@ -1,38 +1,58 @@
 {
-  "scenario_name": "2vs2_default",
-  "composite_score": {
-    "min": 0.35,
-    "max": 1.0,
-    "note": "higher is better (0-1 scale)"
-  },
-  "oob_pct": {
-    "min": 0.0,
-    "max": 10.0,
-    "note": "lower is better (0% ideal)"
-  },
-  "cluster_pct": {
-    "min": 0.0,
-    "max": 15.0,
-    "note": "lower is better (0% ideal)"
-  },
-  "goalie_idle_pct": {
-    "min": 0.0,
-    "max": 70.0,
-    "note": "lower is better (0% ideal, but structural limit ~70% after Phase 2a)"
-  },
-  "latency_p50": {
-    "min": 0,
-    "max": 800,
-    "note": "lower is better"
-  },
-  "ball_possession_blue_pct": {
-    "min": 40.0,
-    "max": 100.0,
-    "note": "higher is better (~50% balanced)"
-  },
-  "goals_for_blue": {
-    "min": 0,
-    "max": 10,
-    "note": "higher is better"
-  }
+    "scenario_name": "2vs2_default",
+    "composite_score": {
+        "min": 0.35,
+        "max": 1.0,
+        "note": "higher is better (0-1 scale)"
+    },
+    "oob_pct": {
+        "min": 0.0,
+        "max": 10.0,
+        "note": "lower is better (0% ideal)"
+    },
+    "cluster_pct": {
+        "min": 0.0,
+        "max": 15.0,
+        "note": "lower is better (0% ideal)"
+    },
+    "goalie_idle_pct": {
+        "min": 0.0,
+        "max": 70.0,
+        "note": "lower is better (0% ideal, but structural limit ~70% after Phase 2a)"
+    },
+    "latency_p50": {
+        "min": 0,
+        "max": 800,
+        "note": "lower is better"
+    },
+    "ball_possession_blue_pct": {
+        "min": 40.0,
+        "max": 100.0,
+        "note": "higher is better (~50% balanced)"
+    },
+    "goals_for_blue": {
+        "min": 0,
+        "max": 10,
+        "note": "higher is better"
+    },
+    "shots_on_goal": {
+        "min": 0,
+        "max": 10,
+        "note": "no v6.3 baseline (2vs2 not in baseline run)"
+    },
+    "shots_on_target": {
+        "min": 0,
+        "max": 5,
+        "note": "no v6.3 baseline"
+    },
+    "pass_completion_pct": {
+        "min": 20.0,
+        "max": 100.0,
+        "note": "no v6.3 baseline"
+    },
+    "restart_recovery_time_s": {
+        "min": 0.0,
+        "max": 30.0,
+        "note": "no v6.3 baseline"
+    }
 }
