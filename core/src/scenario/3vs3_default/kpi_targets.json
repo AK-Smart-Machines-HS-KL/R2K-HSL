@@ -1,38 +1,58 @@
 {
-  "scenario_name": "3vs3_default",
-  "composite_score": {
-    "min": 0.4,
-    "max": 1.0,
-    "note": "higher is better (0-1 scale)"
-  },
-  "oob_pct": {
-    "min": 0.0,
-    "max": 10.0,
-    "note": "lower is better (0% ideal)"
-  },
-  "cluster_pct": {
-    "min": 0.0,
-    "max": 10.0,
-    "note": "lower is better (0% ideal)"
-  },
-  "goalie_idle_pct": {
-    "min": 0.0,
-    "max": 70.0,
-    "note": "lower is better (0% ideal, but structural limit ~70% after Phase 2a)"
-  },
-  "latency_p50": {
-    "min": 0,
-    "max": 1000,
-    "note": "lower is better"
-  },
-  "ball_possession_blue_pct": {
-    "min": 40.0,
-    "max": 100.0,
-    "note": "higher is better (~50% balanced)"
-  },
-  "goals_for_blue": {
-    "min": 0,
-    "max": 10,
-    "note": "higher is better"
-  }
+    "scenario_name": "3vs3_default",
+    "composite_score": {
+        "min": 0.4,
+        "max": 1.0,
+        "note": "higher is better (0-1 scale)"
+    },
+    "oob_pct": {
+        "min": 0.0,
+        "max": 10.0,
+        "note": "lower is better (0% ideal)"
+    },
+    "cluster_pct": {
+        "min": 0.0,
+        "max": 10.0,
+        "note": "lower is better (0% ideal)"
+    },
+    "goalie_idle_pct": {
+        "min": 0.0,
+        "max": 70.0,
+        "note": "lower is better (0% ideal, but structural limit ~70% after Phase 2a)"
+    },
+    "latency_p50": {
+        "min": 0,
+        "max": 1000,
+        "note": "lower is better"
+    },
+    "ball_possession_blue_pct": {
+        "min": 40.0,
+        "max": 100.0,
+        "note": "higher is better (~50% balanced)"
+    },
+    "goals_for_blue": {
+        "min": 0,
+        "max": 10,
+        "note": "higher is better"
+    },
+    "shots_on_goal": {
+        "min": 0,
+        "max": 17,
+        "note": "higher is better (v6.3 baseline proxy=attack_center mean=11.1)"
+    },
+    "shots_on_target": {
+        "min": 0,
+        "max": 7,
+        "note": "higher is better (v6.3 baseline proxy=attack_center mean=4.9)"
+    },
+    "pass_completion_pct": {
+        "min": 25.3,
+        "max": 100.0,
+        "note": "higher is better (v6.3 baseline proxy=attack_center mean=50.5%)"
+    },
+    "restart_recovery_time_s": {
+        "min": 0.0,
+        "max": 20.1,
+        "note": "lower is better (v6.3 baseline proxy=attack_center mean=13.4s)"
+    }
 }

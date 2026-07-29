@@ -14,6 +14,7 @@ EXPLAIN_FLAG="--no-explain"
 RELAY="only_sim_bots"
 HEADLESS=false
 DURATION=0
+ANALYZE=false
 TRAP_TRIGGERED=false
 UBUNTU_VERSION=$(lsb_release -rs)
 
@@ -42,6 +43,7 @@ while [[ "$#" -gt 0 ]]; do
             echo "  --no-explain          (Disable AI reasoning)"
             echo "  --headless            (Run without visualizer)"
             echo "  --duration <seconds> (Auto-terminate after N seconds)"
+            echo "  --analyze             (Open annotator in new terminal)"
             echo "=========================================================="
             exit 0 ;;
         --scenario) SCENARIO="$2"; shift ;;
@@ -52,10 +54,14 @@ while [[ "$#" -gt 0 ]]; do
         --relay) RELAY="$2"; shift ;;
         --headless) HEADLESS=true ;;
         --duration) DURATION="$2"; shift ;;
+        --analyze) ANALYZE=true ;;
         *) echo "⚠️ Unknown parameter: $1"; exit 1 ;;
     esac
     shift
 done
+
+# Export explain flag for the evaluator (R2K_EXPLAIN=1 → 600 tokens, analysis+oracle+assignments)
+export R2K_EXPLAIN=$([[ "$EXPLAIN_FLAG" == "--explain" ]] && echo 1 || echo 0)
 
 echo "=========================================================="
 echo "🚀 FAST BOOT: R2K Launch Sequence... ($SCENARIO | Relay: $RELAY)"
@@ -86,6 +92,27 @@ rm -f shared_state/current_strategy.json shared_state/Worldstate.json
 # --- Phase 1 instrumentation: auto-tag run ID for trace logs ---
 export R2K_RUN_ID="${SCENARIO}_${STRATEGY}_$(date +%Y%m%d_%H%M%S)"
 echo "📋 Run ID: $R2K_RUN_ID  (logs: src/logs/*_${R2K_RUN_ID}.jsonl)"
+
+# --- --analyze: open annotator in a new terminal (called after container is up) ---
+launch_annotator() {
+    if [ "$ANALYZE" != true ]; then return; fi
+    TERM_CMD=""
+    if command -v gnome-terminal >/dev/null 2>&1; then
+        TERM_CMD="gnome-terminal -- bash -c"
+    elif command -v xterm >/dev/null 2>&1; then
+        TERM_CMD="xterm -e bash -c"
+    elif command -v konsole >/dev/null 2>&1; then
+        TERM_CMD="konsole -e bash -c"
+    fi
+    if [ -n "$TERM_CMD" ] && [ -n "$DISPLAY" ]; then
+        $TERM_CMD "cd '$PWD' && PROJECT_NAME='$PROJECT_NAME' COMPOSE_PROJECT_NAME='$COMPOSE_PROJECT_NAME' R2K_RUN_ID='$R2K_RUN_ID' python3 tools/match_annotate.py; echo 'Annotator closed. Press ENTER to exit.'; read" &
+        echo "📝 Annotator opened in new terminal (run_id: $R2K_RUN_ID)"
+        echo "   Press ENTER in that terminal to freeze Gazebo and annotate a moment."
+    else
+        echo "⚠️ --analyze: no supported terminal (gnome-terminal/xterm/konsole) or no DISPLAY. Run manually:"
+        echo "   R2K_RUN_ID=$R2K_RUN_ID python3 tools/match_annotate.py"
+    fi
+}
 
 python3 setup_r2k.py --scenario "$SCENARIO" --strategy "$STRATEGY" --model "$MODEL" --relay "$RELAY" $EXPLAIN_FLAG || { echo "❌ Setup failed!"; exit 1; }
 
@@ -174,6 +201,19 @@ if [[ "$SCENARIO" != 0vs* ]]; then
         exit 1
     fi
     echo "✅ Modell '$MODEL' ist bereit."
+fi
+
+# Warm up the model: trigger the 30-40s cold-boot load BEFORE the evaluator starts
+# polling. Without this, the first match after `ollama serve` starts triggers a
+# model load; if the user interrupts during load → evaluator killed → no
+# current_strategy.json → dead blue team (2026-07-23 root cause). The warm-up
+# call blocks until the model is resident in VRAM, so the evaluator's first
+# /api/generate call hits a warm runner (~500-800ms instead of 30s+).
+if [[ "$SCENARIO" != 0vs* ]]; then
+    echo "🔥 Warming up model '$MODEL' (cold-boot load, ~30s on first run)..."
+    curl -s --max-time 120 "${OLLAMA_LOCAL}/api/generate" \
+        -d "{\"model\":\"$MODEL\",\"prompt\":\"hi\",\"stream\":false}" > /dev/null 2>&1
+    echo "✅ Model '$MODEL' is warm."
 fi
 
 # Verify container can reach Ollama via Docker bridge gateway (U24 only).
@@ -285,6 +325,8 @@ if [ "$UBUNTU_VERSION" == "22.04" ]; then
     echo "✅ System Online. Press CTRL+C to shutdown."
     echo "=========================================================="
     
+    launch_annotator
+    
     # Headless mode: skip visualizer
     if [ "$HEADLESS" = true ]; then
         echo "🏃 Headless mode: No visualizer"
@@ -383,7 +425,7 @@ else
     $DOCKER_BASE "$SOURCE_CMD && python3 ai_tactics/ollama_sandbox_bridge.py > /dev/null 2>&1"
     
     echo "🧠 Starting Team Blue AI (Live Output)..."
-    docker exec -d -e PYTHONUNBUFFERED=1 -e PYTHONWARNINGS="ignore" -e R2K_OLLAMA_MODEL=$MODEL -e R2K_OLLAMA_URL="${OLLAMA_DOCKER}/api/generate" -e R2K_RUN_ID="$R2K_RUN_ID" $CONTAINER_NAME bash -c "$SOURCE_CMD && python3 -u ai_tactics/r2k_evaluator.py"
+    docker exec -d -e PYTHONUNBUFFERED=1 -e PYTHONWARNINGS="ignore" -e R2K_OLLAMA_MODEL=$MODEL -e R2K_OLLAMA_URL="${OLLAMA_DOCKER}/api/generate" -e R2K_RUN_ID="$R2K_RUN_ID" -e R2K_EXPLAIN="$R2K_EXPLAIN" $CONTAINER_NAME bash -c "$SOURCE_CMD && python3 -u ai_tactics/r2k_evaluator.py"
     
     # Duration-based auto-terminate (for batch evaluation)
     if [ "$DURATION" -gt 0 ]; then
@@ -395,6 +437,8 @@ else
     echo "=========================================================="
     echo "✅ System Online. Press CTRL+C to shutdown."
     echo "=========================================================="
+    
+    launch_annotator
     
     # Headless mode: skip visualizer
     if [ "$HEADLESS" = true ]; then

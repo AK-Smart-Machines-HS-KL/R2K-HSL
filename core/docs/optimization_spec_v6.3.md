@@ -1,42 +1,49 @@
 ---
-title: ROS2K v6.2 — Unified Technical Specification
-tags: [ros2k, v6, v6.1, v6.2, optimization, llm, evaluation, benchmark, referee, momentum, reward, fouls, prompt-engineering, trace-logging, kalman, predictive-model, watchdog, dynamic-prompt, non-functional-tests, regression, phase-2.5, attack-kpis, shot-on-goal, pass-completion, restart-recovery]
+title: ROS2K v6.3 — Unified Technical Specification
+tags: [ros2k, v6, v6.1, v6.2, v6.3, optimization, llm, evaluation, benchmark, referee, momentum, reward, fouls, prompt-engineering, trace-logging, kalman, predictive-model, watchdog, dynamic-prompt, non-functional-tests, regression, phase-2.5, attack-kpis, shot-on-goal, pass-completion, restart-recovery, content-hash-skip, role-condensation, replay-system, annotation-nav]
 date: 2026-07-22
 last_updated: 2026-07-29
-status: superseded
-version: 6.2
-supersedes: optimization_spec_v6.md (v6.1)
-superseded_by: optimization_spec_v6.3.md (v6.3)
+status: active
+version: 6.3
+supersedes: optimization_spec_v6.2.md (v6.2)
 ---
 
-> [!warning] SUPERSEDED
-> This spec is superseded by `optimization_spec_v6.3.md` (2026-07-29).
-> v6.3 documents role condensation, content-hash skip, explain-mode fix,
-> replay system, Ollama bind-address fix, and Phase 3-5 updates.
-
-# ROS2K v6.2 — Unified Technical Specification
+# ROS2K v6.3 — Unified Technical Specification
 
 > [!abstract] Scope
 > 3vs3 Gazebo simulation. No relay. Three models under test. Ten tactical scenarios.
 > Automated evaluation pipeline with foul detection, momentum tracking, reward scoring,
 > trace-based KPI measurement, and a bottom-up prompt engineering methodology.
 >
-> **v6.2 changelog (updated 2026-07-27):** Unifies the v6.1 infrastructure spec with
+> **v6.2 changelog (2026-07-27):** Unifies the v6.1 infrastructure spec with
 > the completed prompt engineering study (Phases 0-1). Drops the 5 named prompt variants
 > (superseded by B-study). Adopts **trial-and-error optimization with shared regression
 > tests**: engineers iterate locally (no commits per experiment), run a shared test suite
 > of pre-defined scenarios, and commit only the final winning config. The shared test
 > suite grows over time and guards against regressions. No external experiment-tracking
 > framework (W&B, DSPy, Optuna) — uses tools students already know (pytest, git).
->
-> **2026-07-27 update:** Phase 2 marked DONE (goalie blending, test suite, kick fix,
-> 27-run baseline, threshold calibration). Inserted **Phase 2.5** between Phase 2 and
-> Phase 3 — adds 4 attack/passing/restart KPIs (`shots_on_goal`, `shots_on_target`,
-> `pass_completion_pct`, `restart_recovery_time_s`), implements dynamic prompt injection
-> (moved here from Phase 4a), and re-baselines v6.3 as the reference Phase 3 model
-> comparison will compare against. **Phase 3 reworked:** `cosmos` model dropped
-> (technically too divergent from Ollama architecture) — model lineup TBD. Total KPI
+> Phase 2 marked DONE. Inserted **Phase 2.5** — adds 4 attack/passing/restart KPIs,
+> implements dynamic prompt injection, re-baselines as v6.3 reference. Total KPI
 > count rises 15 → 19.
+>
+> **v6.3 changelog (2026-07-29):** Updates spec to reflect work done after the
+> 2026-07-22 workshop sessions. Key changes from v6.2:
+> - **~~Role diversity KPI~~** deleted (dead metric, CV=0% after role condensation).
+> - **Role condensation 5→3** (goalie/attacker/defender) — not in v6.2 spec, now documented.
+> - **Content-hash skip** (64% fewer LLM calls, ~50% effective latency reduction) — not in v6.2 spec, now documented.
+> - **Explain-mode fix** (broken by 2.5b, fixed with `R2K_EXPLAIN` env var) — not in v6.2 spec, now documented.
+> - **Replay system** (`match_annotate.py`, `replay_trace.py`, `--replay`/`--nav` mode) — not in v6.2 spec, now documented.
+> - **Ollama bind-address fix** (`OLLAMA_HOST=0.0.0.0` systemd override) — not in v6.2 spec, now documented.
+> - **Phase 3 `format: "json"` confound** documented — different models currently get different Ollama options.
+> - **Phase 5 latency figures** updated for content-hash skip (~1328ms → ~684ms effective).
+> - **Phase 5.10 5vs5 roles** updated for role condensation.
+> - **Phase 5.4 failsafe** updated — content-hash skip makes file-mtime staleness checks unreliable.
+> - **Phase 2.5 status** updated — 2.5a/2.5b/2.5c/pre1/pre2 done, 2.5d/2.5e/2.5f blocked.
+> - **§9 Data format** — role names in KPI JSON example updated (striker/supporter → attacker/defender).
+> - **§10 Related files** — 5 file statuses updated, 2 new tools added.
+>
+> **v6.2 → v6.3 deletions are marked with ~~strikethrough~~.**
+> **NEW in v6.3 are marked with `[NEW v6.3]`.**
 
 ---
 
@@ -85,10 +92,16 @@ Regression check:              new design decision → run shared test suite →
 | 0 | Foundation: infrastructure, set-pieces, instrumentation, prompt disentanglement | ✅ **DONE** | — | — |
 | 1 | Prompt Engineering Study (B1-B7b, RQ1-RQ3) | ✅ **DONE** | 33 | ~1h |
 | 2 | Goalie fix + shared test suite + 27-run baseline + threshold calibration | ✅ **DONE** | 27 | ~45min |
-| 2.5 | Attack/passing/restart KPIs + dynamic prompt injection + minimal game-phase fragments + v6.3 re-baseline | ⬜ **Next** | 27 | ~45min |
-| 3 | Model Comparison (consolidated prompt × 9 scenarios × 3 models × 5 runs) | ⬜ Blocked by 2.5 | 135 | ~2.5h |
+| 2.5 | Attack/passing/restart KPIs + dynamic prompt injection + minimal game-phase fragments + v6.3 re-baseline | ⬜ **Code done, re-baseline pending** | 27 | ~45min |
+| 3 | Model Comparison (consolidated prompt × 9 scenarios × 3 models × 5 runs) | ⬜ Blocked by 2.5d | 135 | ~2.5h |
 | 4 | Game-phase fragment library iteration + TC-10 + production commit | ⬜ Blocked by 3 | ~10 | ~20min |
 | 5 | Future Work (Kalman, predictive model, watchdog, failsafe, sim-to-real) | ⬜ Research | — | — |
+
+> [!info] [NEW v6.3] Phase 2.5 code status
+> 2.5-pre1 (warm-up curl), 2.5-pre2 (run_baseline.sh hardening), 2.5a (4 attack KPIs),
+> 2.5b (dynamic prompt injection), 2.5c (minimal game-phase fragments) are all **done**.
+> Only 2.5d (27-run re-baseline), 2.5e (regression thresholds), 2.5f (KB update) remain —
+> blocked by live Gazebo + Ollama availability.
 
 **Total new compute:** 232 runs, ~5h.
 
@@ -97,7 +110,7 @@ meaningful improvements (not every experiment). A config map saying "for scenari
 use strategy Y with model Z" backed by data. Plus a research roadmap for the next
 architecture evolution.
 
-**Key metrics (19 KPIs via `tools/analyze_trace.py` — 15 from v6.1 + 4 added in Phase 2.5):**
+**Key metrics (18 KPIs via `tools/analyze_trace.py`):**
 
 | KPI | Source | Target | Phase added |
 |-----|--------|--------|-------------|
@@ -110,11 +123,29 @@ architecture evolution.
 | Ball possession (blue) | world_trace | > 50% | v6.1 |
 | Latency p50 | llm_trace | < 1000ms | v6.1 |
 | Parse error rate | llm_trace | < 5% | v6.1 |
-| Role diversity | llm_trace | > 2 | v6.1 |
-| Shots on goal | world+llm join | > 0 per match (baseline shows ~0) | **v6.2 (Phase 2.5)** |
-| Shots on target | world+llm join | > 50% of shots on goal | **v6.2 (Phase 2.5)** |
-| Pass completion % | world+llm join | > 30% (currently unmeasured) | **v6.2 (Phase 2.5)** |
-| Restart recovery time | world_trace | < 3.0s mean | **v6.2 (Phase 2.5)** |
+| ~~Role diversity~~ | ~~llm_trace~~ | ~~> 2~~ | ~~v6.1~~ **[deleted v6.3 — dead metric, CV=0% after role condensation]** |
+| Shots on goal | world+llm join | > 0 per match (baseline shows ~0) | v6.2 (Phase 2.5) |
+| Shots on target | world+llm join | > 50% of shots on goal | v6.2 (Phase 2.5) |
+| Pass completion % | world+llm join | > 30% (currently unmeasured) | v6.2 (Phase 2.5) |
+| Restart recovery time | world_trace | < 3.0s mean | v6.2 (Phase 2.5) |
+| Avg response tokens | llm_trace | (diagnostic) | v6.1 |
+
+> [!info] [NEW v6.3] Role condensation (5→3)
+> Roles condensed from striker/midfielder/passer/receiver/supporter to
+> **goalie/attacker/defender** (2026-07-28). The bridge only checks `role == 'goalie'`;
+> all other roles were cosmetic noise the 3B model generated without any consumer
+> caring. `role_diversity` KPI dropped (was always 5.0, now always 3.0 — CV=0%,
+> no discriminative value). `pass_completion_pct` changed from role-based
+> (`role == 'passer'`) to position-based (kicker NOT in opponent half).
+
+> [!info] [NEW v6.3] Content-hash skip (64% fewer LLM calls)
+> The evaluator now hashes entity positions and skips the LLM call if identical to
+> the previous call (2026-07-28). At `temperature: 0.0`, identical input → identical
+> output → wasted GPU time. Impact: ~62 calls per match (was 171), effective delay
+> (situation change → strategy output) drops from ~1328ms to ~684ms (~50%).
+> The evaluator is idle 64% of the time instead of busy. All latency KPIs in this
+> spec now refer to **per-call** latency (`llm_trace` `latency_ms`); effective
+> latency is the relevant user-facing metric but is not directly logged.
 
 **Composite score (unchanged, v6.2):** `0.4×goal_diff_norm + 0.3×tac_score_norm + 0.2×possession + 0.1×latency_factor`
 
@@ -838,14 +869,14 @@ See §4.3 for results table and conclusions. Full data in `src/results/kpis_*.js
 | Exp | Name | Variable | Question | Runs |
 |-----|------|----------|----------|------|
 | D1 | Model size scaling | 1.5b vs 3b vs 7b | Does a larger model improve soccer reasoning or just add latency? | 3×3=9 |
-| D2 | Temperature sweep | 0.0 vs 0.3 vs 0.7 | Does temperature >0 improve role diversity or just add noise? | 3×3=9 |
-| D3 | Context window | num_ctx 2048 vs 4096 vs 8192 | Does larger context help (requires temporal history in prompt)? | 3×3=9 |
-| D4 | Dynamic prompt switching | match_state-driven fragment selection | Does gamestate-aware prompting improve restart behavior? | 3×3=9 |
+| D2 | Temperature sweep | 0.0 vs 0.3 vs 0.7 | ~~Does temperature >0 improve role diversity~~ **[NEW v6.3]** `role_diversity` dropped (dead metric after role condensation). Does temperature >0 improve shot quality or just add noise? | 3×3=9 |
+| D3 | Context window | num_ctx 2048 vs 4096 vs 8192 | Does larger context help (requires temporal history in prompt)? **[NEW v6.3]** Content-hash skip means fewer calls — `num_ctx` affects per-call latency (KV cache) and VRAM, not total match compute. | 3×3=9 |
+| D4 | ~~Dynamic prompt switching~~ match_state-driven fragment selection | Does gamestate-aware prompting improve restart behavior? **[DONE in Phase 2.5b]** | ~~3×3=9~~ |
 | D5 | Opponent adaptation | AGGRESSION_FACTOR 0.0/0.15/0.30/0.50 | How does red aggression level affect blue performance? | 4×3=12 |
 | D6 | Scenario difficulty | All 9 scenarios, consolidated prompt | Which scenarios does the LLM perform worst on? (Phase 2c) | 9×3=27 |
 | D7 | Temporal context | 0 vs 3 vs 10 history frames in prompt | Does including past states improve motion understanding? | 3×3=9 |
 | D8 | 10× confidence | Re-run B6a and A with 10 repeats | Confirm B6a > A with statistical confidence | 2×10=20 |
-| D9 | Goalie blending parameters | `GOALIE_TACTICAL_WEIGHT` 0.5/0.7/0.9, `GOALIE_FAR_GOAL_DIST` 3.0/4.0/5.0, `GOALIE_FORWARD_LIMIT` -2.0/-2.5/-3.0 | Which blending parameters produce the best `goalie_tactical_pct` without hurting `composite_score`? | 3×3=9 |
+| D9 | Goalie blending parameters | `GOALIE_TACTICAL_WEIGHT` 0.5/0.7/0.9, `GOALIE_FAR_GOAL_DIST` 3.0/4.0/5.0, `GOALIE_FORWARD_LIMIT` -2.0/-2.5/-3.0 | Which blending parameters produce the best `goalie_tactical_pct` without hurting `composite_score`? **[NEW v6.3]** Include content-hash-skip on/off as a variable — effective latency changes may require retuning. | 3×3=9 |
 
 ### 6.4 Commit Convention for Winning Configs
 
@@ -1300,7 +1331,7 @@ the `sys_prompt` field changes when `match_state.status` transitions from `playi
 4. `test: v6.3 baseline + regression thresholds for 4 new KPIs` (2.5d + 2.5e)
 5. `docs: Phase 2.5 spec amendment + KB update` (2.5f)
 
-### Phase 3: Model Comparison ⬜ BLOCKED BY PHASE 2.5
+### Phase 3: Model Comparison ⬜ BLOCKED BY PHASE 2.5d
 
 > [!warning] Phase 3 reworked (2026-07-27)
 > `cosmos` model dropped — technically too divergent from the Ollama architecture.
@@ -1314,6 +1345,23 @@ the `sys_prompt` field changes when `match_state.status` transitions from `playi
 > the latency difference (4.7GB model) muddies the composite comparison (latency
 > is 10% of composite). Final lineup decision deferred to start of Phase 3.
 
+> [!danger] [NEW v6.3] `format: "json"` confound
+> The evaluator currently sends `"format": "json"` only for nemotron/llama models
+> (`r2k_evaluator.py:303-304`). If `llama3.2:3b` is in the Phase 3 lineup, it gets
+> `format: "json"` but `qwen2.5-coder:3b` does NOT. This is a **comparison confound** —
+> different models get different Ollama options, affecting both latency and parse
+> error rate. **Before running Phase 3, either enable `format: "json"` for all models
+> or disable it for all.** The fairest approach is to enable it for all (Ollama's
+> JSON mode enforces strict JSON, reducing parse errors uniformly).
+
+> [!info] [NEW v6.3] Content-hash skip in Phase 3
+> Content-hash skip is active (2026-07-28). Effective latency (situation-change →
+> strategy output) is ~684ms, not ~1328ms. All models benefit equally (the skip
+> is position-based, not model-based). Compare `latency_p50` from `llm_trace`
+> (per-call latency), not wall-clock match time. The number of LLM calls per match
+> may differ between models (if a model produces different entity positions →
+> different hash → different skip rate), but this is a second-order effect.
+
 **3a:** Pull the 2 new models (lineup TBD — see warning above). Example:
 `ollama pull llama3.2:3b && ollama pull qwen2.5:3b`
 
@@ -1326,6 +1374,8 @@ with each model. Inspect which model passes thresholds and by how much. **Use th
 new attack/passing/restart KPIs (Phase 2.5a) to distinguish models on soccer-relevant
 behavior, not just the composite score.** A model that scores higher composite but
 has 0 shots on goal is not actually better — it just concedes less.
+**[NEW v6.3] Ensure all models use identical Ollama options** — resolve the
+`format: "json"` confound (see danger callout above) before running.
 
 **3d:** Commit the winning model as default:
 ```
@@ -1335,6 +1385,9 @@ KPI before (qwen2.5-coder:3b, v6.3 baseline): composite=0.33, shots_on_goal=0.7,
 KPI after  (llama3.2:3b):                    composite=0.41, shots_on_goal=1.9, pass_completion=28%
 Delta: +0.08 composite, +1.2 shots_on_goal, +16pp pass_completion
 ```
+> [!info] [NEW v6.3] Example numbers are illustrative. Role condensation (goalie/attacker/defender)
+> and content-hash skip are active during Phase 3 runs. The `pass_completion_pct` KPI is
+> position-based (kicker NOT in opponent half), not role-based.
 
 **Output:** One commit with the winning model config. Regression suite updated if needed.
 
@@ -1348,7 +1401,8 @@ Delta: +0.08 composite, +1.2 shots_on_goal, +16pp pass_completion
 
 **4a: Iterate game-phase fragment library** (content authoring, local iteration)
 - The minimal stubs from Phase 2.5c are the starting point. Replace each 2-line stub
-  with full rules + samples:
+  with full rules + samples. **[NEW v6.3] Use role names goalie/attacker/defender
+  (not striker/midfielder/supporter — role condensation 2026-07-28):**
   - `rules_ball_out.txt` + `samples_ball_out.txt`
   - `rules_goal_kick.txt` + `samples_goal_kick.txt`
   - `rules_corner_kick_in.txt` + `samples_corner_kick_in.txt`
@@ -1401,6 +1455,13 @@ root cause of goalie idle is bad data: the LLM sees a stale (~800ms), noisy ball
 and produces bad goalie targets. The bridge blending corrects for this by overriding 70%
 of the LLM's target with tactical positioning logic.
 
+> [!info] [NEW v6.3] Content-hash skip reduced effective latency from ~1328ms to ~684ms
+> (2026-07-28). The Kalman filter's latency compensation value is reduced but not
+> eliminated — 684ms is still significant for a moving ball at ~2 m/s (ball travels
+> ~1.4m during the decision gap). The case for Kalman is now primarily about **noise
+> smoothing** (jitter-free positions → no micro-oscillations), with velocity estimation
+> as a secondary benefit. Latency compensation alone may not justify the complexity.
+
 Once the Kalman filter provides:
 - **Filtered ball position** (no noise → no jitter → no micro-oscillations)
 - **Ball velocity** (direction + speed → LLM can reason about motion)
@@ -1432,6 +1493,13 @@ Forward-simulate world state by N ms (matching measured LLM latency ~800ms). Fee
 the *predicted* future state, so its decisions apply to the world as it will be, not as it
 was. Reduces effective latency from the LLM's perspective to near-zero.
 
+> [!info] [NEW v6.3] Effective latency is now ~684ms (content-hash skip, 2026-07-28).
+> Per-call latency is ~777ms p50. The predictor should forward-simulate by the
+> **effective** latency (decision-time to action-time gap), not the per-call latency.
+> With content-hash skip, the evaluator reacts to real changes within ~20ms (one poll
+> cycle) instead of waiting for a redundant call to finish. The predictor's value is
+> reduced proportionally.
+
 **Implementation target:** New node `predictor_node.py` or extension of `state_aggregator.py`.
 Requires velocity estimates (5.1). Forward simulation: simple kinematic extrapolation
 (`pos += vel * dt`) for N steps, or a physics-based predictor for ball-bot collisions.
@@ -1458,6 +1526,14 @@ If LLM latency > N ms (e.g. 5000ms) or parse error rate > X% (e.g. 20%) or devia
 watchdog (5.3) flags critical anomaly → switch blue team to rule-based behavior (mirror
 `rule_evaluator_red.py` with blue goals). Ensures the system never hangs, never produces
 dangerous commands, and always has a functional opponent even if the LLM fails.
+
+> [!warning] [NEW v6.3] Content-hash skip makes file-mtime staleness checks unreliable
+> Content-hash skip (2026-07-28) means `current_strategy.json` may not update for
+> several seconds during stable positions — this is normal, not a failure. Failsafe
+> should trigger on: (a) LLM call latency > 5000ms (per-call, from `llm_trace`),
+> (b) parse error rate > 20% (rolling window), (c) no `llm_trace` records written
+> in N seconds while `world_trace` shows entity movement (positions changing but
+> no LLM response). Do NOT use `current_strategy.json` mtime as a staleness indicator.
 
 **Implementation target:** `r2k_evaluator.py` — monitor own latency/parse stats, switch to
 fallback mode. Or `ollama_sandbox_bridge.py` — detect stale `current_strategy.json` mtime,
@@ -1491,6 +1567,13 @@ Adapted prompt: simpler instructions, smaller num_ctx for K1 latency budget.
 **Implementation target:** `--relay hardware_mirror` in `launch_r2k.sh`. KPI collection
 via `analyze_trace.py` works on hardware (reads JSON traces, not ROS2 topics).
 Semi-automated: human places robots + ball, system runs match + collects KPIs.
+
+> [!info] [NEW v6.3] Replay system available
+> `launch_r2k.sh --analyze` opens a live annotator terminal during hardware matches
+> (press ENTER to freeze Gazebo, record a comment). Post-match: `replay_trace.py`
+> for CLI step-through or `r2k_visualizer.py --replay --nav` for visual playback with
+> annotation navigation (f/b/SPACE). See `tools/match_annotate.py` and
+> `tools/replay_trace.py`.
 
 #### 5.6 Opponent Adaptation (Curriculum Learning)
 
@@ -1585,7 +1668,12 @@ did the LLM's reasoning match the human's reasoning?
 - Added to the composite score or as a standalone quality metric
 
 **Deferred to Phase 5 because:**
-- Requires `--explain` mode (44% latency cost — not suitable for production runs)
+- ~~Requires `--explain` mode (44% latency cost — not suitable for production runs)~~
+  **[NEW v6.3]** Explain-mode was broken by Phase 2.5b dynamic injection, then fixed
+  (2026-07-28, `R2K_EXPLAIN` env var + `{{EXPLAIN_INSTRUCTION}}` placeholder). The 44%
+  latency cost was from B-study (B5: 1190ms vs 825ms, `num_predict` 600 vs 150). With
+  content-hash skip, explain calls are also skipped when positions don't change — the
+  per-call cost is still ~44% higher, but effective cost per match is lower.
 - LLM-as-judge is circular (using an LLM to evaluate an LLM) — needs careful design
 - Manual comparison is sufficient for the current team size and iteration speed
 - The quantitative KPIs (composite score, OOB, cluster) are the primary optimization
@@ -1600,9 +1688,14 @@ did the LLM's reasoning match the human's reasoning?
 The current test matrix focuses on 3vs3 (primary) and 2vs2 (secondary, faster iteration).
 Scaling to 5vs5 introduces new challenges:
 
-- **Prompt complexity:** 5 blue bots require 5 role assignments per LLM call. The prompt
+- **Prompt complexity:** ~~5 blue bots require 5 role assignments per LLM call. The prompt
   must define more roles (goalie, left-back, right-back, midfielder, striker) and the
-  sample must show 5-bot coordination.
+  sample must show 5-bot coordination.~~ **[NEW v6.3]** Role condensation (2026-07-28)
+  reduced to 3 roles (goalie/attacker/defender). For 5vs5: either (a) keep 3 roles with
+  2 attackers + 1 defender + 1 goalie + 1 flexible, or (b) introduce 2 new spatial roles
+  (e.g. left-attacker/right-attacker). Research question: does the 3B model handle 5-bot
+  coordination with 3 roles, or does it need spatial role differentiation? The bridge only
+  checks `role == 'goalie'`; all other roles are cosmetic labels for the visualizer.
 - **Latency:** More bots → larger JSON output → higher latency. May require `--no-explain`
   and 1-sample only (B-study findings become critical).
 - **Fragment library:** New `rules_5vs5.txt` + `samples_5vs5.txt` fragments needed.
@@ -1639,7 +1732,7 @@ necessary at 5vs5 scale?
 |-------|------|---------------|-----------|--------|
 | 1 (done) | 33 | 120s | ~1.1h | ✅ |
 | 2 Baseline (done) | 27 | 120s | ~54min | ✅ |
-| 2.5 v6.3 re-baseline | 27 | 120s | ~54min | ⬜ |
+| 2.5 v6.3 re-baseline | 27 | 120s | ~54min | ⬜ **[NEW v6.3] Code done, re-baseline blocked by live Gazebo+Ollama** |
 | 3 Models | 135 | 120s | ~4.5h | ⬜ |
 | 4 Fragment iteration + TC-10 | ~10 | 120s | ~20min | ⬜ |
 | **Total new (excl. done)** | **172** | — | **~5.7h** | |
@@ -1686,8 +1779,7 @@ Written by `tools/analyze_trace.py`. One file per run.
     "latency_p95": 872,
     "latency_max": 927,
     "parse_error_rate": 0.0,
-    "role_diversity": 4,
-    "roles": {"goalie": 155, "striker": 155, "supporter": 128, "midfielder": 27},
+    "roles": {"goalie": 155, "attacker": 155, "defender": 128},
     "avg_response_tokens": 76.0,
     "explain_mode": false,
     "model": "qwen2.5-coder:3b"
@@ -1725,36 +1817,43 @@ which are gitignored.
 
 ## 10. Related Files
 
-| File | Role | v6.2 Status |
+| File | Role | v6.3 Status |
 |------|------|-------------|
 | `src/referee_node.py` | Foul + ball-out + set-piece referee | ✅ v6.2 (unified set-pieces, early termination) |
 | `src/score_node.py` | Momentum (OLS, deque, trend) | ✅ v6.2 |
-| `src/reward_node.py` | 1Hz reward, foul penalty | ✅ v6.2 |
-| `src/state_aggregator.py` | Worldstate + world_trace logger | ✅ v6.2 |
-| `src/ai_tactics/r2k_evaluator.py` | LLM driver + llm_trace logger | ✅ v6.2 (dynamic prompt switching: Phase 2.5b) |
-| `src/ai_tactics/ollama_sandbox_bridge.py` | HAL (cmd_vel / RPC) | ✅ v5 (unchanged) |
-| `src/r2k_visualizer.py` | Blitted visualizer + momentum | ✅ v6.2 (untested live) |
+| `src/reward_node.py` | 1Hz reward, foul penalty | ✅ v6.3 (zero-delta skip) |
+| `src/state_aggregator.py` | Worldstate + world_trace logger | ✅ v6.3 (`/clock` subscription, sim-time in world_trace) |
+| `src/ai_tactics/r2k_evaluator.py` | LLM driver + llm_trace logger | ✅ v6.3 (dynamic prompt injection: Phase 2.5b, content-hash skip, explain-mode fix) |
+| `src/ai_tactics/ollama_sandbox_bridge.py` | HAL (cmd_vel / RPC) | ✅ v6.3 (Phase 2a goalie smooth blending + role-aware kick direction) |
+| `src/r2k_visualizer.py` | Blitted visualizer + momentum + replay | ✅ v6.3 (`--replay`/`--nav`/`--speed`/`--start` mode, annotation overlay, note panel, full-width momentum) |
 | `src/rule_evaluator_red.py` | Team red + P1-P5 | ✅ v6.2 |
 | `src/setup_r2k.py` | Prompt compiler (fragments only) | ✅ v6.2 (strat_*.txt removed) |
 | `src/ai_tactics/batch_evaluator.py` | Headless orchestrator (deprecated) | ⬜ Deprecated — replaced by shared regression suite |
-| `src/strategy/fragments/rules_core.txt` | Core rules + STAY INSIDE + goalie -4.0 | ✅ v6.2 consolidated |
-| `src/strategy/fragments/samples_3vs3.txt` | 1 sample, no --explain | ✅ v6.2 consolidated |
-| `src/tools/analyze_trace.py` | Offline KPI analyzer (14 KPIs) | ✅ v6.2 |
+| `src/strategy/fragments/rules_core.txt` | Core rules + STAY INSIDE + goalie -4.0 | ✅ v6.3 (consolidated) |
+| `src/strategy/fragments/samples_3vs3.txt` | 1 sample, no --explain | ✅ v6.3 (roles: attacker/defender/goalie) |
+| `src/strategy/fragments/rules_ball_out.txt` | [NEW v6.3] Minimal game-phase stub (Phase 2.5c) | ✅ v6.3 |
+| `src/strategy/fragments/rules_goal_kick.txt` | [NEW v6.3] Minimal game-phase stub (Phase 2.5c) | ✅ v6.3 |
+| `src/strategy/fragments/rules_corner_kick_in.txt` | [NEW v6.3] Minimal game-phase stub (Phase 2.5c) | ✅ v6.3 |
+| `src/strategy/fragments/rules_kickoff.txt` | [NEW v6.3] Minimal game-phase stub (Phase 2.5c) | ✅ v6.3 |
+| `src/tools/analyze_trace.py` | Offline KPI analyzer | ✅ v6.3 (18 KPIs: 15 base + 4 attack/passing/restart from Phase 2.5a, ~~role_diversity~~ dropped) |
 | `src/tools/dump_prompt.py` | Dry-run prompt inspector | ✅ v6.2 |
 | `src/tools/swap_fragments.sh` | Experiment fragment swapper | ✅ v6.2 |
 | `src/tools/run_experiment.sh` | Experiment runner (3 repeats) | ✅ v6.2 |
+| `src/tools/run_baseline.sh` | 27-run baseline runner | ✅ v6.3 (hardened: container readiness wait, prefix arg) |
+| `src/tools/match_annotate.py` | [NEW v6.3] Live match annotation tool (pause Gazebo, record comment) | ✅ v6.3 |
+| `src/tools/replay_trace.py` | [NEW v6.3] Post-match annotation review CLI | ✅ v6.3 |
 | `src/experiments/` | B-study experiment dirs (baseline + B1-B7b) | ✅ v6.2 |
 | `src/results/` | KPI JSONs + console logs + prompt dumps | ✅ (36 KPI files) |
-| `src/scenario/3vs3_*/` | TC-01..09 scenario packages (JSON + diagram + analysis + KPI targets) | ✅ v6.2 (packages created, diagrams generated) |
-| `src/scenario/2vs2_*/` | 2vs2 scenario packages (secondary test matrix) | ✅ v6.2 (TC-11 created, TC-12/13 future) |
+| `src/scenario/3vs3_*/` | TC-01..09 scenario packages (JSON + diagram + analysis + KPI targets) | ✅ v6.2 |
+| `src/scenario/2vs2_*/` | 2vs2 scenario packages (secondary test matrix) | ✅ v6.2 (TC-11 created) |
 | `src/scenario/3vs3_*.json` | Legacy flat scenario JSONs (backward compat) | ✅ v6.2 (TC-10 missing, Phase 4b) |
 | `src/tools/gen_field_diagrams.py` | Field diagram generator for scenario packages | ✅ v6.2 |
-| `launch_r2k.sh` | Entry point + headless + R2K_RUN_ID | ✅ v6.2 |
-| `tests/test_*.py` | Unit + integration tests (6 files) | ✅ v6.2 (62 tests pass) |
-| `tests/test_non_functional.py` | Shared regression suite (KPI thresholds, 11 slow tests) | ✅ v6.2 (Phase 2b, expanded 2f) |
+| `launch_r2k.sh` | Entry point + headless + R2K_RUN_ID + warm-up curl + --analyze | ✅ v6.3 |
+| `tests/test_*.py` | Unit + integration tests (7 files) | ✅ v6.3 (92 tests pass) |
+| `tests/test_non_functional.py` | Shared regression suite (KPI thresholds, 11 slow tests) | ✅ v6.3 (Phase 2b, expanded 2f) |
 | `docs/referee_rulebook.md` | Authoritative referee rulebook | ✅ v6.2 |
-| `docs/optimization_spec_v6.md` | Predecessor spec (v6.1) | Superseded by this file |
-| `docs/optimization_spec_v6.2.md` | This file | ✅ v6.2 |
+| `docs/optimization_spec_v6.2.md` | Predecessor spec (v6.2) | Superseded by this file |
+| `docs/optimization_spec_v6.3.md` | This file | ✅ v6.3 |
 
 ---
 
@@ -1785,7 +1884,18 @@ which are gitignored.
 | 13 | `cosmos` model | **Dropped** — technically too divergent from Ollama architecture | User decision 2026-07-27. Replacement lineup: 3 models ~2GB each, all Ollama-supported. Suggested: `qwen2.5-coder:3b` + `llama3.2:3b` + `qwen2.5:3b`. Final pick deferred to Phase 3 start. |
 | 14 | Phase 4 scope | **Reduced to fragment iteration + TC-10** — dynamic injection (4a) and minimal stubs (part of 4b) moved to Phase 2.5 | Phase 4 is now the content iteration phase, tuned for the winning model from Phase 3. Run count drops 45 → ~10. |
 | 15 | Game-phase fragment depth at 2.5 | **Minimal stubs** (2-line `rules_<status>.txt`, no samples stubs). No rename of `rules_3vs3.txt` — the evaluator treats mode fragments as the base "playing" rules; game-phase fragments are ADDITIVE for non-playing statuses only. | Defer full library to Phase 4. Avoids tuning fragments for the wrong model (pre-Phase-3). Keeps `setup_r2k.py` unchanged. |
-| 16 | New KPI count | **15 → 19** (add `shots_on_goal`, `shots_on_target`, `pass_completion_pct`, `restart_recovery_time_s`) | Attack/passing/restart measurement gap. Computed from existing trace data — no runtime node changes. Not part of composite score (would require recomputing weights); asserted alongside composite in regression suite. |
+| 16 | ~~New KPI count~~ | ~~15 → 19~~ **[NEW v6.3]** 15 → 18 (added 4 attack/passing/restart KPIs, dropped `role_diversity` — dead metric after role condensation). | Attack/passing/restart measurement gap. `role_diversity` had CV=0% across 27 baseline runs, always 3.0 after 5→3 role condensation — no discriminative value. |
+
+> [!check] Resolved decisions (2026-07-29) [NEW v6.3]
+
+| # | Question | Decision | Rationale |
+|---|----------|----------|----------|
+| 17 | Role count | **5 → 3** (goalie/attacker/defender) | Bridge only checks `role == 'goalie'`; striker/midfielder/passer/receiver/supporter were cosmetic noise the 3B model generated without any consumer. `role_diversity` KPI dropped (dead metric). |
+| 18 | Content-hash skip | **Enabled** (hash entity positions, skip LLM call if identical) | At `temperature: 0.0`, identical input → identical output → 64% of calls were wasted. Impact: 171→62 calls/match, effective latency ~1328ms→~684ms (~50%). |
+| 19 | Explain-mode fix | **`R2K_EXPLAIN` env var + `{{EXPLAIN_INSTRUCTION}}` placeholder** | Phase 2.5b dynamic injection bypassed `setup_r2k.py`'s `clean_json_samples()`. The evaluator now duplicates this logic and injects analysis/oracle defaults at runtime. Without this, Qwen 3B fills oracle with JSON strategy data. |
+| 20 | Replay system | **`match_annotate.py` + `replay_trace.py` + `--replay`/`--nav` visualizer mode** | Freeze Gazebo during live match to annotate moments. Post-match: visual playback with annotation navigation (f/b/SPACE) or CLI step-through. No ROS 2 required for replay. |
+| 21 | Ollama bind-address | **`OLLAMA_HOST=0.0.0.0` systemd override** | Docker container can't reach host's 127.0.0.1. `install.sh` creates systemd drop-in. `launch_r2k.sh` has container-reachability guard. Fixes "dead blue team" on U24 Docker. |
+| 22 | `format: "json"` confound | **Identified, not yet resolved** | Different models get different Ollama options (qwen: no format, llama/nemotron: format:json). Must unify before Phase 3 model comparison. |
 
 > [!question] Remaining decisions
 
@@ -1795,3 +1905,5 @@ which are gitignored.
 | 9 | Statistical confidence: assert single-run KPI or mean-of-N-runs? | Phase 2a — single-run is faster but stochastic. Mean-of-3 is more stable but 3× slower. |
 | 10 | CI strategy: nightly full suite or on-demand only? | Phase 2b — depends on whether CI is available (GitHub Actions) or manual. |
 | 11 | When to adopt DSPy/Optuna (Phase 5.9)? | Only if manual trial-and-error becomes a bottleneck for the team. |
+| 23 | [NEW v6.3] `format: "json"` for all models or none? | Before Phase 3 start — resolve the comparison confound. |
+| 24 | [NEW v6.3] No-explain latency optimizations (stop tokens, compact JSON, role stripping)? | Phase 2.5d evaluation — measure impact during re-baseline. |

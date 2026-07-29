@@ -1,11 +1,11 @@
 ---
-title: "ROS2K v6.2 Workshop — Student Handout"
+title: "ROS2K v6.3 Workshop — Student Handout"
 type: HANDOUT
-tags: [workshop, handout, student, v6.2]
-last_modified: 2026-07-23
+tags: [workshop, handout, student, v6.2, v6.3]
+last_modified: 2026-07-29
 ---
 
-# ROS2K v6.2 Workshop — Student Handout
+# ROS2K v6.3 Workshop — Student Handout
 
 > Dieses Handout begleitet dich durch die 5 Module. Es enthält die Aufgaben,
 > die Kommandos und Platz für deine Notizen. Die Antworten hat nur der
@@ -374,6 +374,22 @@ Fragment editieren → dump_prompt.py (verifizieren) → Match laufen lassen
 → analyze_trace.py (KPIs) → mit Baseline vergleichen → wenn besser: committen
 ```
 
+> [!info] [NEW v6.3] Dynamic Prompt Injection
+> Seit Phase 2.5b assembelt der Evaluator den Prompt **zur Laufzeit** aus
+> Fragmenten — nicht mehr nur beim Boot. Der Prompt wechselt basierend auf
+> `match_state.status`: bei `ball_out` wird `rules_ball_out.txt` additive
+> hinzugefügt. `setup_r2k.py` schreibt `system_prompt.txt` beim Boot (für
+> `dump_prompt.py`), aber der Evaluator liest es nicht mehr zur Laufzeit.
+>
+> **3 Rollen, nicht 5:** Seit 2026-07-28 nutzt das System nur noch
+> `goalie`/`attacker`/`defender` (war: striker/midfielder/passer/receiver/
+> supporter). Die Bridge prüft nur `role == 'goalie'`; alle anderen Rollen
+> waren kosmetisch.
+>
+> **Content-Hash-Skip:** Der Evaluator überspringt LLM-Calls wenn sich die
+> Entity-Positionen nicht geändert haben (64% weniger Calls pro Match,
+> effektive Latenz ~684ms statt ~1328ms).
+
 ### Experiment 1: KPIs lesen (8 min)
 
 ```bash
@@ -386,6 +402,15 @@ Schreibe die wichtigsten KPIs auf:
 - `cluster_pct`: _____
 - `goalie_idle_pct`: _____
 - `latency_p50`: _____
+- `shots_on_goal`: _____ [NEW v6.3]
+- `pass_completion_pct`: _____ [NEW v6.3]
+
+> [!info] [NEW v6.3] Neue KPIs
+> `shots_on_goal`, `shots_on_target`, `pass_completion_pct`,
+> `restart_recovery_time_s` — gemessen via Join von `llm_trace` (Kick/Pass
+> Actions) und `world_trace` (Ball-Positionen nach der Action).
+> `role_diversity` wurde entfernt (war immer 3.0 nach Role-Condensation —
+> keine Aussagekraft).
 
 ### Experiment 2: Fragment-Surgery (10 min)
 
@@ -405,8 +430,42 @@ python3 tools/analyze_trace.py --run-id <ID>
 | `oob_pct` | _____ | _____ | _____ |
 | `cluster_pct` | _____ | _____ | _____ |
 | `goals_for_blue` | _____ | _____ | _____ |
+| `shots_on_goal` | _____ | _____ | _____ |
 
-### Experiment 3: opencode Fragment-Edit + Experiment (7 min)
+### Experiment 3: Replay — Match annotieren und abspielen [NEW v6.3] (10 min)
+
+```bash
+# Terminal 1: Match mit Annotator starten
+./launch_r2k.sh --scenario 3vs3_attack_center --relay only_sim_bots --analyze
+
+# Terminal 2 (öffnet sich automatisch): ENTER drücken um Gazebo zu pausieren
+#   → Kommentar tippen → ENTER zum Fortsetzen. 'q' zum Beenden.
+```
+
+Nach dem Match — visuelles Replay mit Annotation-Navigation:
+```bash
+cd src
+python3 r2k_visualizer.py --replay --nav
+# f = nächste Annotation, b = vorherige, SPACE = Pause/Resume, q = Quit
+```
+
+Oder CLI-Review der Annotationen:
+```bash
+python3 tools/replay_trace.py          # letzte Match, interaktiv
+python3 tools/replay_trace.py --all    # alle Annotationen als Text
+```
+
+**Pro Annotation siehst du:**
+- Deinen Kommentar
+- Die LLM-Decision direkt davor (assignments + analysis/oracle)
+- Game-State (Score, Status, alle Bot-Positionen)
+- Ball-Trajektorie für 5s nach der Annotation (Tore, Status-Wechsel)
+
+**Deine Beobachtungen:**
+- ________________________________
+- ________________________________
+
+### Experiment 4: opencode Fragment-Edit + Experiment (7 min)
 
 ```text
 Edit rules_core.txt to add a rule: "ALWAYS pass to the bot closest to the
@@ -430,18 +489,25 @@ clustering. Show me a plan before making changes." <Tab> "Go ahead."
 
 ### Key Take-Aways Module 4
 
-- **Fragment-Assembly passiert beim Boot, nicht zur Laufzeit.** `setup_r2k.py`
-  liest `fragments/` → schreibt `system_prompt.txt`. Editiere immer die
-  Fragmente, nie `system_prompt.txt` (wird bei jedem Boot überschrieben).
-- **Override-Logik:** Strategy-Fragmente (`rules_aggro.txt`) ersetzen
-  Mode-Fragmente (`rules_3vs3.txt`), wenn sie existieren. Samples ebenso.
+- **[NEW v6.3] Dynamic Prompt Injection:** Der Evaluator assembelt den Prompt
+  zur Laufzeit aus Fragmenten, basierend auf `match_state.status`. Bei
+  `ball_out` → `rules_ball_out.txt` wird additive hinzugefügt. Game-Phase-
+  Fragmente sind ADDITIV zu Mode-Fragmenten (`rules_3vs3.txt`).
+- **[NEW v6.3] 3 Rollen (goalie/attacker/defender):** War 5 Rollen, jetzt 3.
+  Die Bridge prüft nur `role == 'goalie'`; alle anderen Rollen waren kosmetisch.
+- **[NEW v6.3] Content-Hash-Skip:** 64% weniger LLM-Calls (171→62/Match).
+  Effektive Latenz ~684ms (war ~1328ms). Bei `temperature: 0.0` → identische
+  Input-Positionen → identischer Output → Call übersprungen.
+- **Fragment-Assembly passiert beim Boot UND zur Laufzeit.** `setup_r2k.py`
+  liest `fragments/` → schreibt `system_prompt.txt` (für `dump_prompt.py`).
+  Der Evaluator assembelt zur Laufzeit direkt aus Fragmenten.
 - **`dump_prompt.py` ist dein Pre-Flight-Check.** Zeigt den assemblierten
-  Prompt ohne ROS/Ollama.immer ausführen bevor du ein Match startest.
+  Prompt ohne ROS/Ollama. Immer ausführen bevor du ein Match startest.
 - **Die Iterations-Schleife ist manuell:** Fragment editieren → `dump_prompt`
   → Match → `analyze_trace` → KPIs vergleichen → wenn besser, committen.
   Kein automatischer Optimierer — Trial-and-Error mit pytest als Regressionsschutz.
-- **`run_experiment.sh A baseline`**: `A` = Name (Baseline), `baseline` =
-  keine Fragment-Swap. `B1`-`B7b` = Varianten mit `swap_fragments.sh`.
+- **[NEW v6.3] Replay-System:** `--analyze` öffnet Annotator-Terminal.
+  `--replay --nav` spielt das Match ab mit f/b-Steuerung für Annotationen.
 
 ---
 
@@ -460,7 +526,8 @@ Das ist dein persönlicher Datensatz vom Workshop-Tag.
 - `composite_score`: _____
 - `tactical_score_avg`: _____
 - `ball_possession_blue_pct`: _____
-- `role_diversity`: _____
+- `shots_on_goal`: _____ [NEW v6.3]
+- `pass_completion_pct`: _____ [NEW v6.3]
 - `status_distribution`: _____
 
 **Persönliche Beobachtungen / Ideen für eigene Experimente:**
@@ -477,20 +544,56 @@ cat scenario/3vs3_attack_center/analysis.md
 Vergleiche das LLM-Reasoning (`analysis` + `oracle` im `llm_trace`) mit der
 menschlichen Oracle aus `analysis.md`.
 
+> [!info] [NEW v6.3] Explain-Mode repariert
+> `--explain` war nach Phase 2.5b kaputt (dynamic injection umging
+> `clean_json_samples()`). Jetzt gefixt via `R2K_EXPLAIN` env var +
+> `{{EXPLAIN_INSTRUCTION}}` Placeholder. `num_predict` = 600 (explain) /
+> 150 (no-explain). Explain kostet ~44% mehr Latenz pro Call, aber
+> Content-Hash-Skip reduziert die Anzahl Calls.
+
 **Hat die KI richtig gedacht?**
 - ________________________________
 - ________________________________
+
+### Experiment 3: Replay mit Annotationen [NEW v6.3] (10 min)
+
+```bash
+# Match mit Annotationen aufzeichnen
+./launch_r2k.sh --scenario 3vs3_attack_center --relay only_sim_bots --explain --analyze
+# Im Annotator-Terminal: ENTER → Kommentar → ENTER (wiederholen)
+```
+
+Nach dem Match — visuelles Replay mit Step-Through:
+```bash
+cd src
+python3 r2k_visualizer.py --replay --nav --speed 3
+# f = nächste Annotation (pausiert automatisch)
+# b = vorherige Annotation
+# SPACE = Resume
+# Im Visualizer: Note-Panel oben rechts, gelbe Diamanten im Momentum-Panel
+```
+
+**Fragen:**
+- Stimmen die LLM-Entscheidungen an den annotierten Stellen mit deiner
+  Einschätzung überein?
+- Wo hat die KI das Spiel gedreht (Momentum-Knick im Panel)?
+- Gibt es Timestamps, wo die KI gar nichts getan hat (Content-Hash-Skip)?
 
 ### Phase 5 — Forschungsrichtungen
 
 | Richtung | Was | Status |
 |----------|-----|--------|
 | 5.1 Kalman-Filter | Noise filtern, Velocity schätzen. Goalie-Idle-Fix. | Geplant |
-| 5.2 Predictive World Model | Welt ~800ms vorhersagen → Latenz kompensieren | Geplant |
+| 5.2 Predictive World Model | Welt ~684ms vorhersagen → Latenz kompensieren | Geplant |
 | 5.3+5.4 Watchdog + Failsafe | Predicted vs. Actual vergleichen → Rule-based Fallback | Geplant |
-| 5.5 Sim-to-Real | Auf K1/Yahboom-Hardware testen | Geplant |
-| 5.10 5vs5 Scale-Up | 5 Bote, mehr Rollen, größere Prompts | Geplant |
+| 5.5 Sim-to-Real | Auf K1/Yahboom-Hardware testen. Replay-System verfügbar (`--analyze`). | Geplant |
+| 5.10 5vs5 Scale-Up | 5 Bots, ~~mehr Rollen~~ 3 Rollen + Spatial Split, größere Prompts | Geplant |
 | 5.11 LLM-Output-Quality | Automated LLM-as-judge für Reasoning-Quality | Geplant |
+
+> [!info] [NEW v6.3] Aktuelle Latenz
+> Effektive Latenz (Situation-Change → Strategy-Output) ist jetzt ~684ms
+> (war ~1328ms vor Content-Hash-Skip). Per-Call-Latenz bleibt ~777ms p50.
+> Phase 5.2 (Predictive Model) muss nur noch ~684ms kompensieren, nicht ~1328ms.
 
 **Welche Richtung interessiert dich für ein Praktikum / Studienprojekt?**
 - ________________________________
@@ -507,6 +610,10 @@ compare them to the oracle text in scenario/3vs3_attack_center/analysis.md.
 Explain the Phase 5.1 Kalman filter plan. Where in tracker_node.py would
 it be implemented? Show me the current code that would need to change.
 ```
+```text
+How does the content-hash skip work in r2k_evaluator.py? Show me the
+hashing code and explain why it saves 64% of LLM calls.
+```
 
 ### Key Take-Aways Module 5
 
@@ -514,16 +621,20 @@ it be implemented? Show me the current code that would need to change.
   Sage "wir planen", nicht "wir haben". Keine Features als existent präsentieren.
 - **Kalman-Filter (5.1) ist der Enabler.** Filtert Noise, schätzt Velocity,
   behebt Goalie-Idle. Ohne 5.1 kein 5.2 (Predictive World Model).
-- **Predictive World Model (5.2) kompensiert Latenz.** Vorhersage um ~800ms
-  → KI entscheidet für die Welt, wie sie SEIN WIRD, nicht wie sie WAR.
-  Reduziert effektive Staleness auf nahe Null.
+- **[NEW v6.3] Predictive World Model (5.2) kompensiert ~684ms** (war ~800ms).
+  Content-Hash-Skip halbiert die effektive Latenz. Der Predictor muss nur
+  noch die halbe Strecke überbrücken — Value-Prop reduziert, aber nicht null.
 - **Watchdog + Failsafe (5.3+5.4) = Sicherheit.** Predicted vs. Actual
-  vergleichen → bei Divergenz → rule-based Fallback. System hängt nie,
-  produziert nie gefährliche Kommandos.
+  vergleichen → bei Divergenz → rule-based Fallback.
+  **[NEW v6.3] Achtung:** Content-Hash-Skip macht `current_strategy.json`
+  mtime unzuverlässig als Staleness-Indikator — Failsafe muss auf
+  `llm_trace`-Records prüfen, nicht auf File-mtime.
 - **Sim-to-Real (5.5) ist der Endtest.** `--relay hardware_mirror` auf
-  K1/Yahboom. Sim-KPIs vs. Feld-KPIs vergleichen. K1-Freeze-Limit beachten.
-- **5vs5 (5.10) ist offen:** Schafft das 3B-Modell 5-Bot-Koordination oder
-  brauchen wir 7B? Mehr Rollen, größere Prompts, höhere Latenz.
+  K1/Yahboom. **[NEW v6.3]** Replay-System verfügbar: `--analyze` für
+  Live-Annotationen, `--replay --nav` für Post-Match-Review.
+- **5vs5 (5.10) ist offen:** Schafft das 3B-Modell 5-Bot-Koordination mit
+  ~~mehr Rollen~~ **[NEW v6.3]** 3 Rollen (goalie/attacker/defender) +
+  Spatial Split? Oder braucht es 7B? Höhere Latenz bei 5 Assignments.
 
 ---
 
@@ -532,9 +643,11 @@ it be implemented? Show me the current code that would need to change.
 | Problem                                   | Fix                                                                                                                            |
 | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
 | Ollama nicht erreichbar                   | `pkill -9 -f "ollama runner"; pkill -9 -f "ollama serve"; sleep 2; nohup ollama serve > /dev/null 2>&1 &; sleep 3; nvidia-smi` |
-| Blaues Team bewegt sich nicht (dead blue) | `ls logs/llm_trace_*_<run_id>.jsonl` — wenn Datei fehlt: Cold-Boot-Race. Match neu starten (Modell ist jetzt warm).            |
+| Blaues Team bewegt sich nicht (dead blue) | `ls logs/llm_trace_*_<run_id>.jsonl` — wenn Datei fehlt: Cold-Boot-Race. Match neu starten (Modell ist jetzt warm). **[NEW v6.3]** Auf U24 (Docker): Ollama muss auf `0.0.0.0` lauschen, nicht `127.0.0.1` — siehe `install.sh` systemd override. |
 | Gazebo startet nicht                      | `ros2 run r2k_world_model tracker` in anderem Terminal prüfen. Docker: `docker ps` — Container läuft?                          |
 | `parse_error_rate` hoch                   | `num_predict` zu niedrig? Versuche `--explain` (600 Tokens statt 150). Siehe `cheatpage.md` §3.                                |
+| **[NEW v6.3]** Annotator: "ros2 not available" | Container läuft nicht oder `PROJECT_NAME` nicht gesetzt. Auf U24: `launch_r2k.sh --analyze` öffnet Annotator erst NACH Container-Start. |
+| **[NEW v6.3]** Replay: alle Timestamps zeigen t=0.0s | Sim-time (`/clock`) nicht verfügbar — `libgazebo_ros_init.so` noch nicht im Container gebaut. `replay_trace.py` nutzt `t_wall` als Fallback (Wall-Clock). Baut mit: `docker exec core_gazebo bash -c "cd /workspace/ros2_ws && rm -rf build install && colcon build"` |
 
 ---
 
@@ -542,9 +655,9 @@ it be implemented? Show me the current code that would need to change.
 
 | Was                                            | Wo                                    |
 | ---------------------------------------------- | ------------------------------------- |
-| Launch-Flags (`--scenario`, `--explain`, etc.) | `cheatpage.md` §1                     |
+| Launch-Flags (`--scenario`, `--explain`, `--analyze`, etc.) | `cheatpage.md` §1                     |
 | Test-Kommandos (`pytest`)                      | `cheatpage.md` §2                     |
-| 14 KPI-Definitionen                            | `cheatpage.md` §3                     |
+| 18 KPI-Definitionen                            | `cheatpage.md` §3                     |
 | 10 Szenarien + Oracle + KPI-Targets            | `cheatpage.md` §4                     |
 | Quick-Test-Rezepte (Smoke test, etc.)          | `cheatpage.md` §5                     |
 | Dateipfade (wo liegen die Files?)              | `cheatpage.md` §6                     |
@@ -552,5 +665,8 @@ it be implemented? Show me the current code that would need to change.
 | Architektur-Übersicht (Runtime)                | `part2_running_system.pdf`            |
 | ROS2 Node Graph                                | `rqt_graph_mockup.png`                |
 | Referee-Regelwerk (alle Entscheidungen)        | `core/docs/referee_rulebook.md`       |
-| Optimierungs-Spec (Phasen 0-5)                 | `core/docs/optimization_spec_v6.2.md` |
+| Optimierungs-Spec (Phasen 0-5)                 | `core/docs/optimization_spec_v6.3.md` |
+| **[NEW v6.3]** Replay: Match annotieren        | `tools/match_annotate.py`             |
+| **[NEW v6.3]** Replay: CLI-Review              | `tools/replay_trace.py`               |
+| **[NEW v6.3]** Replay: Visuelles Playback      | `r2k_visualizer.py --replay --nav`    |
 | opencode starten                               | `cd ~/R2K-HSL/core && opencode`       |

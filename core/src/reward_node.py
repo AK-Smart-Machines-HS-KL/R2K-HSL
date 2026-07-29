@@ -99,11 +99,17 @@ class RewardNode(Node):
                 elapsed = time.time() - self.action_start_time
                 action_type = 'Move' if self.pending_action.get('target_x') is not None else 'Kick'
                 timeout = 5.0 if action_type == 'Move' else 2.0
-                
+
                 if elapsed >= timeout:
                     score_after = self.current_score
                     reward = score_after - (self.score_before if self.score_before is not None else score_after)
-                    
+
+                    if reward == 0 and self.score_before == score_after:
+                        self.score_before = None
+                        self.action_start_time = None
+                        self.pending_action = None
+                        return
+
                     classification = "neutral"
                     if reward > 1.0: classification = "positive"
                     elif reward < -1.0: classification = "negative"

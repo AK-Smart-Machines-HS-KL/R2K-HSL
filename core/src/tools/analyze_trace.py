@@ -11,11 +11,17 @@ Computes:
   goalie_idle_frames                — frames where goalie moved < 0.05m
   goalie_tactical_pct               — % frames goalie in tactically useful position
   oob_frames_blue                   — blue bot outside field bounds
-  ball_possession_blue_pct          — % frames closest bot to ball is blue
-  role_diversity                    — distinct role strings in LLM responses
-  latency_p50/p95/max               — from latency_ms
-  parse_error_rate                  — % calls with parse_code > 0
-  avg_response_tokens               — len(raw_response)/4
+   ball_possession_blue_pct          — % frames closest bot to ball is blue
+   latency_p50/p95/max               — from latency_ms
+   parse_error_rate                  — % calls with parse_code > 0
+   avg_response_tokens               — len(raw_response)/4
+  shots_on_goal [2.5]               — Kick actions (kicker in opp half, ball ≤2m)
+                                     where ball moves toward opp goal after kick
+  shots_on_target [2.5]             — subset where ball Y at x=4.5 within ±1.3m
+  pass_completion_pct [2.5]         — % Pass actions where different blue bot
+                                     closest to ball within 2s
+  restart_recovery_time_s [2.5]     — mean time from status!=playing to
+                                     restart-team bot within 0.3m of ball
 
 Usage:
   python3 tools/analyze_trace.py --run-id test_001
@@ -26,6 +32,7 @@ import argparse
 import json
 import math
 import os
+import re
 import statistics
 import sys
 from collections import Counter
@@ -37,14 +44,26 @@ GOALIE_IDLE_THRESHOLD = 0.05
 OOB_MARGIN = 0.1  # bots slightly outside count as OOB
 
 # Goalie tactical position thresholds (Phase 2a). Must match bridge constants.
-# Ball far from goal => goalie should be forward (angle-block), not parked at line.
-# Ball near goal => goalie should be near goal line and track ball Y.
-GOALIE_NEAR_GOAL_DIST = 1.0   # ball within this = "near" zone
-GOALIE_FAR_GOAL_DIST  = 4.0   # ball beyond this = "far" zone
-GOALIE_LINE_X = -4.3          # expected goalie X when ball near goal
-GOALIE_NEAR_X_MIN = -4.5      # goalie X must be >= this when ball near
-GOALIE_NEAR_X_MAX = -3.5      # goalie X must be <= this when ball near
-GOALIE_Y_TOL = 0.8            # goalie Y must be within this of expected Y
+GOALIE_NEAR_GOAL_DIST = 1.0
+GOALIE_FAR_GOAL_DIST  = 4.0
+GOALIE_LINE_X = -4.3
+GOALIE_NEAR_X_MIN = -4.5
+GOALIE_NEAR_X_MAX = -3.5
+GOALIE_Y_TOL = 0.8
+
+# Attack/passing/restart KPI thresholds (Phase 2.5a)
+OPP_GOAL_X = 4.5            # opponent goal line
+GOAL_HALF_WIDTH = 1.3       # goal posts at y = ±1.3
+SHOT_KICKER_OPP_HALF = 0.0  # kicker x > 0 = in opponent half
+SHOT_BALL_NEAR_KICKER = 2.0 # ball within 2m of kicker at kick time
+SHOT_BALL_VX_THRESHOLD = 0.5 # ball x-velocity (m/s) > this = "toward opp goal"
+SHOT_FOLLOW_FRAMES = 5      # frames (0.5s) after kick to check ball movement
+PASS_FOLLOW_FRAMES = 20     # frames (2s) after pass to check receiver touch
+RESTART_TOUCH_DIST = 0.35    # restart-team bot within this of ball = recovery
+                            # (0.35 not 0.3 to account for tracker noise —
+                            # the referee uses 0.3m for early termination, but
+                            # the tracker rounds to 0.1m precision)
+SHOT_EXTRAPOLATE_FRAMES = 10 # frames (1s) to extrapolate ball trajectory for on-target
 
 
 def load_jsonl(path):
@@ -64,19 +83,217 @@ def load_jsonl(path):
 
 
 def extract_assignments(raw_response):
-    """Extract role strings from raw LLM response."""
+    """Extract assignments dict from raw LLM response."""
     try:
         start = raw_response.find('{')
         end = raw_response.rfind('}')
         if start == -1 or end == -1:
             return {}
         json_str = raw_response[start:end + 1]
-        json_str = __import__('re').sub(r',\s*\}', '}', json_str)
-        json_str = __import__('re').sub(r',\s*\]', ']', json_str)
+        json_str = re.sub(r',\s*\}', '}', json_str)
+        json_str = re.sub(r',\s*\]', ']', json_str)
         data = json.loads(json_str)
         return data.get("assignments", data)
     except Exception:
         return {}
+
+
+def compute_attack_kpis(world_records, llm_records):
+    """Phase 2.5a — 4 attack/passing/restart KPIs.
+
+    Joins llm_trace (Kick/Pass actions + world_snapshot at decision time) with
+    world_trace (ball position deltas after the action) to measure soccer behavior
+    that the existing KPIs (goals, possession) cannot detect.
+
+    Returns dict with: shots_on_goal, shots_on_target, pass_completion_pct,
+    restart_recovery_time_s, pass_attempts, restart_events.
+    """
+    if not world_records or not llm_records:
+        return {
+            "shots_on_goal": 0, "shots_on_target": 0,
+            "pass_attempts": 0, "pass_completion_pct": 0.0,
+            "restart_events": 0, "restart_recovery_time_s": 0.0,
+        }
+
+    # Build a time-indexed list of world frames for the post-action lookup.
+    # world_records are ~10Hz (0.1s apart); llm_records have a `t` timestamp.
+    # Use t_wall (wall-clock) as the common timeline — sim-time (t) is 0.0
+    # in existing traces (libgazebo_ros_init.so not yet rebuilt into container).
+    world_times = [r.get("t_wall", r.get("t", 0)) for r in world_records]
+
+    def find_world_frame_after(t, n_frames):
+        """Return the index of the first world frame at or after time t, plus
+        the next n_frames indices. Returns (start_idx, [idx_list])."""
+        # Binary search for the first frame with t >= target
+        lo, hi = 0, len(world_times)
+        while lo < hi:
+            mid = (lo + hi) // 2
+            if world_times[mid] < t:
+                lo = mid + 1
+            else:
+                hi = mid
+        start = lo
+        indices = list(range(start, min(start + n_frames, len(world_records))))
+        return start, indices
+
+    # === shots_on_goal + shots_on_target ===
+    shots_on_goal = 0
+    shots_on_target = 0
+    for llm_rec in llm_records:
+        assignments = extract_assignments(llm_rec.get("raw_response", ""))
+        snapshot = llm_rec.get("world_snapshot", {})
+        ball_snap = snapshot.get("soccer_ball", {})
+        if not ball_snap:
+            continue
+        call_t = llm_rec.get("t", 0)
+        for bot_name, task in assignments.items():
+            if not isinstance(task, dict):
+                continue
+            if task.get("action") != "Kick":
+                continue
+            if "blue" not in bot_name:
+                continue
+            kicker_snap = snapshot.get(bot_name, {})
+            kx = kicker_snap.get("x", 0)
+            # Shot: kicker in opponent half, ball near kicker
+            if kx <= SHOT_KICKER_OPP_HALF:
+                continue
+            ball_dist = math.hypot(ball_snap.get("x", 0) - kx,
+                                   ball_snap.get("y", 0) - kicker_snap.get("y", 0))
+            if ball_dist > SHOT_BALL_NEAR_KICKER:
+                continue
+            # Look at ball position in the SHOT_FOLLOW_FRAMES after the call
+            _, follow_idxs = find_world_frame_after(call_t, SHOT_FOLLOW_FRAMES)
+            if not follow_idxs:
+                continue
+            # Ball velocity: compare first follow frame to the snapshot
+            # (the snapshot is ~800ms stale; the first follow frame is ~current)
+            first_frame = world_records[follow_idxs[0]]
+            ball_after = first_frame.get("entities", {}).get("soccer_ball", {})
+            if not ball_after:
+                continue
+            dt = world_times[follow_idxs[0]] - call_t
+            if dt <= 0:
+                dt = 0.1
+            vx = (ball_after.get("x", 0) - ball_snap.get("x", 0)) / dt
+            if vx <= SHOT_BALL_VX_THRESHOLD:
+                continue
+            # Ball moved toward opponent goal → it's a shot on goal
+            shots_on_goal += 1
+            # On target: extrapolate ball Y at x=OPP_GOAL_X
+            ball_x = ball_after.get("x", 0)
+            ball_y = ball_after.get("y", 0)
+            # Use velocity from the follow window (first to last follow frame)
+            if len(follow_idxs) >= 2:
+                last_frame = world_records[follow_idxs[-1]]
+                ball_last = last_frame.get("entities", {}).get("soccer_ball", {})
+                dt_window = world_times[follow_idxs[-1]] - world_times[follow_idxs[0]]
+                if dt_window > 0:
+                    vx = (ball_last.get("x", 0) - ball_x) / dt_window
+                    vy = (ball_last.get("y", 0) - ball_y) / dt_window
+            if vx > 0:
+                t_to_goal = (OPP_GOAL_X - ball_x) / vx
+                y_at_goal = ball_y + vy * t_to_goal
+                if abs(y_at_goal) <= GOAL_HALF_WIDTH:
+                    shots_on_target += 1
+
+    # === pass_completion_pct ===
+    pass_attempts = 0
+    pass_completions = 0
+    for llm_rec in llm_records:
+        assignments = extract_assignments(llm_rec.get("raw_response", ""))
+        snapshot = llm_rec.get("world_snapshot", {})
+        call_t = llm_rec.get("t", 0)
+        for bot_name, task in assignments.items():
+            if not isinstance(task, dict):
+                continue
+            if task.get("action") != "Kick":
+                continue
+            if "blue" not in bot_name:
+                continue
+            kicker_snap = snapshot.get(bot_name, {})
+            # Position-based pass detection: a Kick by a blue bot NOT in the
+            # opponent half is a pass attempt (not a shot). Role-independent —
+            # works with any role naming scheme (3-role: goalie/attacker/defender).
+            if kicker_snap.get("x", 0) > SHOT_KICKER_OPP_HALF:
+                continue  # in opponent half → likely a shot, not a pass
+            pass_attempts += 1
+            # Check if a DIFFERENT blue bot is closest to ball within 2s
+            _, follow_idxs = find_world_frame_after(call_t, PASS_FOLLOW_FRAMES)
+            for idx in follow_idxs:
+                frame = world_records[idx]
+                ents = frame.get("entities", {})
+                ball = ents.get("soccer_ball", {})
+                if not ball:
+                    continue
+                bx, by = ball.get("x", 0), ball.get("y", 0)
+                min_dist = float('inf')
+                closest_bot = None
+                for bname, bpos in ents.items():
+                    if "blue" not in bname:
+                        continue
+                    d = math.hypot(bpos.get("x", 0) - bx, bpos.get("y", 0) - by)
+                    if d < min_dist:
+                        min_dist = d
+                        closest_bot = bname
+                if closest_bot and closest_bot != bot_name:
+                    pass_completions += 1
+                    break  # one completion per pass attempt
+
+    pass_completion_pct = round(pass_completions / max(pass_attempts, 1) * 100, 1) if pass_attempts > 0 else 0.0
+
+    # === restart_recovery_time_s ===
+    restart_events = 0
+    restart_recovery_times = []
+    prev_status = "playing"
+    for i, rec in enumerate(world_records):
+        match_state = rec.get("match_state", {})
+        status = match_state.get("status", "playing")
+        # Detect transition into a non-playing status
+        if prev_status == "playing" and status != "playing":
+            restart_team = match_state.get("restart_team")
+            if not restart_team:
+                prev_status = status
+                continue
+            # Forward-scan for first frame where a restart-team bot is within
+            # RESTART_TOUCH_DIST of the ball
+            ents = rec.get("entities", {})
+            ball = ents.get("soccer_ball", {})
+            if not ball:
+                prev_status = status
+                continue
+            bx, by = ball.get("x", 0), ball.get("y", 0)
+            t_start = rec.get("t_wall", rec.get("t", 0))
+            for j in range(i, len(world_records)):
+                frame = world_records[j]
+                fents = frame.get("entities", {})
+                fball = fents.get("soccer_ball", {})
+                if not fball:
+                    continue
+                fbx, fby = fball.get("x", 0), fball.get("y", 0)
+                for bname, bpos in fents.items():
+                    if restart_team not in bname:
+                        continue
+                    d = math.hypot(bpos.get("x", 0) - fbx, bpos.get("y", 0) - fby)
+                    if d <= RESTART_TOUCH_DIST:
+                        restart_events += 1
+                        restart_recovery_times.append(frame.get("t_wall", frame.get("t", 0)) - t_start)
+                        break
+                else:
+                    continue
+                break  # found recovery for this restart
+        prev_status = status
+
+    restart_recovery_time_s = round(statistics.mean(restart_recovery_times), 2) if restart_recovery_times else 0.0
+
+    return {
+        "shots_on_goal": shots_on_goal,
+        "shots_on_target": shots_on_target,
+        "pass_attempts": pass_attempts,
+        "pass_completion_pct": pass_completion_pct,
+        "restart_events": restart_events,
+        "restart_recovery_time_s": restart_recovery_time_s,
+    }
 
 
 def compute_world_kpis(world_records):
@@ -247,7 +464,7 @@ def compute_llm_kpis(llm_records):
     if not llm_records:
         return {
             "llm_calls": 0, "latency_p50": 0, "latency_p95": 0, "latency_max": 0,
-            "parse_error_rate": 0.0, "role_diversity": 0, "avg_response_tokens": 0,
+            "parse_error_rate": 0.0, "avg_response_tokens": 0,
             "roles": {},
         }
 
@@ -255,7 +472,8 @@ def compute_llm_kpis(llm_records):
     parse_errors = sum(1 for r in llm_records if r.get("parse_code", 0) > 0)
     response_tokens = [len(r.get("raw_response", "")) / 4 for r in llm_records]
 
-    # Role diversity
+    # Role counter (diagnostic only — role_diversity dropped as dead metric,
+    # CV=0% across 27 v6.3 baseline runs. See kpi_regression_analysis_2026-07-27.md)
     role_counter = Counter()
     for r in llm_records:
         assignments = extract_assignments(r.get("raw_response", ""))
@@ -273,7 +491,6 @@ def compute_llm_kpis(llm_records):
         "latency_max": max(latencies) if latencies else 0,
         "latency_mean": round(statistics.mean(latencies), 0) if latencies else 0,
         "parse_error_rate": round(parse_errors / n * 100, 1),
-        "role_diversity": len(role_counter),
         "roles": dict(role_counter.most_common(20)),
         "avg_response_tokens": round(statistics.mean(response_tokens), 0) if response_tokens else 0,
         "explain_mode": llm_records[0].get("explain", None),
@@ -311,6 +528,9 @@ def main():
 
     world_kpis = compute_world_kpis(world_records)
     llm_kpis = compute_llm_kpis(llm_records)
+    attack_kpis = compute_attack_kpis(world_records, llm_records)
+    # Merge attack KPIs into world_kpis for backward-compatible output structure
+    world_kpis.update(attack_kpis)
 
     result = {
         "run_id": args.run_id,
@@ -344,12 +564,15 @@ def main():
     print(f"OOB frames:      {world_kpis.get('oob_frames_blue', 0)} ({world_kpis.get('oob_pct', 0)}%)")
     print(f"Status dist:     {world_kpis.get('status_distribution', {})}")
     print("-" * 60)
+    print(f"Shots on goal:   {world_kpis.get('shots_on_goal', 0)} (on target: {world_kpis.get('shots_on_target', 0)})")
+    print(f"Pass attempts:   {world_kpis.get('pass_attempts', 0)} ({world_kpis.get('pass_completion_pct', 0)}% completed)")
+    print(f"Restart events:  {world_kpis.get('restart_events', 0)} (mean recovery: {world_kpis.get('restart_recovery_time_s', 0)}s)")
+    print("-" * 60)
     print(f"LLM calls:       {llm_kpis.get('llm_calls', 0)}")
     print(f"Latency p50:     {llm_kpis.get('latency_p50', 0)}ms")
     print(f"Latency p95:     {llm_kpis.get('latency_p95', 0)}ms")
     print(f"Latency max:     {llm_kpis.get('latency_max', 0)}ms")
     print(f"Parse errors:    {llm_kpis.get('parse_error_rate', 0)}%")
-    print(f"Role diversity:  {llm_kpis.get('role_diversity', 0)} distinct roles")
     print(f"Roles:           {llm_kpis.get('roles', {})}")
     print("=" * 60)
 

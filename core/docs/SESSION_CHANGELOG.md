@@ -2148,3 +2148,592 @@ warm-up curl) and are not fixed by this change.
 - `run_baseline.sh` reliability (carried from 2026-07-27).
 - Phase 3 requires `ollama pull cosmos` — model size/variant not yet
   determined (carried from 2026-07-27).
+
+## 2026-07-27 (continued) — Phase 2.5 spec amendment + code (KPIs, dynamic injection, hardening)
+
+**Goal:** Insert Phase 2.5 between Phase 2 and Phase 3 — add 4 attack/passing/restart
+KPIs, implement dynamic prompt injection (moved from Phase 4a), create minimal
+game-phase fragments, harden `launch_r2k.sh` (warm-up curl) and `run_baseline.sh`
+(container readiness). Phase 3 `cosmos` model dropped (technically too divergent
+from Ollama architecture); replacement lineup TBD. Update v6.2 spec to reflect
+the new phase ordering.
+
+**Done:**
+
+### Spec update — `optimization_spec_v6.2.md` (+351/-94 lines)
+- Frontmatter: `last_updated: 2026-07-27`, new tags (phase-2.5, attack-kpis,
+  shot-on-goal, pass-completion, restart-recovery)
+- §0 Management Summary: 6→7 phases, Phase 2 ✅ DONE, Phase 2.5 ⬜ Next,
+  Phase 3 ⬜ Blocked by 2.5, Phase 4 reworked (45→~10 runs), total 207→232 runs
+- §0 Key metrics: 14→19 KPI table with Phase-added column + composite-bias
+  warning callout (27-run baseline showed blue scores ~0.3 goals/match with
+  77% possession — composite is dominated by `goal_diff_norm` but blue can't
+  score; adding `shots_on_goal` / `pass_completion_pct` first makes Phase 3
+  model comparison soccer-meaningful)
+- §1 Architecture diagram: "Phase 4" → "Phase 2.5b/2.5"
+- §4.2 Fragment taxonomy: "Phase 4 introduces" → "Phase 2.5b implements";
+  ~20 lines → ~35 lines; clarified game-phase fragments are ADDITIVE to mode
+  fragments (not replacements); no rename of `rules_3vs3.txt` needed
+- §4.5 TC-10: "Phase 4a" → "Phase 2.5b"
+- §5.1 KPI table: 15→19 rows, 4 new KPIs marked **[2.5]**:
+  - `shots_on_goal` — Kick actions (kicker in opp half, ball ≤2m) where ball
+    moves toward opp goal after kick (world+llm join)
+  - `shots_on_target` — subset where ball Y at x=4.5 within ±1.3m (goal posts)
+  - `pass_completion_pct` — % Pass actions where different blue bot closest to
+    ball within 2s (world+llm join)
+  - `restart_recovery_time_s` — mean time from `status != "playing"` to
+    restart-team bot within 0.35m of ball (pure world_trace)
+- §7 Phases: Phase 2 marked DONE with checkpoint; **new Phase 2.5**
+  (lines 1110-1290, 8 sub-steps: pre1, pre2, a, b, c, d, e, f); Phase 3
+  reworked (cosmos dropped, lineup TBD, v6.3 baseline reference, 4 new KPIs
+  used for comparison); Phase 4 reworked (4a→2.5b, 4b→2.5c, now fragment
+  iteration + TC-10, ~10 runs)
+- §8 Run Budget: updated with Status column, 172 new runs (excl. done)
+- §10 Related files: `test_non_functional.py` ✅, evaluator "Phase 2.5b",
+  TC-10 "Phase 4b"
+- §11 Open Questions: Q2 updated (cosmos dropped), Q5 updated (2.5b
+  implemented), new 2026-07-27 decisions block (Q12-Q16)
+
+### 2.5-pre1: Warm-up curl in `launch_r2k.sh` (+13 lines)
+- After the model-availability check (line 177), added a warm-up curl:
+  `curl -s --max-time 120 "${OLLAMA_LOCAL}/api/generate" -d
+  '{"model":"$MODEL","prompt":"hi","stream":false}' > /dev/null 2>&1`
+- Prevents the cold-boot dead-blue-team race (2026-07-23 root cause): first
+  match after `ollama serve` starts triggers a 30-40s model load; if the user
+  interrupts during load → evaluator killed → no `current_strategy.json` →
+  dead blue. The warm-up blocks until the model is resident in VRAM.
+- `bash -n launch_r2k.sh` passes syntax check.
+
+### 2.5-pre2: Harden `run_baseline.sh` (+81/-40 lines, full rewrite)
+- New `wait_for_container()` function: waits for any in-flight `docker compose
+  down` from the previous run's EXIT trap to complete (up to 15s, then forces
+  down), then brings the container up and waits for `ros2 topic list` to
+  respond inside the container (up to 60s). Eliminates the watchdog +
+  `docker compose down` race that made unattended 27-run sweeps fragile.
+- Added `[prefix]` CLI argument: `bash tools/run_baseline.sh baseline_v63`
+  for the Phase 2.5d v6.3 re-baseline (default: "baseline"). All output
+  filenames use the prefix.
+- `bash -n run_baseline.sh` passes syntax check.
+
+### 2.5a: 4 attack/passing/restart KPIs in `analyze_trace.py` (+248 lines)
+- New `compute_attack_kpis(world_records, llm_records)` function — joins
+  `llm_trace` (Kick/Pass actions + `world_snapshot` at decision time) with
+  `world_trace` (ball position deltas after the action).
+- 10 new named constants at module top (Phase 2.5a thresholds):
+  `OPP_GOAL_X=4.5`, `GOAL_HALF_WIDTH=1.3`, `SHOT_KICKER_OPP_HALF=0.0`,
+  `SHOT_BALL_NEAR_KICKER=2.0`, `SHOT_BALL_VX_THRESHOLD=0.5`,
+  `SHOT_FOLLOW_FRAMES=5`, `PASS_FOLLOW_FRAMES=20`, `RESTART_TOUCH_DIST=0.35`
+  (0.35 not 0.3 to account for tracker noise — referee uses 0.3m for early
+  termination, tracker rounds to 0.1m precision), `SHOT_EXTRAPOLATE_FRAMES=10`.
+- Binary-search time-indexed lookup (`find_world_frame_after`) for efficient
+  post-action frame scanning.
+- `shots_on_goal`: Kick action where kicker x > 0, ball within 2m of kicker,
+  AND ball x-velocity > 0.5 m/s in the 5 frames (0.5s) after the LLM call.
+- `shots_on_target`: subset of shots where ball Y extrapolated to x=4.5 is
+  within ±1.3m (goal posts).
+- `pass_completion_pct`: Kick by passer/receiver/midfielder (not in opp half)
+  where a DIFFERENT blue bot is closest to ball within 20 frames (2s).
+- `restart_recovery_time_s`: mean time from `status != "playing"` transition
+  to first frame where restart-team bot within 0.35m of ball. `restart_events`
+  count also returned. Pure `world_trace` computation.
+- Updated `extract_assignments()` to use module-level `re` import (was
+  `__import__('re')` inline — cleaner).
+- `main()` calls `compute_attack_kpis()` and merges results into `world_kpis`
+  dict (backward-compatible output structure).
+- Human-readable summary now prints shots/passes/restarts section.
+- **Verification gate passed:** Ran against existing baseline trace files:
+  - `3vs3_attack_center`: 6 shots on goal (1 on target), 142 pass attempts
+    (88.0% completed), 2 restart events (4.4s mean recovery)
+  - `3vs3_high_line`: 3 shots on goal (1 on target), 135 pass attempts
+    (88.9% completed), 4 restart events (10.0s mean recovery)
+  - All 4 KPIs produce sensible numbers, no crashes, no NaN.
+
+### 2.5b: Dynamic prompt injection in `r2k_evaluator.py` (+89 lines)
+- New constants: `FRAGMENTS_DIR`, `SCENARIO_PATH` (reads
+  `ai_tactics/active_scenario.json` written by `setup_r2k.py` at boot).
+- New `_determine_mode()`: reads mode from `active_scenario.json`, falls back
+  to "3vs3" if unavailable. Called once at startup, cached in `_active_mode`.
+- New `_read_fragment(name)`: reads a fragment file, returns empty string if
+  missing (no crash on FileNotFoundError).
+- New `_assemble_prompt(status, mode)`: assembles prompt from fragments:
+  1. `header.txt` (static)
+  2. `rules_core.txt` (static)
+  3. `rules_<status>.txt` (game-phase, ADDITIVE — only if status != "playing"
+     and file exists)
+  4. `rules_<mode>.txt` (mode rules — always loaded; IS the playing rules
+     when status == "playing")
+  5. `samples_<status>.txt` (game-phase, ADDITIVE — only if status != "playing"
+     and file exists)
+  6. `samples_<mode>.txt` (mode samples — always loaded)
+  No rename of `rules_3vs3.txt` needed — the mode fragment IS the playing
+  fragment. Game-phase fragments are additive for non-playing statuses only.
+- New `_get_sys_prompt(status)`: caches by `(status, mode)` tuple. Re-reads
+  fragment files only on status transitions (rare — <10 per match). Without
+  caching, fragment file reads would add I/O latency to every 20ms poll.
+- Main loop: replaced `with open(PROMPT_PATH, 'r') as f: sys_prompt = f.read()`
+  with `sys_prompt = _get_sys_prompt(status)` where `status` comes from
+  `world_data.get("match_state", {}).get("status", "playing")`.
+- `PROMPT_PATH` / `system_prompt.txt` still written by `setup_r2k.py` at boot
+  for `dump_prompt.py` dry-runs. The evaluator just no longer reads it at
+  runtime — it assembles from fragments directly.
+- **Verification gate passed:** Standalone test confirmed:
+  - `playing` prompt = 2015 chars (mode fragment only, no game-phase)
+  - `ball_out` prompt = 2226 chars (mode + `rules_ball_out.txt` stub)
+  - `STATUS: ball_out` correctly present in ball_out prompt, absent in playing
+  - All 91 fast tests pass, all 7 integration smoke tests pass.
+
+### 2.5c: Minimal game-phase fragments (4 new files, ~8 lines total)
+- `strategy/fragments/rules_ball_out.txt` (2 lines)
+- `strategy/fragments/rules_goal_kick.txt` (2 lines)
+- `strategy/fragments/rules_corner_kick_in.txt` (2 lines)
+- `strategy/fragments/rules_kickoff.txt` (2 lines)
+- No `samples_<status>.txt` stubs — mode samples serve as base for all
+  statuses. Game-phase samples deferred to Phase 4.
+- No rename of `rules_3vs3.txt` / `samples_3vs3.txt` — the evaluator's
+  additive design means mode fragments are the base "playing" rules.
+- `setup_r2k.py` requires NO changes.
+- `test_integration_smoke.py::test_strategy_files_exist`: added 4 new
+  fragments to the required-files list. Test passes.
+
+### Tests
+- All 91 fast tests pass (`python3 -m pytest tests/ --skip-slow -v`).
+- All 7 integration smoke tests pass.
+- `analyze_trace.py` verified on 2 existing baseline trace files — 4 new KPIs
+  produce sensible numbers.
+- `r2k_evaluator.py` dynamic injection verified standalone — prompt changes
+  on status transition, no crash on missing game-phase fragment.
+
+**Files touched:**
+- core/docs/optimization_spec_v6.2.md (spec amendment, +351/-94)
+- core/launch_r2k.sh (warm-up curl, +13)
+- core/src/ai_tactics/r2k_evaluator.py (dynamic injection, +89)
+- core/src/tools/analyze_trace.py (4 new KPIs, +248)
+- core/src/tools/run_baseline.sh (hardening, +81/-40 full rewrite)
+- core/src/tests/test_integration_smoke.py (4 new fragments in required list)
+- core/docs/SESSION_CHANGELOG.md (this entry)
+
+**New files (untracked):**
+- src/strategy/fragments/rules_ball_out.txt
+- src/strategy/fragments/rules_goal_kick.txt
+- src/strategy/fragments/rules_corner_kick_in.txt
+- src/strategy/fragments/rules_kickoff.txt
+- docs/student_projects_autumn_fair.md (carried from prior session, not this session's work)
+
+**Files deleted:**
+- (none)
+
+**Not yet done:**
+- **2.5d: v6.3 re-baseline** — requires live Gazebo + Ollama environment to
+  run 27 unattended matches (~45min). All code prerequisites are in place
+  (warm-up curl, hardened `run_baseline.sh`, 4 new KPIs, dynamic injection,
+  game-phase fragments). This is compute work, not code work.
+- **2.5e: Regression suite update** — add 4 new KPI targets to all 11
+  `kpi_targets.json` (calibrated from 2.5d baseline) + 4 assertions to slow
+  tests. Blocked by 2.5d (need real data to calibrate thresholds).
+- **2.5f: KB + docs update** — FAQ Q16 (15→19 KPIs), `META_ROUTER` routing
+  entries, `6_DATA` KPI table, `3_AI` dynamic injection status, `AGENTS.md`
+  KPI count. Blocked by 2.5e (spec already updated; KB update follows the
+  regression suite).
+- **Live match not yet re-run** — the dynamic injection + warm-up curl +
+  game-phase fragments need a live match to verify the `llm_trace` shows
+  `sys_prompt_hash` changing on status transitions. Standalone test
+  confirmed the prompt assembly works, but end-to-end with ROS 2 + Gazebo
+  is the real gate.
+
+**Next:**
+1. **Run a live match** to verify dynamic injection end-to-end: launch
+   `./launch_r2k.sh --scenario 3vs3_attack_center --relay only_sim_bots`,
+   check `logs/llm_trace_*.jsonl` for `sys_prompt_hash` changes when
+   `match_state.status` transitions.
+2. **Run 2.5d v6.3 re-baseline**: `bash tools/run_baseline.sh baseline_v63`
+   (~45min unattended). Verify all 27 runs produce KPIs (warm-up curl
+   prevents dead-blue).
+3. **2.5e: Calibrate 4 new KPI targets** from v6.3 baseline + 30-50% margin,
+   add assertions to `test_non_functional.py`.
+4. **2.5f: KB + docs update**.
+5. Commit on `feature/phase-2.5-attack-kpis-dynamic-injection` (separate
+   from the larger uncommitted body of work). Suggested commit boundaries:
+   - `fix: warm-up curl + run_baseline.sh hardening` (pre1 + pre2)
+   - `feat: add 4 attack/passing/restart KPIs to analyze_trace.py` (2.5a)
+   - `feat: dynamic prompt injection + minimal game-phase fragments` (2.5b + 2.5c)
+   - `docs: Phase 2.5 spec amendment` (spec, already done)
+   - `test: v6.3 baseline + regression thresholds for 4 new KPIs` (2.5d + 2.5e, after compute)
+   - `docs: Phase 2.5 KB update` (2.5f, after 2.5e)
+
+**Blockers:**
+- **Live Gazebo + Ollama required** for 2.5d (27-run re-baseline). All code
+  is ready; this is compute work. Ollama GPU state unverified this session
+  (carried from 2026-07-27: user must restart ollama with
+  `OLLAMA_HOST=0.0.0.0` if not already configured via the install.sh
+  systemd override fix from the prior session).
+- `batch_evaluator.py` KPI collection still broken (deprecated, Phase 2b
+  regression suite is the replacement — orthogonal to Phase 2.5).
+- Visualizer blitting refactor still untested with live ROS 2 + Gazebo
+  (carried from 2026-07-14, orthogonal to Phase 2.5).
+
+## 2026-07-28 — Role condensation, explain-mode fix, visualizer labels, content-hash skip
+
+**Goal:** Condense LLM roles from 5 to 3 (KISS), fix `--explain` flag broken
+by Phase 2.5b dynamic injection, fix visualizer labels + copyable output,
+and eliminate 64% wasted LLM calls via content-hash skip.
+
+**Done:**
+
+### Role condensation: 5 → 3 (goalie/attacker/defender)
+
+Replaced `striker`/`midfielder`/`passer`/`receiver`/`supporter` with
+`goalie`/`attacker`/`defender` across all fragments. The bridge only
+checks `role == 'goalie'` — all other roles were cosmetic noise the 3B
+model had to generate without any consumer caring.
+
+- `rules_3vs3.txt:3`: Striker/Midfielder/Goalie → Attacker/Defender/Goalie
+- `rules_3vs1.txt`, `rules_2vs2.txt`, `rules_2vs1.txt`, `rules_1vs1.txt`:
+  striker/supporter → attacker/defender
+- `samples_3vs3.txt`: passer/receiver → attacker/defender
+- `samples_3vs1.txt`, `samples_2vs2.txt`, `samples_2vs1.txt`,
+  `samples_1vs1.txt`, `samples_1vs0.txt`, `samples_recover.txt`: all
+  role names updated
+- `analyze_trace.py:217`: pass detection changed from role-based
+  (`role in ('passer','receiver','midfielder')`) to position-based
+  (kicker NOT in opponent half = pass attempt). Role-independent.
+- `analyze_trace.py`: dropped `role_diversity` KPI (dead metric, CV=0%
+  across 27 v6.3 baseline runs, always 5.0). Kept `roles` counter as
+  diagnostic only.
+- `r2k_visualizer.py:303`: auto-adapts (role[0].lower() → g/a/d)
+
+### Explain-mode flag fix (broken by Phase 2.5b dynamic injection)
+
+**Root cause:** Phase 2.5b's `_assemble_prompt()` reads fragments
+directly, bypassing `setup_r2k.py`'s `clean_json_samples()`. The
+`header.txt` had no `{{EXPLAIN_INSTRUCTION}}` placeholder (removed during
+Phase 0 disentanglement). The evaluator detected explain mode by
+string-matching `"analysis" in sys_prompt.lower()` — always False →
+`num_predict` always 150 → `--explain` silently ignored.
+
+- `strategy/fragments/header.txt`: restored `{{EXPLAIN_INSTRUCTION}}`
+  placeholder (line 4)
+- `r2k_evaluator.py:_assemble_prompt()`: replaces
+  `{{EXPLAIN_INSTRUCTION}}` using `R2K_EXPLAIN` env var (0 → assignments-
+  only, 1 → analysis+oracle+assignments)
+- `r2k_evaluator.py:190`: replaced string-matching detection with
+  `os.getenv("R2K_EXPLAIN", "0") == "1"` (direct env var check)
+- `launch_r2k.sh:60`: `export R2K_EXPLAIN=$([[ "$EXPLAIN_FLAG" == "--explain" ]] && echo 1 || echo 0)`
+- `launch_r2k.sh:402`: added `-e R2K_EXPLAIN="$R2K_EXPLAIN"` to Docker
+  evaluator exec
+- `r2k_evaluator.py`: duplicated `clean_json_samples()` from
+  `setup_r2k.py` (~70 lines) — needed at runtime to inject default
+  analysis/oracle strings into samples. Without this, Qwen 3B fills
+  oracle with JSON strategy data instead of text.
+- Applied `_clean_json_samples()` to sample fragments in
+  `_assemble_prompt()` (mode + game-phase samples)
+
+### Visualizer labels + copyable output
+
+- `r2k_visualizer.py:432`: renamed labels — `### AI ANALYSIS ###` →
+  `### STRATEGY ###`, `### STRATEGY ORACLE ###` → `### ORACLE ###`.
+  Semantics: STRATEGY = analysis field (what to do), ORACLE = oracle
+  field (what will happen).
+- `r2k_visualizer.py:429-434`: guard against JSON in oracle/analysis
+  fields — if dict/list, shows `(invalid - JSON in oracle field)` instead
+  of raw JSON blob
+- `r2k_visualizer.py:517-520`: print `[STRATEGY]` / `[ORACLE]` to terminal
+  on each strategy update (copyable from terminal scrollback)
+
+### Content-hash skip (64% LLM call reduction)
+
+**Root cause:** Aggregator writes Worldstate.json at 10Hz unconditionally
+(67% of writes have identical positions) → mtime changes → evaluator
+triggers LLM call → identical input at temperature:0.0 → identical output
+→ 64% of calls wasted (153s GPU time per 120s match). Repetitive
+visualizer output was the visible symptom.
+
+- `r2k_evaluator.py:240`: `last_ents_hash = 0` initialization
+- `r2k_evaluator.py:259-266`: hash entities JSON, skip LLM call if
+  identical to previous call. ~7 lines.
+- Impact: ~62 calls per match (was 171), no repetition, ~153s GPU saved.
+- **Game changer:** effective delay (situation change → strategy output)
+  drops from ~1328ms to ~684ms (~50%). Evaluator is idle 64% of the time
+  instead of busy — reacts to real changes within ~20ms (one poll cycle)
+  instead of waiting up to 664ms for a redundant call to finish.
+
+### Test case: oracle-is-string validation
+
+- `tests/test_prompt_assembly.py` (NEW): `test_oracle_is_string_in_trace`
+  — validates that oracle and analysis fields in the latest llm_trace
+  are strings, not JSON dicts. Catches the regression where Qwen 3B
+  fills oracle with assignments JSON.
+
+### Soccer tech speech experiment (reverted)
+
+Attempted to reduce `--explain` latency by replacing verbose
+analysis/oracle defaults with terse "soccer tech speech" (e.g.
+`"ball pos, formation, threat"` / `"assign roles, execute"`). Expected
+~25 tokens instead of 93. However: the LLM copied the oracle default
+verbatim (131/132 calls), and the labels broke (user reported JSON in
+oracle field). Reverted all changes to the last working state (verbose
+defaults, oracle injection, no markdown stripping in fast_parse).
+
+### Identified but not fixed
+
+- **Qwen 3B spatial reasoning hallucination:** 73% of `--explain` calls
+  produce "ball is near the opponent's goal, but it's also close to our
+  own goal" even when ball is at center (x=0.0, equidistant from both
+  goals at x=±4.5). This is a model capability limitation, not a prompt
+  bug. The `analysis`/`oracle` fields are display-only — the bridge only
+  reads `assignments`. Decision deferred.
+- **Further latency reduction:** The 664ms LLM inference is 97% of the
+  remaining delay. Only Phase 5.1 (Kalman + predictive world model)
+  can offset it — send the LLM where the ball WILL BE in 664ms. That's
+  a 6-month internship project.
+
+**Files touched:**
+- core/src/strategy/fragments/header.txt (restored {{EXPLAIN_INSTRUCTION}})
+- core/src/strategy/fragments/rules_3vs3.txt (roles: Attacker/Defender/Goalie)
+- core/src/strategy/fragments/rules_3vs1.txt (roles)
+- core/src/strategy/fragments/rules_2vs2.txt (roles)
+- core/src/strategy/fragments/rules_2vs1.txt (roles)
+- core/src/strategy/fragments/rules_1vs1.txt (roles)
+- core/src/strategy/fragments/samples_3vs3.txt (roles: attacker/defender)
+- core/src/strategy/fragments/samples_3vs1.txt (roles)
+- core/src/strategy/fragments/samples_2vs2.txt (roles)
+- core/src/strategy/fragments/samples_2vs1.txt (roles)
+- core/src/strategy/fragments/samples_1vs1.txt (roles)
+- core/src/strategy/fragments/samples_1vs0.txt (roles)
+- core/src/strategy/fragments/samples_recover.txt (roles: attacker/defender)
+- core/src/ai_tactics/r2k_evaluator.py (explain fix, clean_json_samples
+  duplication, content-hash skip, R2K_EXPLAIN env var)
+- core/src/r2k_visualizer.py (labels rename, JSON guard, terminal print)
+- core/src/setup_r2k.py (no net change — soccer tech speech reverted)
+- core/src/tools/dump_prompt.py (no net change — reverted)
+- core/src/tools/analyze_trace.py (position-based pass detection,
+  drop role_diversity)
+- core/launch_r2k.sh (R2K_EXPLAIN export + Docker passthrough)
+- core/docs/SESSION_CHANGELOG.md (this entry)
+
+**New files (untracked):**
+- core/src/tests/test_prompt_assembly.py (oracle-is-string test)
+
+**Files deleted:**
+- (none)
+
+**Not yet done:**
+- Soccer tech speech for analysis/oracle defaults — attempted, reverted.
+  The LLM copies terse oracle verbatim (131/132 calls). Need a different
+  approach (e.g. multiple samples with varying oracle, or drop oracle
+  from sample and let LLM generate freely). Decision deferred.
+- Markdown wrapper stripping in fast_parse — attempted, reverted. The
+  ` ```json ` wrapper doesn't actually break fast_parse (it finds
+  `{` and `}` correctly). The labels issue was a semantic
+  misunderstanding, not a parse bug.
+- KPI cleanup (2.5e): drop 3 dead KPIs + lat_mean from
+  kpi_targets.json + test_non_functional.py assertions. Regression
+  analysis complete, application deferred.
+- KB + docs update (2.5f): FAQ Q16 (15→16 KPIs), routing entries,
+  dynamic injection status, AGENTS.md KPI count. Deferred.
+- Nothing committed — all work uncommitted on
+  `feature/ros2k_behavior_optimization`.
+
+**Next:**
+- Live `--explain` run to verify: (1) content-hash skip eliminates
+  repetition, (2) visualizer shows `### STRATEGY ###` / `### ORACLE ###`
+  with text, (3) terminal prints `[STRATEGY]` / `[ORACLE]` copyable
+  text, (4) ~62 LLM calls per match (was 171)
+- Then commit all work (role condensation + explain fix + visualizer
+  labels + content-hash skip + test case)
+
+**Blockers:**
+- Ollama GPU state unverified (carried from 2026-07-27)
+- `batch_evaluator.py` KPI collection still broken (deprecated, carried
+  from 2026-07-13)
+- Visualizer blitting refactor still untested with live ROS 2 + Gazebo
+  (carried from 2026-07-14)
+
+## 2026-07-28 (continued) — Replay system: match annotator, trace replay, visualizer --replay mode
+
+**Goal:** Build a replay system for saved and annotated ROS2K sim games —
+freeze Gazebo during a live match to annotate moments, then replay the
+saved match with the visualizer showing annotations + LLM decisions +
+ball trajectory. Recover from an interrupted session (license limit).
+
+**Done:**
+
+### Match annotator (`tools/match_annotate.py`, NEW — 327 lines)
+- Run alongside a live match. Press ENTER to pause Gazebo (via
+  `/gazebo/pause_physics`), record game state + last LLM decision + your
+  comment, then unpause.
+- Writes `logs/annotations_<run_id>.jsonl` for post-match replay.
+- Supports both native (U22) and Docker (U24) `ros2` invocations via
+  `get_ros2_prefix()` detection (checks `shutil.which("ros2")`, falls
+  back to `docker exec core_gazebo bash -c "source ... && ros2"`).
+- `atexit` cleanup unpauses Gazebo if interrupted while paused.
+- Reads `R2K_RUN_ID` from env, falls back to latest `world_trace_*` file.
+- Records: `t_sim`, `t_wall`, `paused`, `score`, `status`, `snapshot`
+  (all entity positions), `last_llm_decision` (assignments + analysis +
+  oracle + latency), `comment`, `annotation_index`.
+
+### Trace replay tool (`tools/replay_trace.py`, NEW — 251 lines)
+- Post-match CLI review: loads annotations + `llm_trace` + `world_trace`,
+  shows for each annotation the LLM decision before it, game state
+  snapshot, and ball trajectory + events (goals, status changes) in the
+  5 seconds after.
+- Interactive mode (ENTER for next annotation, q to quit) or `--all`
+  (dump all to stdout for markdown piping).
+- `--forward N` controls scan window (default 5s).
+- Binary-search time-indexed lookup for efficient frame scanning.
+
+### Visualizer `--replay` mode (`r2k_visualizer.py`)
+- **`--replay RUN_ID`** CLI arg: replays a saved match from trace files
+  with no ROS 2 required. Loads `world_trace`, `llm_trace`, `annotations`
+  from `logs/`.
+- **`--speed N`**: playback speed multiplier (default 1.0 = real time).
+  `--speed 5` plays 5x faster.
+- **`--start N`**: seek to N seconds from match start (default 0.0).
+- `main_replay()` function: normalizes all timestamps to "seconds from
+  first world_trace record" using `t_wall` (wall-clock). Sim-time (`t`)
+  is 0.0 in all existing traces (the `/clock` subscription +
+  `libgazebo_ros_init.so` was added but not yet rebuilt/deployed when
+  these traces were recorded — the sim-time field exists but is always 0).
+- Pre-parses all LLM decisions once at load time (`_parse_llm_decision`
+  extracts assignments/analysis/oracle/latency from each `llm_trace`
+  record). Avoids re-parsing on every frame.
+- Replay loop: advances `w_idx` through `world_trace` records based on
+  real elapsed wall-time x speed. For each world frame, finds the latest
+  LLM decision at or before that timestamp via `bisect.bisect_right`.
+  Prints `[STRATEGY]` / `[ORACLE]` to terminal on new LLM decision
+  (matches live mode behavior).
+- Annotation overlay: yellow text bar at top-center, shown for 5s when
+  replay crosses an annotation timestamp. Prints annotation to terminal.
+- Reuses `init_figure` + `update_figure` + `process_match_state` — no
+  duplicate rendering code. `process_match_state` was extracted from the
+  ROS callback into a standalone function (parameterized by `t_sim`)
+  so both live and replay modes can call it.
+- `HAS_ROS2` import guard: `rclpy` import wrapped in try/except. When
+  unavailable (replay mode on a machine without ROS 2), a `Node` stub
+  class is defined so the `VisualizerROSNode` class definition doesn't
+  raise `NameError`. The live `main()` checks `HAS_ROS2` and exits with
+  a helpful message if rclpy is missing.
+- `argparse` in `main()`: routes to `main_replay()` if `--replay` is set,
+  otherwise starts live mode (requires rclpy).
+
+### Supporting changes
+
+- `state_aggregator.py`: added `/clock` subscription (`Clock` from
+  `rosgraph_msgs.msg`) and records `sim_time` in `world_trace` `t`
+  field (was wall-time `time.time()`). `t_wall` retained for correlation.
+  Required so paused annotations don't create time gaps in replay.
+- `soccer_match.launch.py`: added `libgazebo_ros_init.so` to both
+  `gzserver` (headless) and `gazebo` (GUI) launch commands — needed for
+  `/clock` topic and pause/unpause services.
+- `reward_node.py`: zero-delta skip — if `reward == 0` and score hasn't
+  changed, clear the pending action and return immediately (was logging
+  a spurious "neutral" reward every timeout).
+- `r2k_visualizer.py` `update_figure`: JSON guard for oracle/analysis
+  fields (if dict/list, shows `(invalid - JSON in oracle field)` instead
+  of raw JSON blob). Label rename: `AI ANALYSIS` -> `STRATEGY`,
+  `STRATEGY ORACLE` -> `ORACLE`.
+- `r2k_visualizer.py` `init_figure`: added `annotation_overlay` text
+  artist (top-center, yellow text on dark background, shown in replay
+  mode).
+
+### Verification
+- All 3 files compile (`py_compile`).
+- Replay data loading verified: 531 world records, 31 LLM records, 2
+  annotations loaded from a real run.
+- Replay loop verified headless (Agg backend): played through 53s match
+  at 20x speed, printed 46 STRATEGY/ORACLE lines (explain-mode run) and
+  annotation overlays. Exited cleanly.
+- 92 fast tests pass (was 91 + 1 new `test_prompt_assembly.py`), 11
+  skipped. No regressions.
+- `--help` output correct for all 3 args (`--replay`, `--speed`,
+  `--start`).
+
+**Files touched:**
+- `core/src/r2k_visualizer.py` (`--replay` mode, `main_replay()`,
+  `process_match_state` extraction, annotation overlay, JSON guard,
+  label rename, `HAS_ROS2` import guard, `Node` stub, argparse in main)
+- `core/src/state_aggregator.py` (`/clock` subscription, sim-time in
+  world_trace, `t_wall` retained)
+- `core/src/reward_node.py` (zero-delta skip)
+- `core/src/ros2_ws/src/r2k_scenario_spawner/launch/soccer_match.launch.py`
+  (`libgazebo_ros_init.so`)
+- `core/docs/SESSION_CHANGELOG.md` (this entry)
+
+**New files (untracked):**
+- `core/src/tools/match_annotate.py` (live match annotation tool)
+- `core/src/tools/replay_trace.py` (post-match annotation review CLI)
+
+**Files deleted:**
+- (none)
+
+### `--analyze` flag and annotator Docker fix (continuation)
+
+- `launch_r2k.sh`: added `--analyze` flag. Spawns `match_annotate.py` in a
+  new terminal (gnome-terminal/xterm/konsole auto-detected) after the
+  container and all nodes are up. Passes `PROJECT_NAME`,
+  `COMPOSE_PROJECT_NAME`, `R2K_RUN_ID` as inline env vars. Moved from
+  early-boot (container not yet running) to right before visualizer
+  launch in both native (U22) and Docker (U24) branches.
+- `match_annotate.py` `get_ros2_prefix()`: fixed container detection.
+  Was: hardcoded `"core_gazebo"` fallback + host `source /opt/ros/humble/setup.bash`
+  (fails on U24 where ROS 2 is only in the container). Now: reads
+  `PROJECT_NAME` or `COMPOSE_PROJECT_NAME` env var → derives
+  `${project}_gazebo` container name, validates against `docker ps`,
+  sources both `setup.bash` AND `ros2_ws/install/setup.bash` inside the
+  container. Returns `None` (with clear error) if no container found.
+- `replay_trace.py` `find_run_id()`: changed default from newest
+  `annotations_*` to newest `world_trace_*` — annotations are optional,
+  the last game should always be found.
+- `r2k_visualizer.py` `--replay`: made RUN_ID optional (`nargs="?"`).
+  `--replay` alone defaults to the last game (newest `world_trace_*`).
+
+### Verification (additional)
+- `replay_trace.py` with no args: loads last game (229 world records,
+  14 LLM records, 0 annotations) — works without annotations.
+- `r2k_visualizer.py --replay` (no RUN_ID): prints
+  "Replaying last game: <run_id>" and plays the match.
+- `--analyze` flag: `bash -n` passes, annotator opens after container
+  is up. Debug output confirms `PROJECT_NAME='core'`, container found.
+- Annotator Docker detection still needs live verification (container
+  was down during testing — debug showed `containers=[]`).
+
+**Files touched (additional):**
+- `core/launch_r2k.sh` (`--analyze` flag, `launch_annotator()` function,
+  moved annotator spawn to post-container-up)
+- `core/src/tools/match_annotate.py` (container detection fix,
+  `PROJECT_NAME`/`COMPOSE_PROJECT_NAME` env, `ros2_ws/install` source,
+  `ROS2_PREFIX=None` handling, debug output)
+- `core/src/tools/replay_trace.py` (default to newest `world_trace_*`)
+- `core/src/r2k_visualizer.py` (`--replay` RUN_ID optional, defaults to
+  last game)
+
+**Not yet done:**
+- `libgazebo_ros_init.so` added to launch file but NOT rebuilt into the
+  Docker container — existing traces all have `t=0.0` (sim-time not
+  flowing). Needs `docker exec ... colcon build` to deploy, then a new
+  match to record traces with working sim-time.
+- Replay not tested with live TkAgg backend (only headless Agg). The
+  visualizer window should display the match playback, but no human has
+  watched it yet.
+- `--analyze` annotator Docker detection needs live verification (run
+  with a running container to confirm `ROS2_PREFIX` finds it and
+  `/gazebo/pause_physics` works).
+- Nothing committed — all work uncommitted on
+  `feature/ros2k_behavior_optimization`.
+
+**Next:**
+- Commit the replay system on a dedicated branch
+  (`feature/replay-system`) or fold into the next commit on
+  `feature/ros2k_behavior_optimization`.
+- Rebuild Docker container with `libgazebo_ros_init.so` and record a new
+  match with working sim-time, then verify replay uses sim-time
+  correctly.
+- Live TkAgg test: run `python3 r2k_visualizer.py --replay <run_id>`
+  on a machine with display, verify the visualizer window plays the
+  match with annotation overlays.
+
+**Blockers:**
+- Ollama GPU state unverified (carried from 2026-07-27)
+- `batch_evaluator.py` KPI collection still broken (deprecated, carried
+  from 2026-07-13)
+- Visualizer blitting refactor still untested with live ROS 2 + Gazebo
+  (carried from 2026-07-14 — now also applies to replay mode TkAgg)

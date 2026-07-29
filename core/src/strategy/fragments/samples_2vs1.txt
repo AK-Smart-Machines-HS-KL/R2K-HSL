@@ -4,8 +4,8 @@ ASSISTANT: {
   "analysis": "blue_1 and blue_2 maintain wide spacing to confuse the lone defender.",
   "oracle": "blue_1 will attack the ball while blue_2 stays ready for a rebound.",
   "assignments": {
-    "blue_1": {"role": "striker", "action": "Move", "x": 1.0, "y": 0.0},
-    "blue_2": {"role": "supporter", "action": "Move", "x": 1.0, "y": -2.0}
+    "blue_1": {"role": "attacker", "action": "Move", "x": 1.0, "y": 0.0},
+    "blue_2": {"role": "defender", "action": "Move", "x": 1.0, "y": -2.0}
   }
 }
 
@@ -15,8 +15,8 @@ ASSISTANT: {
   "analysis": "blue_1 kicks ball toward blue_2's lane to bypass red_1.",
   "oracle": "Successful pass to the open teammate blue_2.",
   "assignments": {
-    "blue_1": {"role": "passer", "action": "Kick"},
-    "blue_2": {"role": "striker", "action": "Move", "x": 2.5, "y": -1.0}
+    "blue_1": {"role": "attacker", "action": "Kick"},
+    "blue_2": {"role": "attacker", "action": "Move", "x": 2.5, "y": -1.0}
   }
 }
 
@@ -26,7 +26,7 @@ ASSISTANT: {
   "analysis": "Bots are colliding in the defensive half. blue_1 strikes. blue_2 retreats to the goal line (X=-4.5).",
   "oracle": "Immediate spacing to restore defensive structure.",
   "assignments": {
-    "blue_1": {"role": "striker", "action": "Move", "x": -2.5, "y": 0.0},
+    "blue_1": {"role": "attacker", "action": "Move", "x": -2.5, "y": 0.0},
     "blue_2": {"role": "goalie", "action": "Move", "x": -4.5, "y": 0.0}
   }
 }
