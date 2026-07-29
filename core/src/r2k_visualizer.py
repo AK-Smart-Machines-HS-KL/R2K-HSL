@@ -1,18 +1,27 @@
-import json, os, sys, time
+import json, os, sys, time, bisect, argparse
 import numpy as np
 import matplotlib
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 from mplsoccer import Pitch
-import rclpy
-from rclpy.node import Node
-from std_msgs.msg import String
 from collections import deque
 from matplotlib.lines import Line2D
+
+try:
+    import rclpy
+    from rclpy.node import Node
+    from std_msgs.msg import String
+    HAS_ROS2 = True
+except ImportError:
+    HAS_ROS2 = False
+    # Stub so the class definition doesn't fail when rclpy is unavailable
+    class Node:
+        pass
 
 plt.rcParams['toolbar'] = 'None'
 BASE_DIR = os.getenv('ROS2K_WS', '.')
 STRAT_PATH = os.path.join(BASE_DIR, "shared_state", "current_strategy.json")
+LOG_DIR = os.path.join(BASE_DIR, "logs")
 
 latest_world_state = {}
 latest_tactical_score = {}
@@ -29,6 +38,10 @@ last_match_status = "playing"
 MAX_BOTS = 6
 MAX_ARROWS = 6
 MAX_REF_ROWS = 8
+
+# Annotation markers for momentum timeline (set by main_replay, read by update_figure)
+# List of (t_seconds, annotation_index) tuples
+annotation_markers = []
 
 _artists = {}
 _initialized = False
@@ -58,63 +71,61 @@ class VisualizerROSNode(Node):
         except: pass
 
     def match_callback(self, msg):
-        global latest_match_state, goal_events, foul_events, referee_events, last_match_status
+        global latest_match_state
         try:
             latest_match_state = json.loads(msg.data)
-            current_status = latest_match_state.get('status', 'playing')
-
-            # Track goal events
-            if current_status == 'goal' and last_match_status != 'goal':
-                elapsed = time.time() - game_start_time if game_start_time else 0
-                blue_goals = latest_match_state.get('blue', 0)
-                red_goals = latest_match_state.get('red', 0)
-                team = "blue" if blue_goals > red_goals else "red"
-                goal_events.append((elapsed, team, blue_goals, red_goals))
-                referee_events.append((elapsed, "GOAL", f"Blue {blue_goals} - {red_goals} Red", "#4caf50"))
-                kicking = "red" if team == "blue" else "blue"
-                referee_events.append((elapsed, "KICKOFF", kicking.capitalize(), "#ff9800"))
-
-            # Track foul events
-            if latest_match_state.get('foul') and current_status == 'foul_penalty' and last_match_status != 'foul_penalty':
-                elapsed = time.time() - game_start_time if game_start_time else 0
-                foul_data = latest_match_state['foul']
-                foul_type = foul_data.get('type', 'unknown')
-                offender = foul_data.get('offender', 'unknown')
-                team = "blue" if "blue" in offender else "red"
-                foul_events.append((elapsed, team, foul_type))
-                short_foul = "BLOCK" if "block" in foul_type else foul_type.upper()
-                referee_events.append((elapsed, "FOUL", f"{short_foul} {offender}", "#FF4136"))
-
-            # Track ball-out events (sideline with known offender)
-            if current_status == 'ball_out' and last_match_status != 'ball_out':
-                elapsed = time.time() - game_start_time if game_start_time else 0
-                restart_team = latest_match_state.get('restart_team', 'unknown')
-                restart_team_display = restart_team.capitalize() if restart_team in ('blue', 'red') else restart_team
-                foul_data = latest_match_state.get('foul')
-                offender = foul_data.get('offender', 'unknown') if foul_data else 'unknown'
-                referee_events.append((elapsed, "BALL OUT", f"{offender} >> {restart_team_display}", "#ff9800"))
-
-            # Track goal kick transitions
-            if current_status == 'goal_kick' and last_match_status != 'goal_kick':
-                elapsed = time.time() - game_start_time if game_start_time else 0
-                restart_team = latest_match_state.get('restart_team', 'unknown')
-                restart_team_display = restart_team.capitalize() if restart_team in ('blue', 'red') else restart_team
-                referee_events.append((elapsed, "GOAL KICK", restart_team_display, "#ff9800"))
-
-            # Track corner kick-in transitions
-            if current_status == 'corner_kick_in' and last_match_status != 'corner_kick_in':
-                elapsed = time.time() - game_start_time if game_start_time else 0
-                restart_team = latest_match_state.get('restart_team', 'unknown')
-                restart_team_display = restart_team.capitalize() if restart_team in ('blue', 'red') else restart_team
-                referee_events.append((elapsed, "CORNER", restart_team_display, "#ff9800"))
-
-            # Ball free
-            if current_status == 'playing' and last_match_status in ('goal', 'goal_kick', 'corner_kick_in'):
-                elapsed = time.time() - game_start_time if game_start_time else 0
-                referee_events.append((elapsed, "BALL FREE", "", "#4caf50"))
-
-            last_match_status = current_status
+            elapsed = time.time() - game_start_time if game_start_time else 0
+            process_match_state(latest_match_state, elapsed)
         except: pass
+
+
+def process_match_state(match_data, t_sim):
+    """Detect referee status transitions and populate event lists.
+    Extracted from match_callback so both live mode and replay mode can call it.
+    Uses t_sim (timestamp) instead of time.time() - game_start_time.
+    """
+    global goal_events, foul_events, referee_events, last_match_status
+    current_status = match_data.get('status', 'playing')
+
+    if current_status == 'goal' and last_match_status != 'goal':
+        blue_goals = match_data.get('blue', 0)
+        red_goals = match_data.get('red', 0)
+        team = "blue" if blue_goals > red_goals else "red"
+        goal_events.append((t_sim, team, blue_goals, red_goals))
+        referee_events.append((t_sim, "GOAL", f"Blue {blue_goals} - {red_goals} Red", "#4caf50"))
+        kicking = "red" if team == "blue" else "blue"
+        referee_events.append((t_sim, "KICKOFF", kicking.capitalize(), "#ff9800"))
+
+    if match_data.get('foul') and current_status == 'foul_penalty' and last_match_status != 'foul_penalty':
+        foul_data = match_data['foul']
+        foul_type = foul_data.get('type', 'unknown')
+        offender = foul_data.get('offender', 'unknown')
+        team = "blue" if "blue" in offender else "red"
+        foul_events.append((t_sim, team, foul_type))
+        short_foul = "BLOCK" if "block" in foul_type else foul_type.upper()
+        referee_events.append((t_sim, "FOUL", f"{short_foul} {offender}", "#FF4136"))
+
+    if current_status == 'ball_out' and last_match_status != 'ball_out':
+        restart_team = match_data.get('restart_team', 'unknown')
+        restart_team_display = restart_team.capitalize() if restart_team in ('blue', 'red') else restart_team
+        foul_data = match_data.get('foul')
+        offender = foul_data.get('offender', 'unknown') if foul_data else 'unknown'
+        referee_events.append((t_sim, "BALL OUT", f"{offender} >> {restart_team_display}", "#ff9800"))
+
+    if current_status == 'goal_kick' and last_match_status != 'goal_kick':
+        restart_team = match_data.get('restart_team', 'unknown')
+        restart_team_display = restart_team.capitalize() if restart_team in ('blue', 'red') else restart_team
+        referee_events.append((t_sim, "GOAL KICK", restart_team_display, "#ff9800"))
+
+    if current_status == 'corner_kick_in' and last_match_status != 'corner_kick_in':
+        restart_team = match_data.get('restart_team', 'unknown')
+        restart_team_display = restart_team.capitalize() if restart_team in ('blue', 'red') else restart_team
+        referee_events.append((t_sim, "CORNER", restart_team_display, "#ff9800"))
+
+    if current_status == 'playing' and last_match_status in ('goal', 'goal_kick', 'corner_kick_in'):
+        referee_events.append((t_sim, "BALL FREE", "", "#4caf50"))
+
+    last_match_status = current_status
 
 
 def to_plot(val):
@@ -128,7 +139,7 @@ def init_figure(fig):
     a = {}
 
     # --- Main pitch area (top) ---
-    a['ax_pitch'] = fig.add_axes([0.05, 0.30, 0.65, 0.65])
+    a['ax_pitch'] = fig.add_axes([0.05, 0.48, 0.65, 0.47])
     a['pitch'] = Pitch(pitch_type='custom', pitch_length=100, pitch_width=100,
                        pitch_color='#1e2a22', line_color='#fafafa')
     a['pitch'].draw(ax=a['ax_pitch'])
@@ -157,8 +168,8 @@ def init_figure(fig):
         arr.set_visible(False)
         a['arrows'].append(arr)
 
-    # --- Momentum sub-panel (bottom) ---
-    a['ax_mom'] = fig.add_axes([0.05, 0.05, 0.65, 0.20])
+    # --- Momentum sub-panel (bottom, full width) ---
+    a['ax_mom'] = fig.add_axes([0.05, 0.05, 0.92, 0.18])
     a['ax_mom'].set_facecolor('#1e2a22')
     a['ax_mom'].set_xlim(0, 120)
     a['ax_mom'].set_ylim(-10, 10)
@@ -180,6 +191,9 @@ def init_figure(fig):
     # Momentum markers (foul triangles + goal circles) — separate scatters
     a['mom_foul_scatter'] = a['ax_mom'].scatter([], [], marker='v', s=80, zorder=5, alpha=0.8)
     a['mom_goal_scatter'] = a['ax_mom'].scatter([], [], marker='o', s=100, zorder=5, edgecolors='white', linewidths=1.5)
+    # Annotation markers (yellow diamonds at top of momentum panel)
+    a['mom_annot_scatter'] = a['ax_mom'].scatter([], [], marker='D', s=60, zorder=6,
+                                                   color='#ffeb3b', edgecolors='white', linewidths=0.5)
 
     # Momentum legend (static)
     legend_elements = [
@@ -187,6 +201,7 @@ def init_figure(fig):
         Line2D([0], [0], marker='o', color='w', markerfacecolor='#FF4136', markersize=6, label='Red Goal'),
         Line2D([0], [0], marker='v', color='w', markerfacecolor='#0074D9', markersize=6, label='Blue Foul'),
         Line2D([0], [0], marker='v', color='w', markerfacecolor='#FF4136', markersize=6, label='Red Foul'),
+        Line2D([0], [0], marker='D', color='w', markerfacecolor='#ffeb3b', markersize=5, label='Note'),
     ]
     a['ax_mom'].legend(handles=legend_elements, loc='upper left', fontsize=7,
                        facecolor='#1e2a22', edgecolor='white', labelcolor='white', framealpha=0.9)
@@ -196,19 +211,29 @@ def init_figure(fig):
                             bbox=dict(facecolor='black', alpha=0.8, pad=6))
     a['hud_avg'] = fig.text(0.15, 0.94, '', fontsize=15, weight='heavy',
                             bbox=dict(facecolor='black', alpha=0.8, pad=6))
-    a['hud_mom'] = fig.text(0.25, 0.94, '', fontsize=15, weight='heavy',
-                            bbox=dict(facecolor='black', alpha=0.8, pad=6))
     a['hud_match'] = fig.text(0.50, 0.94, '', fontsize=15, weight='bold', ha='center',
                               bbox=dict(facecolor='black', alpha=0.8, pad=6))
 
     # --- AI analysis text panel (right top) ---
-    a['ax_text'] = fig.add_axes([0.72, 0.30, 0.25, 0.65])
+    a['ax_text'] = fig.add_axes([0.72, 0.48, 0.25, 0.47])
     a['ax_text'].axis('off')
     a['ai_text'] = a['ax_text'].text(0, 0.95, '', color='white', fontsize=12, wrap=True, va='top',
                                      fontfamily='monospace')
 
-    # --- Referee events panel (right bottom) ---
-    a['ax_ref'] = fig.add_axes([0.72, 0.05, 0.25, 0.20])
+    # --- Annotation note panel (right middle, above referee) ---
+    a['ax_annot'] = fig.add_axes([0.72, 0.43, 0.25, 0.04])
+    a['ax_annot'].axis('off')
+    a['ax_annot'].set_title("Note", color='#ffeb3b', fontsize=10, weight='bold', pad=2)
+    a['annot_text'] = a['ax_annot'].text(0.02, 0.95, '', color='#ffeb3b', fontsize=9,
+                                          wrap=True, va='top', fontfamily='monospace',
+                                          transform=a['ax_annot'].transAxes,
+                                          bbox=dict(facecolor='#2a1e0a', alpha=0.9,
+                                                    edgecolor='#ffeb3b', pad=3,
+                                                    boxstyle='round,pad=0.2'))
+    a['annot_text'].set_visible(False)
+
+    # --- Referee events panel (right, above momentum) ---
+    a['ax_ref'] = fig.add_axes([0.72, 0.26, 0.25, 0.16])
     a['ax_ref'].set_facecolor('#1e2a22')
     a['ax_ref'].axis('off')
     a['ax_ref'].set_title("Referee Decisions", color='#ffeb3b', fontsize=13, weight='bold', pad=4)
@@ -250,26 +275,17 @@ def update_figure(fig, state, score_data, match_data, decision, last_strat_time)
     # --- Read data ---
     num_score = score_data.get("current_numerical_score", 0.0)
     avg_score = score_data.get("average_numerical_score", 0.0)
-    momentum_30s = score_data.get("momentum_30s", 0.0)
-    momentum_trend = score_data.get("momentum_trend", "stable")
     blue_goals = match_data.get("blue", 0)
     red_goals = match_data.get("red", 0)
 
     score_color = '#4caf50' if num_score >= 0 else '#f44336'
     avg_color = '#4caf50' if avg_score >= 0 else '#f44336'
-    trend_colors = {
-        "ascending": "#4caf50", "improving": "#8bc34a", "stable": "#ffeb3b",
-        "declining": "#ff9800", "collapsing": "#f44336"
-    }
-    trend_color = trend_colors.get(momentum_trend, "#ffeb3b")
 
     # --- HUD text ---
     a['hud_cur'].set_text(f"CUR: {num_score:+.2f}")
     a['hud_cur'].set_color(score_color)
     a['hud_avg'].set_text(f"AVG: {avg_score:+.2f}")
     a['hud_avg'].set_color(avg_color)
-    a['hud_mom'].set_text(f"MOM: {momentum_30s:+.2f} ({momentum_trend})")
-    a['hud_mom'].set_color(trend_color)
 
     time_since_last_strat = time.time() - last_strat_time if last_strat_time > 0 else 999.9
     status_color = 'white' if time_since_last_strat < 2.0 else 'red'
@@ -425,11 +441,24 @@ def update_figure(fig, state, score_data, match_data, decision, last_strat_time)
     else:
         a['mom_goal_scatter'].set_visible(False)
 
+    # Annotation markers (yellow diamonds at top of momentum panel)
+    if annotation_markers:
+        annot_x = [t for t, _ in annotation_markers]
+        annot_y = [9.5] * len(annot_x)  # near top of the -10..+10 y range
+        a['mom_annot_scatter'].set_offsets(list(zip(annot_x, annot_y)))
+        a['mom_annot_scatter'].set_visible(True)
+    else:
+        a['mom_annot_scatter'].set_visible(False)
+
     # --- AI analysis text ---
     if decision and "analysis" in decision:
         analysis = decision.get('analysis', '')
         oracle = decision.get('oracle', '')
-        a['ai_text'].set_text(f"### AI ANALYSIS ###\n\n{analysis}\n\n### STRATEGY ORACLE ###\n\n{oracle}")
+        if not isinstance(oracle, str):
+            oracle = "(invalid - JSON in oracle field)"
+        if not isinstance(analysis, str):
+            analysis = "(invalid - JSON in analysis field)"
+        a['ai_text'].set_text(f"### STRATEGY ###\n\n{analysis}\n\n### ORACLE ###\n\n{oracle}")
     else:
         a['ai_text'].set_text("FAST EXECUTION MODE\n\n(No explanation requested)")
 
@@ -472,8 +501,364 @@ def update_figure(fig, state, score_data, match_data, decision, last_strat_time)
     fig.canvas.flush_events()
 
 
+def _load_jsonl(path):
+    if not os.path.exists(path):
+        return []
+    records = []
+    with open(path) as f:
+        for line in f:
+            try:
+                records.append(json.loads(line))
+            except Exception:
+                pass
+    return records
+
+
+def _parse_llm_decision(rec):
+    """Extract assignments/analysis/oracle/latency from an llm_trace record."""
+    raw = rec.get("raw_response", "").strip()
+    if raw.startswith("```"):
+        raw = raw.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
+    start = raw.find("{")
+    end = raw.rfind("}")
+    data = {}
+    if start >= 0 and end >= 0:
+        try:
+            data = json.loads(raw[start:end + 1])
+        except Exception:
+            pass
+    return {
+        "assignments": data.get("assignments", {}),
+        "analysis": data.get("analysis", ""),
+        "oracle": data.get("oracle", ""),
+        "latency_ms": rec.get("latency_ms", 0),
+        "model": rec.get("model", ""),
+    }
+
+
+def load_replay_data(run_id):
+    """Load world_trace, llm_trace, and annotations for a run_id.
+    Returns (world_recs, llm_recs, annot_recs) or None if world_trace missing.
+    """
+    world_path = os.path.join(LOG_DIR, f"world_trace_{run_id}.jsonl")
+    llm_path = os.path.join(LOG_DIR, f"llm_trace_{run_id}.jsonl")
+    annot_path = os.path.join(LOG_DIR, f"annotations_{run_id}.jsonl")
+
+    world_recs = _load_jsonl(world_path)
+    if not world_recs:
+        print(f"❌ No world_trace found at {world_path}")
+        return None
+
+    llm_recs = _load_jsonl(llm_path)
+    annot_recs = _load_jsonl(annot_path)
+
+    print(f"Replay: {run_id}")
+    print(f"  World trace: {len(world_recs)} records ({world_path})")
+    print(f"  LLM trace:   {len(llm_recs)} records ({llm_path})")
+    print(f"  Annotations: {len(annot_recs)} records ({annot_path})")
+
+    return world_recs, llm_recs, annot_recs
+
+
+def find_latest_llm_before(llm_recs, llm_times, t_norm):
+    """Find the most recent LLM record at or before t_norm. Returns (idx, decision_dict) or (-1, {})."""
+    idx = bisect.bisect_right(llm_times, t_norm) - 1
+    if idx < 0:
+        return -1, {}
+    return idx, _parse_llm_decision(llm_recs[idx])
+
+
+def _rebuild_state_to(world_recs, world_times, target_t):
+    """Replay all world frames from 0 to target_t to repopulate momentum,
+    goal_events, foul_events, referee_events, and last_match_status.
+    Called on annotation jump so the panels reflect everything up to the jump point.
+    """
+    global momentum_history, goal_events, foul_events, referee_events, last_match_status
+    momentum_history.clear()
+    goal_events.clear()
+    foul_events.clear()
+    referee_events.clear()
+    last_match_status = "playing"
+    for i in range(len(world_recs)):
+        if world_times[i] > target_t:
+            break
+        w = world_recs[i]
+        w_t = world_times[i]
+        match_data = w.get("match_state", {})
+        score_data = w.get("tactical_score", {})
+        process_match_state(match_data, w_t)
+        num_score = score_data.get("current_numerical_score", 0.0)
+        momentum_history.append((w_t, num_score))
+
+
+def main_replay(run_id, speed=1.0, start_time=0.0, nav=False):
+    """Replay a saved match from trace files — no ROS 2 required.
+
+    If nav=True: enable annotation navigation (f/b/SPACE/q keyboard controls).
+    """
+    global game_start_time, momentum_history, goal_events, foul_events
+    global referee_events, last_match_status, _initialized
+
+    data = load_replay_data(run_id)
+    if data is None:
+        sys.exit(1)
+    world_recs, llm_recs, annot_recs = data
+
+    # Normalize timestamps: seconds from first world_trace record.
+    # Use t_wall (wall-clock) as the common timeline — sim-time (t) is 0.0
+    # in all existing traces (libgazebo_ros_init.so was added but not yet
+    # rebuilt/deployed when these traces were recorded).
+    t0 = world_recs[0].get("t_wall", world_recs[0].get("t", time.time()))
+    world_times = [r.get("t_wall", r.get("t", 0)) - t0 for r in world_recs]
+    llm_times = [r.get("t", 0) - t0 for r in llm_recs]
+    annot_times = [a.get("t_wall", 0) - t0 for a in annot_recs]
+
+    match_duration = world_times[-1] if world_times else 0.0
+    print(f"  Duration: {match_duration:.1f}s | Speed: {speed:.1f}x")
+
+    if nav:
+        if not annot_recs:
+            print("  ⚠️ No annotations in this run — nav mode has nothing to jump to.")
+        else:
+            print(f"  📝 {len(annot_recs)} annotations available")
+        print("  Controls: f=next annotation, b=prev annotation, SPACE=pause/resume, q=quit")
+
+    # Pre-parse all LLM decisions so we don't re-parse on every frame
+    llm_decisions = [_parse_llm_decision(r) for r in llm_recs]
+
+    # Pre-sort annotations by time for overlay + navigation
+    annot_sorted = sorted(zip(annot_times, annot_recs)) if annot_recs else []
+    annot_times_sorted = [a_t for a_t, _ in annot_sorted]
+
+    plt.ion()
+    fig = plt.figure(figsize=(16, 9), facecolor='#121212')
+
+    momentum_history.clear()
+    goal_events.clear()
+    foul_events.clear()
+    referee_events.clear()
+    last_match_status = "playing"
+    game_start_time = 0.0  # relative timeline
+    annotation_markers.clear()
+    for a_t, a_rec in (annot_sorted if annot_recs else []):
+        annotation_markers.append((a_t, a_rec.get("annotation_index", 0)))
+
+    plt.show(block=False)
+
+    w_idx = 0
+    llm_idx = -1
+    current_decision = {}
+    last_strat_time_abs = 0.0
+    active_annotation = None
+    annot_display_until = 0.0
+
+    # --- Nav mode state ---
+    replay_paused = False
+    seek_target = None      # timestamp to jump to
+    seek_annotation = None  # annotation record to display after jump
+
+    def on_key(event):
+        nonlocal replay_paused, seek_target, seek_annotation
+
+        if event.key == 'q':
+            plt.close(fig)
+            return
+
+        if not nav:
+            return
+
+        if event.key == ' ':
+            if replay_paused:
+                replay_paused = False
+                print("▶ Resumed")
+            else:
+                replay_paused = True
+                print("⏸ Paused")
+            return
+
+        if event.key not in ('f', 'b'):
+            return
+
+        if not annot_sorted:
+            print("⛔ No annotations in this run")
+            return
+
+        cur_t = world_times[w_idx] if w_idx < len(world_times) else 0.0
+
+        if event.key == 'f':
+            # Find next annotation after current position
+            jump_idx = bisect.bisect_right(annot_times_sorted, cur_t + 0.01)
+            if jump_idx >= len(annot_sorted):
+                print("⛔ No more annotations (already at last)")
+                return
+        else:  # 'b'
+            # Find previous annotation before current position
+            jump_idx = bisect.bisect_left(annot_times_sorted, cur_t - 0.01) - 1
+            if jump_idx < 0:
+                print("⛔ Already at first annotation")
+                return
+
+        a_t, a_rec = annot_sorted[jump_idx]
+        comment = a_rec.get("comment", "")
+        a_idx = a_rec.get("annotation_index", "?")
+        seek_target = a_t
+        seek_annotation = a_rec
+        replay_paused = True
+        print(f"{'⏩' if event.key == 'f' else '⏪'} Annotation #{a_idx + 1} t={a_t:.1f}s: \"{comment}\"")
+
+    if nav:
+        # Clear matplotlib default keybindings that conflict with nav controls
+        # f=fullscreen, b=back, backspace=back — all conflict with f/b nav
+        plt.rcParams['keymap.fullscreen'] = ['ctrl+f']
+        plt.rcParams['keymap.back'] = ['c']
+        plt.rcParams['keymap.forward'] = ['v']
+        fig.canvas.mpl_connect('key_press_event', on_key)
+
+    # Seek to start_time
+    if start_time > 0:
+        w_idx = bisect.bisect_left(world_times, start_time)
+        if w_idx >= len(world_recs):
+            w_idx = 0
+
+    wall_start = time.time()
+    start_offset = world_times[w_idx] if w_idx < len(world_times) else 0.0
+
+    while plt.fignum_exists(fig.number):
+        # Handle seek (f/b jump)
+        if seek_target is not None:
+            _rebuild_state_to(world_recs, world_times, seek_target)
+            w_idx = bisect.bisect_left(world_times, seek_target)
+            if w_idx >= len(world_recs):
+                w_idx = len(world_recs) - 1
+            # Reset clock so playback continues from here when resumed
+            start_offset = world_times[w_idx]
+            wall_start = time.time()
+            active_annotation = seek_annotation
+            annot_display_until = float('inf')  # stays visible while paused
+            seek_target = None
+            seek_annotation = None
+
+        # Advance replay clock (only if not paused)
+        if replay_paused:
+            replay_clock = world_times[w_idx]
+        else:
+            real_elapsed = time.time() - wall_start
+            replay_clock = start_offset + real_elapsed * speed
+
+        # Advance w_idx to the last record at or before replay_clock
+        if not replay_paused:
+            while w_idx + 1 < len(world_recs) and world_times[w_idx + 1] <= replay_clock:
+                w_idx += 1
+
+        if not replay_paused and w_idx >= len(world_recs) - 1 and replay_clock >= world_times[-1]:
+            print(f"\n✅ Replay finished — {match_duration:.1f}s played.")
+            break
+
+        w_rec = world_recs[w_idx]
+        w_t = world_times[w_idx]
+
+        # Find the latest LLM decision at or before this world frame
+        new_llm_idx = bisect.bisect_right(llm_times, w_t) - 1
+        if new_llm_idx >= 0 and new_llm_idx != llm_idx:
+            llm_idx = new_llm_idx
+            current_decision = llm_decisions[llm_idx]
+            last_strat_time_abs = w_t
+            # Print to terminal for copyable output (matches live mode)
+            analysis = current_decision.get("analysis", "")
+            oracle = current_decision.get("oracle", "")
+            if analysis:
+                print(f"[STRATEGY] {analysis}")
+            if oracle:
+                print(f"[ORACLE]   {oracle}")
+
+        # Check for annotations at this timestamp (natural playback, not jumping)
+        if not replay_paused:
+            for a_t, a_rec in annot_sorted:
+                if a_t <= w_t and a_t > (w_t - 0.5):  # within 0.5s window
+                    if active_annotation != a_rec:
+                        active_annotation = a_rec
+                        annot_display_until = w_t + 5.0  # show for 5s
+                        comment = a_rec.get("comment", "")
+                        idx_label = a_rec.get("annotation_index", "?")
+                        print(f"\n📝 Annotation #{idx_label + 1} (t={w_t:.1f}s): \"{comment}\"")
+
+        # Build state/score/match dicts from world_trace record
+        ents = w_rec.get("entities", {})
+        match_data = w_rec.get("match_state", {})
+        score_data = w_rec.get("tactical_score", {})
+        state = {"entities": ents}
+
+        # Process match state transitions (populates goal_events, referee_events, etc.)
+        process_match_state(match_data, w_t)
+
+        # Update momentum history from tactical_score (only during natural playback)
+        if not replay_paused:
+            num_score = score_data.get("current_numerical_score", 0.0)
+            momentum_history.append((w_t, num_score))
+
+        if not _initialized:
+            init_figure(fig)
+            _initialized = True
+
+        # Show/hide annotation note panel
+        if active_annotation and w_t <= annot_display_until:
+            comment = active_annotation.get("comment", "")
+            a_idx = active_annotation.get("annotation_index", "?")
+            _artists['annot_text'].set_text(
+                f"#{a_idx + 1} t={w_t:.1f}s\n{comment}")
+            _artists['annot_text'].set_visible(True)
+        else:
+            _artists['annot_text'].set_visible(False)
+
+        try:
+            update_figure(fig, state, score_data, match_data,
+                          current_decision, last_strat_time_abs)
+        except Exception as e:
+            print(f"[Visualizer render error] {e}", flush=True)
+
+        plt.pause(0.01)
+
+    print("Replay mode exited.")
+
+
 def main():
     global game_start_time, momentum_history, goal_events, foul_events, referee_events, _initialized
+
+    parser = argparse.ArgumentParser(description="R2K Visualizer (live or replay mode)")
+    parser.add_argument("--replay", metavar="RUN_ID", nargs="?", const="", default=None,
+                        help="Replay a saved match from trace files (no ROS 2 required). "
+                             "Without RUN_ID, defaults to the last game. "
+                             "RUN_ID matches the R2K_RUN_ID used during the match.")
+    parser.add_argument("--speed", type=float, default=1.0,
+                        help="Replay playback speed multiplier (default: 1.0 = real time)")
+    parser.add_argument("--start", type=float, default=0.0,
+                        help="Replay start time in seconds from match start (default: 0.0)")
+    parser.add_argument("--nav", action="store_true",
+                        help="Replay mode: enable annotation navigation (f=next, b=prev, "
+                             "SPACE=pause/resume, q=quit). Jumps to annotated timestamps, "
+                             "pauses, and displays the note. Default: off (continuous playback).")
+    args = parser.parse_args()
+
+    if args.replay is not None:
+        run_id = args.replay
+        if not run_id:
+            # Default to last game: newest world_trace_* file
+            traces = sorted(
+                [f for f in os.listdir(LOG_DIR) if f.startswith("world_trace_")],
+                key=lambda f: os.path.getmtime(os.path.join(LOG_DIR, f)),
+                reverse=True,
+            )
+            if not traces:
+                print("❌ No saved matches found in logs/. Run a match first.")
+                sys.exit(1)
+            run_id = traces[0].replace("world_trace_", "").replace(".jsonl", "")
+            print(f"Replaying last game: {run_id}")
+        main_replay(run_id, speed=args.speed, start_time=args.start, nav=args.nav)
+        return
+
+    if not HAS_ROS2:
+        print("❌ rclpy not available. Use --replay RUN_ID to replay a saved match.")
+        sys.exit(1)
 
     print("Starting Single-Threaded R2K Visualizer (blitted mode)...")
     rclpy.init(args=None)
