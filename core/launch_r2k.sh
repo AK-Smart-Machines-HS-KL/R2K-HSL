@@ -152,11 +152,11 @@ OLLAMA_DOCKER="${HTTP_PROT}://172.17.0.1:11434"
 
 # ---- OLLAMA CHECK ----
 echo "🧠 Checking Ollama AI Server..."
+export OLLAMA_HOST=0.0.0.0
 if curl -s "${OLLAMA_LOCAL}/api/tags" > /dev/null 2>&1; then
     echo "✅ Ollama ist bereits online und erreichbar."
 else
     echo "🚀 Booting Ollama AI Server..."
-    export OLLAMA_HOST=0.0.0.0
     nohup ollama serve > ollama.log 2>&1 &
     disown $!
     sleep 5
@@ -174,6 +174,25 @@ if [[ "$SCENARIO" != 0vs* ]]; then
         exit 1
     fi
     echo "✅ Modell '$MODEL' ist bereit."
+fi
+
+# Verify container can reach Ollama via Docker bridge gateway (U24 only).
+# Without this, the evaluator inside the container silently fails with
+# ConnectionError on every poll loop → dead blue team, no llm_trace.
+if [[ "$UBUNTU_VERSION" == 24.* ]]; then
+    if ! curl -s --max-time 2 "${OLLAMA_DOCKER}/api/tags" > /dev/null 2>&1; then
+        echo "=========================================================="
+        echo "❌ FEHLER: Ollama ist vom Docker-Container aus nicht erreichbar!"
+        echo "   Ollama lauscht auf 127.0.0.1, aber der Container braucht 172.17.0.1."
+        echo "   Fix (systemd): sudo systemctl edit ollama"
+        echo "      → paste: [Service]"
+        echo "      → paste: Environment=\"OLLAMA_HOST=0.0.0.0\""
+        echo "      → sudo systemctl daemon-reload && sudo systemctl restart ollama"
+        echo "   Fix (manual): OLLAMA_HOST=0.0.0.0 ollama serve"
+        echo "=========================================================="
+        exit 1
+    fi
+    echo "✅ Ollama vom Docker-Container aus erreichbar (172.17.0.1)."
 fi
 
 export R2K_OLLAMA_URL="${OLLAMA_LOCAL}/api/generate"
