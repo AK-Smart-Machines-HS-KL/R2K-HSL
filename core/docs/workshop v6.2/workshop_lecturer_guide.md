@@ -1,12 +1,12 @@
 ---
-title: "ROS2K v6.2 Workshop — Lecturer's Guide"
+title: "ROS2K v6.3 Workshop — Lecturer's Guide"
 type: GUIDE
-tags: [workshop, lecturer, guide, internal, v6.2]
-last_modified: 2026-07-22
+tags: [workshop, lecturer, guide, internal, v6.2, v6.3]
+last_modified: 2026-07-29
 status: draft
 ---
 
-# ROS2K v6.2 Workshop — Lecturer's Guide
+# ROS2K v6.3 Workshop — Lecturer's Guide
 
 > [!warning] Internal — for the workshop lecturer only
 > This guide contains timing, talking points, expected answers, common
@@ -30,6 +30,10 @@ status: draft
 | **Oracle / Expert** | Human-authored analysis texts in each scenario package. Oracle = strategic (what should happen tactically). Expert = technical (what the LLM should output). NOT fed to the LLM — for human comparison with `--explain` output. | Module 2, Module 5 |
 | **RPC (Remote Procedure Call)** | A message format where the sender serializes a command as a JSON string inside a ROS2 message. The K1 uses `booster_msgs/RpcReqMsg` with `api_id` 2001 (move) or 2000 (failsafe). | Module 3 |
 | **num_predict** | The Ollama API parameter that caps **how many tokens the model is allowed to generate** in its response. Set in `r2k_evaluator.py:111`. `--no-explain` → 150 tokens (prompt asks for ONLY `assignments`). `--explain` → 600 tokens (prompt asks for `analysis` + `oracle` + `assignments`). If the model's response exceeds this budget, it gets truncated mid-JSON → `fast_parse` fails → no `current_strategy.json` written → dead blue team. 150 is enough for a focused 3B model in steady state but can truncate a verbose cold-start response. | `r2k_evaluator.py:100-111`, Module 1, Module 4 |
+| **Content-hash skip** [NEW v6.3] | The evaluator hashes entity positions (JSON of `min_ents`) and skips the LLM call if identical to the previous call. At `temperature: 0.0`, identical input → identical output → wasted GPU time. Saves 64% of calls per match (171→62). Effective latency drops from ~1328ms to ~684ms. | `r2k_evaluator.py:259-266`, Module 4 |
+| **Dynamic prompt injection** [NEW v6.3] | The evaluator assembles the system prompt at runtime from fragment files, based on `match_state.status`. At `status="ball_out"`, `rules_ball_out.txt` is added additively. Ollama is stateless (sends `system` per call), so the prompt can change between calls without restarting. Cached by `(status, mode)` tuple — file reads only on status transitions. | `r2k_evaluator.py:26-195`, Module 4 |
+| **Role condensation** [NEW v6.3] | Roles reduced from 5 (striker/midfielder/passer/receiver/supporter) to 3 (goalie/attacker/defender). The bridge only checks `role == 'goalie'`; all other roles were cosmetic labels the 3B model generated without any consumer caring. `role_diversity` KPI dropped (dead metric, always 3.0). | All fragments, Module 4 |
+| **Replay system** [NEW v6.3] | `match_annotate.py` (live: pause Gazebo, record comment) + `replay_trace.py` (CLI: step through annotations) + `r2k_visualizer.py --replay --nav` (visual: f/b/SPACE controls, annotation overlay, momentum markers). No ROS 2 required for replay. | `tools/match_annotate.py`, `tools/replay_trace.py`, Module 4+5 |
 
 ---
 
@@ -43,8 +47,11 @@ status: draft
 - [ ] `nvidia-smi` shows Ollama using GPU VRAM (~2-4GB)
 - [ ] `python3 tools/analyze_trace.py --help` works
 - [ ] `python3 tools/dump_prompt.py --scenario 3vs3_attack_center --no-explain` works
-- [ ] `python3 -m pytest tests/ -v` — 62 tests pass
+- [ ] `python3 -m pytest tests/ -v` — ~~62~~ **[NEW v6.3]** 92 tests pass
 - [ ] `python3 tools/gen_field_diagrams.py --all` — generates PNGs
+- [ ] **[NEW v6.3]** `python3 r2k_visualizer.py --replay --help` works (replay mode)
+- [ ] **[NEW v6.3]** `python3 tools/replay_trace.py --help` works (CLI replay)
+- [ ] **[NEW v6.3]** Verify `launch_r2k.sh --analyze` opens annotator terminal (only on U24 with display)
 - [ ] `opencode` launches and can answer "How does the referee detect a foul?"
 - [ ] Print or display: `cheatpage_r2k_team_workflow.md` Part 1 (Setup) as reference
 
@@ -279,13 +286,14 @@ the goalie bot. Show me the PID control section.
 
 **Staleness (2 min):**
 - Explain staleness: the delay between when the world state is measured and when the LLM's decision takes effect
-- LLM latency ~800ms. Ball at 2 m/s → ball is 1.6m away from where the LLM thinks it is
+- LLM latency ~800ms per call. **[NEW v6.3]** Effective latency ~684ms with content-hash skip (was ~1328ms — the evaluator was busy 100% of the time, now idle 64%).
+- Ball at 2 m/s → ball is ~1.4m away from where the LLM thinks it is (was ~1.6m)
 - This is why the goalie stands still (Module 1): the goalie chases a target based on where the ball WAS, not where it IS
 
 **Trace logging (1 min):**
 - Two JSONL files: `llm_trace` (per LLM call) + `world_trace` (per 10Hz tick)
 - Non-blocking, append-only, gitignored
-- `analyze_trace.py` joins them by `R2K_RUN_ID` → 14 KPIs
+- `analyze_trace.py` joins them by `R2K_RUN_ID` → ~~14~~ **[NEW v6.3]** 18 KPIs (4 attack/passing/restart added, `role_diversity` dropped)
 
 ### Experiment 1: What does the LLM see? (8 min)
 
@@ -456,10 +464,11 @@ relay JSON mapping to what topics actually show up.
 
 | Segment | Time | What |
 |---------|------|------|
-| Concepts | 10 min | Fragments, tools, opencode as assistant |
-| Experiment 1: KPI reading | 8 min | analyze_trace on previous run |
+| Concepts | 10 min | Fragments, tools, dynamic injection, content-hash, replay, opencode |
+| Experiment 1: KPI reading | 8 min | analyze_trace on previous run, new attack KPIs |
 | Experiment 2: Fragment surgery | 10 min | Edit rules_core, dump_prompt, run, diff KPIs |
-| Experiment 3: opencode fragment edit | 7 min | Ask opencode to edit a fragment + verify |
+| Experiment 3: Replay + annotation [NEW v6.3] | 10 min | --analyze, --replay --nav, annotation navigation |
+| (if time) Experiment 4: opencode fragment edit | 7 min | Ask opencode to edit a fragment + verify |
 
 ### Talking points
 
@@ -468,22 +477,56 @@ relay JSON mapping to what topics actually show up.
 - `rules_core.txt` → universal rules (STAY INSIDE, goalie -4.0)
 - `rules_{mode}.txt` → mode-specific (3vs3, 2vs2)
 - `samples_{mode}.txt` → few-shot examples (1 sample — B-study finding)
-- `setup_r2k.py` assembles at boot → `system_prompt.txt` (regenerated every boot, don't hand-edit)
-- Override: strategy fragments replace mode fragments if they exist
+- `setup_r2k.py` assembles at boot → `system_prompt.txt` (for `dump_prompt.py`)
+- **[NEW v6.3]** Evaluator also assembles at runtime from fragments directly
+  (dynamic prompt injection — see below). `system_prompt.txt` is no longer
+  read by the evaluator at runtime; it's only for `dump_prompt.py` dry-runs.
+- ~~Override: strategy fragments replace mode fragments if they exist~~
+  **[NEW v6.3]** Game-phase fragments (`rules_ball_out.txt` etc.) are
+  ADDITIVE to mode fragments — they don't replace, they supplement.
+- **[NEW v6.3]** 3 roles: goalie/attacker/defender (was 5: striker/midfielder/
+  passer/receiver/supporter). The bridge only checks `role == 'goalie'`.
 
-**Tools (3 min):**
+**[NEW v6.3] Dynamic prompt injection (3 min):**
+- Evaluator assembles prompt from fragments at runtime, based on
+  `match_state.status`
+- At `status="ball_out"` → `rules_ball_out.txt` is added additively
+- Ollama is stateless — sends `system` per call, can change between calls
+- Cached by `(status, mode)` tuple — file reads only on status transitions (<10/match)
+- 4 minimal game-phase stubs: `rules_ball_out.txt`, `rules_goal_kick.txt`,
+  `rules_corner_kick_in.txt`, `rules_kickoff.txt` (2 lines each)
+- Ask: "Why not just put everything in one prompt?" → Answer: 3B model can't
+  handle a large prompt well — B-study showed 1 sample > 6 samples. Game-phase
+  fragments keep the prompt focused on the current situation.
+
+**[NEW v6.3] Content-hash skip (2 min):**
+- Evaluator hashes entity positions (`min_ents` JSON), skips LLM call if
+  identical to previous call
+- At `temperature: 0.0`, identical input → identical output → 64% of calls
+  were wasted (171→62 per match)
+- Effective latency: ~684ms (was ~1328ms) — evaluator idle 64% of the time
+- Ask: "Why is this safe?" → Answer: `temperature: 0.0` is deterministic.
+  Same positions → same strategy. No point recomputing.
+
+**[NEW v6.3] Replay system (2 min):**
+- `launch_r2k.sh --analyze` → opens annotator terminal after container starts
+- In annotator: ENTER pauses Gazebo, type comment, ENTER resumes
+- Post-match: `r2k_visualizer.py --replay --nav` → visual playback
+  - `f` = next annotation (pauses), `b` = prev, `SPACE` = resume, `q` = quit
+  - Yellow diamond markers on momentum timeline at annotation timestamps
+  - Note panel above referee decisions shows comment
+- `replay_trace.py` → CLI step-through (no display needed)
+- No ROS 2 required for replay — reads trace files only
+
+**Tools (2 min):**
 - `dump_prompt.py` — dry-run prompt inspector (no ROS/Ollama needed)
-- `analyze_trace.py` — 14 KPIs from trace files
+- `analyze_trace.py` — ~~14~~ **[NEW v6.3]** 18 KPIs from trace files
 - `gen_field_diagrams.py` — generates field diagram PNGs for scenario packages
 - `run_experiment.sh` — 3-repeat experiment runner
 - `swap_fragments.sh` — experiment fragment swapper
-- `batch_evaluator.py` — exists but KPI collection is broken (TODO line 91)
-
-**opencode (2 min):**
-- AI-gestützter Development-Assistent. Reads `AGENTS.md` + knowledge base automatically.
-- Can answer architecture questions, run shell commands, edit files, debug
-- Can run in Plan mode (Tab key) to suggest changes before making them
-- Examples inline in each experiment below
+- **[NEW v6.3]** `match_annotate.py` — live match annotation (pause Gazebo, record comment)
+- **[NEW v6.3]** `replay_trace.py` — post-match annotation review CLI
+- `batch_evaluator.py` — exists but KPI collection is broken (deprecated)
 
 ### Experiment 1: KPI reading (8 min)
 
@@ -491,7 +534,14 @@ relay JSON mapping to what topics actually show up.
 python3 tools/analyze_trace.py --run-id <ID from Module 1>
 # Show: goals_for_blue, cluster_pct, oob_pct, goalie_idle_pct,
 # latency_p50, composite_score
+# [NEW v6.3] Also: shots_on_goal, shots_on_target, pass_completion_pct,
+# restart_recovery_time_s
 ```
+
+**[NEW v6.3] Expected:** New attack KPIs show whether blue is actually
+shooting and passing. Baseline shows `shots_on_goal` ~0-6 per match,
+`pass_completion_pct` ~88%. If `shots_on_goal` = 0, blue has the ball
+but never shoots — that's the composite score bias Phase 2.5 addresses.
 
 ### Experiment 2: Fragment surgery (10 min)
 
@@ -508,7 +558,55 @@ python3 tools/analyze_trace.py --run-id <ID>
 
 **Teaching point:** "This is how you iterate today: edit fragments, run a match, analyze KPIs. If KPIs improve, you can commit the change."
 
-### Experiment 3: opencode fragment edit + experiment run (7 min)
+**[NEW v6.3] Note:** The evaluator assembles the prompt at runtime —
+`dump_prompt.py` shows what `setup_r2k.py` would assemble at boot, but
+the evaluator's runtime assembly may differ if game-phase fragments
+are triggered. The `llm_trace` `sys_prompt_hash` field shows which
+prompt variant was used per call.
+
+### Experiment 3: Replay + annotation [NEW v6.3] (10 min)
+
+```bash
+# Terminal 1: Match with annotator
+./launch_r2k.sh --scenario 3vs3_attack_center --relay only_sim_bots --analyze
+
+# Terminal 2 (auto-opens): Press ENTER to freeze Gazebo
+#   → Type a comment (e.g. "blue_2 clusters with blue_1")
+#   → ENTER to resume. Repeat 2-3 times. 'q' to stop annotating.
+```
+
+After the match:
+```bash
+cd src
+# Visual replay with annotation navigation
+python3 r2k_visualizer.py --replay --nav --speed 3
+# f = next annotation (auto-pauses), b = prev, SPACE = resume, q = quit
+# Yellow diamonds on momentum timeline = annotation timestamps
+# Note panel (above referee decisions) shows comment
+```
+
+```bash
+# CLI review (no display needed)
+python3 tools/replay_trace.py
+# ENTER for next annotation, q to quit
+# Shows: LLM decision before annotation, game state, ball trajectory 5s after
+```
+
+**Teaching point:** "You can annotate moments during a live match, then
+replay them post-match with the LLM's decision at that exact moment.
+This is how you do qualitative analysis — KPIs tell you WHETHER, replay
+tells you WHY."
+
+**Common issues:**
+- Annotator says "ros2 not available" → container not running yet, or
+  `PROJECT_NAME` env var not set. On U24: `--analyze` opens annotator
+  AFTER container starts, but if container takes long to boot, the
+  annotator's first `ros2 service list` attempts may fail.
+- Replay shows all timestamps as t=0.0s → `libgazebo_ros_init.so` not
+  built into container (sim-time not flowing). `replay_trace.py` falls
+  back to `t_wall` (wall-clock) — works but timestamps are less intuitive.
+
+### Experiment 4: opencode fragment edit + experiment run (7 min)
 
 Ask opencode:
 ```text
@@ -548,9 +646,10 @@ Show me a plan before making changes."
 | Phase 5 roadmap walkthrough | 20 min | Kalman, predictive, watchdog, failsafe, sim-to-real, 5vs5, LLM quality |
 | Experiment 1: Make it your own | 10 min | Isolated run, KPI inspection |
 | Experiment 2: Oracle/expert comparison | 10 min | --explain reasoning vs analysis.md |
+| **[NEW v6.3]** Experiment 3: Replay with annotations | 10 min | --analyze + --replay --nav |
 | Discussion | 5 min | Which directions for internships/projects? |
 
-### Talking points — Phase 5 from `optimization_spec_v6.2.md` §7
+### Talking points — Phase 5 from `optimization_spec_v6.3.md` §7
 
 > [!important] These are research directions, NOT implemented features.
 > Present them as "here's where the project is heading." Don't say "we have"
@@ -561,33 +660,54 @@ Show me a plan before making changes."
 - Would address goalie idle: smoother ball-Y → less PID jitter → goalie moves
 - Implementation: `tracker_node.py` — add Kalman filter per entity
 - This is the planned long-term fix for the goalie idle problem from Module 1
+- **[NEW v6.3]** Content-hash skip reduced effective latency from ~1328ms to
+  ~684ms. Kalman's latency compensation value is reduced but not eliminated —
+  684ms is still significant for a moving ball (~1.4m at 2 m/s). The case
+  for Kalman is now primarily about noise smoothing, with velocity as a
+  secondary benefit.
 
 **5.2 Predictive World Model (3 min):**
-- Forward-simulate world state by ~800ms (matching LLM latency)
+- Forward-simulate world state by ~~~800ms~~ **[NEW v6.3]** ~684ms (effective
+  latency with content-hash skip)
 - LLM decides for the world as it WILL be, not as it WAS
 - Reduces effective staleness to near-zero
 - Requires Kalman velocity (5.1)
+- **[NEW v6.3]** Value proposition reduced: content-hash skip already halved
+  effective latency. Predictor must only cover ~684ms, not ~1328ms.
 
 **5.3 + 5.4 Watchdog + Failsafe (4 min):**
 - Compare predicted vs actual state each 10Hz tick
 - If divergence > threshold → flag anomaly
 - If critical → switch blue to rule-based behavior (mirror `rule_evaluator_red.py`)
 - System never hangs, never produces dangerous commands
+- **[NEW v6.3]** Content-hash skip makes `current_strategy.json` mtime
+  unreliable as staleness indicator (file may not update for seconds during
+  stable positions — normal, not failure). Failsafe must check `llm_trace`
+  records, not file mtime.
 
 **5.5 Sim-to-Real (3 min):**
 - Test on K1/Yahboom hardware via `--relay hardware_mirror`
 - Compare sim KPIs vs field KPIs
 - Known limitation: K1 ignores cmd_vel for freeze (set-piece freezes sim-only)
+- **[NEW v6.3]** Replay system available: `--analyze` for live annotation
+  during hardware matches, `--replay --nav` for post-match review.
 
 **5.10 5vs5 Scale-Up (3 min):**
-- 5 blue bots = 5 role assignments per LLM call
-- More roles, larger JSON, higher latency
-- Research question: does 3B model handle 5-bot coordination, or need 7B?
+- ~~5 blue bots = 5 role assignments per LLM call~~
+- **[NEW v6.3]** Role condensation: 3 roles (goalie/attacker/defender). For
+  5vs5: either keep 3 roles with 2 attackers + 1 defender + 1 goalie + 1
+  flexible, or introduce spatial roles (left-attacker/right-attacker).
+- Larger JSON, higher latency
+- Research question: does 3B model handle 5-bot coordination with 3 roles,
+  or need spatial differentiation? Does it need 7B?
 
 **5.11 LLM Output Quality (3 min):**
 - Today: manual comparison of `--explain` output against `analysis.md` oracle/expert
 - Future: automated LLM-as-judge produces `reasoning_quality_score`
-- Deferred: `--explain` costs 44% latency, LLM-as-judge is circular
+- **[NEW v6.3]** `--explain` was broken by Phase 2.5b (dynamic injection
+  bypassed `clean_json_samples()`), then fixed (2026-07-28, `R2K_EXPLAIN` env
+  var + `{{EXPLAIN_INSTRUCTION}}` placeholder). The 44% per-call latency cost
+  is unchanged, but content-hash skip reduces the number of explain calls.
 
 ### Experiment 1: Make it your own (10 min)
 
@@ -595,6 +715,7 @@ Show me a plan before making changes."
 ./launch_r2k.sh --headless --duration 60 --scenario 3vs3_attack_center --relay only_sim_bots
 python3 tools/analyze_trace.py --run-id <ID>
 # Inspect your KPIs — this is your personal dataset from the workshop
+# [NEW v6.3] Check: shots_on_goal, pass_completion_pct — is blue actually shooting?
 ```
 
 ### Experiment 2: Oracle/expert comparison (10 min)
@@ -610,6 +731,24 @@ cat scenario/3vs3_attack_center/analysis.md
 - "Which Phase 5 direction interests you for a 6-month internship?"
 - "Which could be a 2-month student project?"
 
+### Experiment 3: Replay with annotations [NEW v6.3] (10 min)
+
+```bash
+# Record a match with annotations
+./launch_r2k.sh --scenario 3vs3_attack_center --relay only_sim_bots --explain --analyze
+# In annotator terminal: ENTER → comment → ENTER (repeat 2-3 times)
+
+# Visual replay with step-through
+cd src
+python3 r2k_visualizer.py --replay --nav --speed 3
+# f = next annotation, b = prev, SPACE = resume
+```
+
+**Discussion:**
+- "Do the LLM's decisions at annotated moments match your tactical judgment?"
+- "Where did the momentum shift? Can you see it in the timeline?"
+- "Are there moments where the LLM did nothing (content-hash skip)? Was that correct?"
+
 ### opencode examples for Module 5
 
 ```text
@@ -621,6 +760,10 @@ compare them to the oracle text in scenario/3vs3_attack_center/analysis.md.
 Explain the Phase 5.1 Kalman filter plan. Where in tracker_node.py would
 it be implemented? Show me the current code that would need to change.
 ```
+```text
+How does the content-hash skip work in r2k_evaluator.py? Show me the
+hashing code and explain why it saves 64% of LLM calls.
+```
 
 ---
 
@@ -629,16 +772,19 @@ it be implemented? Show me the current code that would need to change.
 ### Likely questions
 
 **"Why is the goalie not moving?"**
-→ The bridge PID controller chases the LLM's target Y, which is based on a ball position that's ~800ms old (staleness) and jittery. By the time the goalie arrives, the ball has moved. The result is micro-oscillations with no positional progress. The planned fix is a Kalman filter (Phase 5.1) that provides smoother, predicted positions.
-
-**"Can I use opencode instead of reading the code myself?"**
-→ Yes. opencode reads the knowledge base and AGENTS.md automatically. Ask it architecture questions, let it run experiments, edit fragments. It's especially useful for understanding code you didn't write. See the inline opencode examples in each module.
+→ The bridge PID controller chases the LLM's target Y, which is based on a ball position that's ~~~800ms~~ **[NEW v6.3]** ~684ms (effective, with content-hash skip) old (staleness) and jittery. By the time the goalie arrives, the ball has moved. The result is micro-oscillations with no positional progress. The planned fix is a Kalman filter (Phase 5.1) that provides smoother, predicted positions.
 
 **"What if I don't have a GPU?"**
-→ Ollama falls back to CPU (very slow, ~4000-5000ms latency). Alternatively, use Ollama Cloud or Uni Mainz as the LLM backend — configure in `~/.config/opencode/opencode.json`.
+→ Ollama falls back to CPU (very slow, ~4000-5000ms latency). Alternatively, use Ollama Cloud or Uni Mainz as the LLM backend — configure in `~/.config/opencode/opencode.json`. **[NEW v6.3]** Replay mode (`--replay`) works without GPU or ROS 2 — you can review saved matches on any laptop.
 
 **"How is the K1 different from the Yahboom?"**
 → The K1 is a bipedal robot controlled via ROS2 custom messages (`booster_msgs/RpcReqMsg`) with JSON-serialized RPC commands (api_id 2001=move, 2000=failsafe). The Yahboom is a wheeled rover controlled via standard ROS2 `Twist` messages on `cmd_vel`. The bridge handles both — routing is determined by `relay/*.json` hardware_type.
+
+**[NEW v6.3] "What does --nav do?"**
+→ Enables annotation navigation in replay mode. `f` jumps to the next annotation (pauses automatically), `b` to the previous, `SPACE` resumes, `q` quits. The visualizer shows a note panel (above referee decisions) with the annotation comment, and yellow diamond markers on the momentum timeline at each annotation timestamp. Only works with `--replay` mode.
+
+**[NEW v6.3] "Why does the replay show t=0.0s for all timestamps?"**
+→ Sim-time (`/clock`) isn't available because `libgazebo_ros_init.so` hasn't been built into the Docker container yet. `replay_trace.py` and `r2k_visualizer.py --replay` fall back to `t_wall` (wall-clock time, normalized to seconds from match start). The timestamps are correct in relative terms — they just don't reflect Gazebo sim-time. Fix: rebuild the container with `docker exec core_gazebo bash -c "cd /workspace/ros2_ws && rm -rf build install && colcon build"`.
 
 ---
 
@@ -649,14 +795,24 @@ it be implemented? Show me the current code that would need to change.
 
 | Item                                                       | Spec reference | Status                                                             |
 | ---------------------------------------------------------- | -------------- | ------------------------------------------------------------------ |
-| Goalie fix (bridge blending)                               | Phase 2a       | Designed, NOT coded. Goalie idle still ~95%.                       |
-| Shared regression suite (`test_non_functional.py`)         | Phase 2b       | Does NOT exist. Unit tests only.                                   |
-| Dynamic prompt injection (status-based fragment switching) | Phase 4        | NOT implemented. `r2k_evaluator.py` caches prompt at startup.      |
-| `setup_r2k.py` reads scenario packages                     | Phase 2d       | NOT implemented. Still reads flat JSON files.                      |
+| ~~Goalie fix (bridge blending)~~ **[DONE v6.3]** | Phase 2a       | ~~Designed, NOT coded~~ **Implemented** 2026-07-27. Smooth blending, 70% tactical + 30% LLM. `goalie_tactical_pct` KPI added. |
+| ~~Shared regression suite~~ **[DONE v6.3]** | Phase 2b       | ~~Does NOT exist~~ **Implemented** 2026-07-27. `test_non_functional.py`, 11 slow tests, `--skip-slow` two-tier. |
+| ~~Dynamic prompt injection~~ **[DONE v6.3]** | Phase 2.5b     | ~~NOT implemented~~ **Implemented** 2026-07-27. Evaluator assembles prompt at runtime from fragments, based on `match_state.status`. |
+| ~~`setup_r2k.py` reads scenario packages~~ **[DONE v6.3]** | Phase 2d | ~~NOT implemented~~ **Implemented** 2026-07-27. Reads `scenario/<name>/scenario.json` first, falls back to flat JSON. |
+| **[NEW v6.3]** Content-hash skip | `r2k_evaluator.py` | **Implemented** 2026-07-28. 64% fewer LLM calls, ~684ms effective latency. |
+| **[NEW v6.3]** Role condensation (5→3) | All fragments | **Implemented** 2026-07-28. goalie/attacker/defender. `role_diversity` KPI dropped. |
+| **[NEW v6.3]** Replay system | `tools/match_annotate.py`, `tools/replay_trace.py`, `r2k_visualizer.py --replay` | **Implemented** 2026-07-28/29. Live annotation + post-match visual/CLI replay with nav. |
+| **[NEW v6.3]** Explain-mode fix | `r2k_evaluator.py`, `R2K_EXPLAIN` env var | **Implemented** 2026-07-28. Was broken by 2.5b dynamic injection. Fixed with `{{EXPLAIN_INSTRUCTION}}` placeholder + `clean_json_samples` duplication. |
+| **[NEW v6.3]** Ollama bind-address fix | `install.sh`, `launch_r2k.sh` | **Implemented** 2026-07-27. `OLLAMA_HOST=0.0.0.0` systemd override + container reachability guard. |
+| **[NEW v6.3]** Warm-up curl in launch_r2k.sh | Phase 2.5-pre1 | **Implemented** 2026-07-27. Prevents cold-boot dead-blue-team race. |
+| **[NEW v6.3]** 4 attack/passing/restart KPIs | Phase 2.5a | **Implemented** 2026-07-27. `shots_on_goal`, `shots_on_target`, `pass_completion_pct`, `restart_recovery_time_s` in `analyze_trace.py`. |
+| **[NEW v6.3]** Minimal game-phase fragments | Phase 2.5c | **Implemented** 2026-07-27. 4 stub files: `rules_ball_out.txt`, `rules_goal_kick.txt`, `rules_corner_kick_in.txt`, `rules_kickoff.txt`. |
 | Kalman filter                                              | Phase 5.1      | NOT implemented.                                                   |
 | Predictive world model                                     | Phase 5.2      | NOT implemented.                                                   |
 | Watchdog + failsafe                                        | Phase 5.3+5.4  | NOT implemented.                                                   |
 | 5vs5 scenarios                                             | Phase 5.10     | NOT implemented. Current: 2vs2, 3vs3.                              |
 | LLM-as-judge quality evaluation                            | Phase 5.11     | NOT implemented.                                                   |
 | Automated prompt optimization (DSPy/Optuna)                | Phase 5.9      | NOT implemented.                                                   |
-| `batch_evaluator.py` KPI collection                        | Phase 2b       | Broken (TODO line 91). File exists, launches matches, no KPI data. |
+| `batch_evaluator.py` KPI collection                        | Phase 2b       | Broken (TODO line 91). Deprecated — replaced by `test_non_functional.py`. |
+| **[NEW v6.3]** v6.3 re-baseline (27 runs) | Phase 2.5d | NOT done. Code ready (KPIs, dynamic injection, fragments, warm-up, hardening). Blocked by live Gazebo + Ollama. |
+| **[NEW v6.3]** `libgazebo_ros_init.so` in Docker | `soccer_match.launch.py` | Added to launch file but NOT rebuilt into container. Sim-time (`/clock`) not flowing. Replay falls back to `t_wall`. |
