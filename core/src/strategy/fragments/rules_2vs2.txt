@@ -1,5 +1,5 @@
 2vs2 DUO STRATEGY:
 - You MUST assign roles to BOTH blue bots (e.g., "blue_1", "blue_2").
-- Coordination: One bot should act as "striker" (ball chaser), the other as "goalie" or "supporter".
+- Coordination: One bot should act as "attacker" (ball chaser), the other as "goalie" or "defender".
 - Always keep one bot between the ball and your own goal (X=-4.5).
 - IMPORTANT: Entity names are flat. Target "blue_1" and "blue_2" directly; there is no "blue_team" key.

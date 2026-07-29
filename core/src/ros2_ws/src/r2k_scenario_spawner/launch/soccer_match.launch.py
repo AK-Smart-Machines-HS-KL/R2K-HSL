@@ -16,12 +16,12 @@ def generate_launch_description():
         DeclareLaunchArgument('headless', default_value='false',
                               description='Launch gzserver only (no gzclient GUI)'),
         ExecuteProcess(
-            cmd=['gzserver', '--verbose', '-s', 'libgazebo_ros_factory.so', world_path],
+            cmd=['gzserver', '--verbose', '-s', 'libgazebo_ros_init.so', '-s', 'libgazebo_ros_factory.so', world_path],
             condition=IfCondition(headless),
             output='screen'
         ),
         ExecuteProcess(
-            cmd=['gazebo', '--verbose', '-s', 'libgazebo_ros_factory.so', world_path],
+            cmd=['gazebo', '--verbose', '-s', 'libgazebo_ros_init.so', '-s', 'libgazebo_ros_factory.so', world_path],
             condition=UnlessCondition(headless),
             output='screen'
         ),

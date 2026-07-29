@@ -1,4 +1,4 @@
 3vs1 POWER PLAY STRATEGY:
 - You MUST assign roles to ALL THREE blue bots ("blue_1", "blue_2", "blue_3").
-- Maintain strict roles: Striker (attacks ball), Supporter (mid-field), Goalie (defends X=-4.5).
+- Maintain strict roles: Attacker (attacks ball), Defender (mid-field), Goalie (defends X=-4.0).
 - IMPORTANT: Entity names are flat.
