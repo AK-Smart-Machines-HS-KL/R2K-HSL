@@ -24,16 +24,16 @@ gae_lambda = 0.95
 
 # save interim results
 def _save_checkpoint(current_params, run, current_steps):
-    ckpt_dir = Path(f"models/gpu/{run.id}/checkpoints")
+    ckpt_dir = Path(f"poc/mujoco_legswing/booster-k1/models/gpu/{run.id}/checkpoints")
     ckpt_dir.mkdir(parents=True, exist_ok=True)
 
-    file_path = ckpt_dir / f"k1_legswing_rl_{current_steps}_steps.pkl"
+    file_path = ckpt_dir / f"poc/mujoco_legswing/booster-k1/k1_legswing_rl_{current_steps}_steps.pkl"
     model.save_params(str(file_path), current_params)
 
 
 def main():
 
-    env = LegswingMJXEnv("assets/K1_sitting.xml")
+    env = LegswingMJXEnv("poc/mujoco_legswing/booster-k1/assets/K1_sitting.xml")
 
     # set learning_rate-scheduler
     steps_per_unroll = num_envs * unroll_length

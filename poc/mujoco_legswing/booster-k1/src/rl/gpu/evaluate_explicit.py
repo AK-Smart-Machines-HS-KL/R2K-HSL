@@ -11,11 +11,11 @@ from train_explicit import ActorCritic
 def main():
 
 
-    ckpt_path = pathlib.Path("checkpoints/9hwhuj2t/k1_legswing_rl_final").resolve()
+    ckpt_path = pathlib.Path("poc/mujoco_legswing/booster-k1/checkpoints/9hwhuj2t/k1_legswing_rl_final").resolve()
     
 
     # load environment and network
-    env = LegswingMJXEnv("assets/K1_sitting.xml")
+    env = LegswingMJXEnv("poc/mujoco_legswing/booster-k1/assets/K1_sitting.xml")
     network = ActorCritic(action_dim=env.act_size, layer_size=256)
     
     # restore weights
