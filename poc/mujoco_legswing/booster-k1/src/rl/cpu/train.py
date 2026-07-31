@@ -7,12 +7,12 @@ from wandb.integration.sb3 import WandbCallback
 from legswing_env import LegswingEnv
 
 model_exists = True  # if True, set relative model path
-model_path = "final/k1_sit_upright_rl.zip"
+model_path = "poc/mujoco_legswing/booster-k1/final/k1_sit_upright_rl.zip"
 
 # Factory for multithreading
 def make_env(rank, seed=0):
     def _init():
-        env = Monitor(LegswingEnv("assets/K1_sitting.xml", seed=seed + rank))
+        env = Monitor(LegswingEnv("poc/mujoco_legswing/booster-k1/assets/K1_sitting.xml", seed=seed + rank))
         return env
     return _init
 
@@ -57,7 +57,7 @@ def main():
     save_freq = num_timesteps / num_cpu / num_checkpoints
     checkpoint_callback = CheckpointCallback(
         save_freq=save_freq,
-        save_path=f"./models/cpu/{run.id}/checkpoints",
+        save_path=f"./poc/mujoco_legswing/booster-k1/models/cpu/{run.id}/checkpoints",
         name_prefix="k1_legswing_rl"
     )
     callbacks = CallbackList([wandb_callback, checkpoint_callback])
@@ -81,7 +81,7 @@ def main():
     # start training
     model.learn(total_timesteps=num_timesteps, callback=callbacks)
 
-    model.save(f"./models/cpu/{run.id}/k1_legswing_rl_final.zip")
+    model.save(f"./poc/mujoco_legswing/booster-k1/models/cpu/{run.id}/k1_legswing_rl_final.zip")
 
     run.finish()
 

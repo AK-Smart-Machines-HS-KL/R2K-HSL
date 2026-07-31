@@ -13,7 +13,7 @@ def main():
             paused = not paused
 
     # load the static world description and initialize the simulation data
-    model = mujoco.MjModel.from_xml_path("assets/K1_22dof.xml")
+    model = mujoco.MjModel.from_xml_path("poc/mujoco_legswing/booster-k1/assets/K1_22dof.xml")
     data = mujoco.MjData(model)
 
     # open the MuJoCo-Viewer

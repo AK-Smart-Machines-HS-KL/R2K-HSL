@@ -16,7 +16,7 @@ def main():
         return int(model.jnt_qposadr[jnt_id])
     
 
-    model_path = pathlib.Path("assets/K1_sitting.xml")
+    model_path = pathlib.Path("poc/mujoco_legswing/booster-k1/assets/K1_sitting.xml")
 
     # load the static world description and initialize the simulation data
     model = mujoco.MjModel.from_xml_path(str(model_path))

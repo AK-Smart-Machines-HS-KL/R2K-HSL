@@ -214,7 +214,7 @@ def main():
         )
 
     # AutoResetWrapper resets each env indivually if terminated
-    env = training.AutoResetWrapper(LegswingMJXEnv("assets/K1_sitting.xml"))
+    env = training.AutoResetWrapper(LegswingMJXEnv("poc/mujoco_legswing/booster-k1/assets/K1_sitting.xml"))
     network = ActorCritic(action_dim=env.act_size, layer_size=LAYER_SIZE)
 
     # create the train_state
@@ -228,7 +228,7 @@ def main():
     ckptr = orbax.checkpoint.PyTreeCheckpointer()
     ckpt_dir = Path(f"checkpoints/{run.id}").resolve()
     ckpt_dir.mkdir(parents=True, exist_ok=True)
-    savefile = Path(f"{ckpt_dir}/k1_legswing_rl_final").resolve()
+    savefile = Path(f"poc/mujoco_legswing/booster-k1/{ckpt_dir}/k1_legswing_rl_final").resolve()
 
 
     collect_rollout = make_collect_fn(env, network)

@@ -8,11 +8,11 @@ auto_reset = False
 
 def main():
 
-    env = LegswingEnv("assets/K1_sitting.xml")
+    env = LegswingEnv("poc/mujoco_legswing/booster-k1/assets/K1_sitting.xml")
 
 
     # load model to be evaluated by relative path
-    model = PPO.load("models/cpu/i902a5b0/checkpoints/k1_legswing_rl_1600000_steps.zip", env=env)
+    model = PPO.load("poc/mujoco_legswing/booster-k1/models/cpu/i902a5b0/checkpoints/k1_legswing_rl_1600000_steps.zip", env=env)
 
 
     obs, _ = env.reset()

@@ -55,11 +55,11 @@ booster-k1
 
 ### Bereichserklärung
 
-- `control/`: Dient dem schnellen Testen von Hardware-Limits, der Verifizierung des XML-Modells oder Keyframes und visuellen Kontrollen ohne KI-Einfluss.
+- `control/`: Dient dem schnellen Testen von Hardware-Limits, der Verifizierung des XML-Modells oder Keyframes und visuellen Kontrollen ohne KI-Einfluss. Nutzt CPU-Umgebung: `conda activate k1_env_cpu`
 
-- `rl/cpu/`: Nutzt Stable-Baselines3 (PyTorch) auf der CPU. Perfekt geeignet zum schnellen Debuggen der Reward-Logik, da Python-Strukturen nicht kompiliert werden und print() direkt genutzt werden kann.
+- `rl/cpu/`: Nutzt Stable-Baselines3 (PyTorch) auf der CPU. Perfekt geeignet zum schnellen Debuggen der Reward-Logik, da Python-Strukturen nicht kompiliert werden und print() direkt genutzt werden kann. Nutzt CPU-Umgebung: `conda activate k1_env_cpu`
 
-- `rl/gpu/`: Die Hochleistungs-Pipeline. Nutzt Google Brax und MuJoCo MJX unter JAX. Ermöglicht das gleichzeitige Simulieren von tausenden Robotern auf der GPU.
+- `rl/gpu/`: Die Hochleistungs-Pipeline. Nutzt Google Brax und MuJoCo MJX unter JAX. Ermöglicht das gleichzeitige Simulieren von tausenden Robotern auf der GPU. Nutzt GPU-Umgebung: `conda activate k1_env_gpu`
 
 ---
 
