@@ -215,13 +215,13 @@ def init_figure(fig):
                               bbox=dict(facecolor='black', alpha=0.8, pad=6))
 
     # --- AI analysis text panel (right top) ---
-    a['ax_text'] = fig.add_axes([0.72, 0.48, 0.25, 0.47])
+    a['ax_text'] = fig.add_axes([0.72, 0.50, 0.25, 0.45])
     a['ax_text'].axis('off')
     a['ai_text'] = a['ax_text'].text(0, 0.95, '', color='white', fontsize=12, wrap=True, va='top',
                                      fontfamily='monospace')
 
     # --- Annotation note panel (right middle, above referee) ---
-    a['ax_annot'] = fig.add_axes([0.72, 0.43, 0.25, 0.04])
+    a['ax_annot'] = fig.add_axes([0.72, 0.45, 0.25, 0.04])
     a['ax_annot'].axis('off')
     a['ax_annot'].set_title("Note", color='#ffeb3b', fontsize=10, weight='bold', pad=2)
     a['annot_text'] = a['ax_annot'].text(0.02, 0.95, '', color='#ffeb3b', fontsize=9,
@@ -591,10 +591,10 @@ def _rebuild_state_to(world_recs, world_times, target_t):
         momentum_history.append((w_t, num_score))
 
 
-def main_replay(run_id, speed=1.0, start_time=0.0, nav=False):
+def main_replay(run_id, speed=1.0, start_time=0.0, nav=True):
     """Replay a saved match from trace files — no ROS 2 required.
 
-    If nav=True: enable annotation navigation (f/b/SPACE/q keyboard controls).
+    Nav controls (f/b/SPACE/q) are always enabled in replay mode.
     """
     global game_start_time, momentum_history, goal_events, foul_events
     global referee_events, last_match_status, _initialized
@@ -614,14 +614,15 @@ def main_replay(run_id, speed=1.0, start_time=0.0, nav=False):
     annot_times = [a.get("t_wall", 0) - t0 for a in annot_recs]
 
     match_duration = world_times[-1] if world_times else 0.0
+    print(f"  Log: {run_id}")
     print(f"  Duration: {match_duration:.1f}s | Speed: {speed:.1f}x")
 
-    if nav:
-        if not annot_recs:
-            print("  ⚠️ No annotations in this run — nav mode has nothing to jump to.")
-        else:
-            print(f"  📝 {len(annot_recs)} annotations available")
-        print("  Controls: f=next annotation, b=prev annotation, SPACE=pause/resume, q=quit")
+    if not annot_recs:
+        print("  ⚠️ No annotations in this run — f/b have nothing to jump to.")
+    else:
+        print(f"  📝 {len(annot_recs)} annotations available")
+    print("  Controls: ←/→ seek ±5s, SPACE=pause/resume, "
+          "f=next annotation, b=prev annotation, q=quit (ctrl+f=fullscreen)")
 
     # Pre-parse all LLM decisions so we don't re-parse on every frame
     llm_decisions = [_parse_llm_decision(r) for r in llm_recs]
@@ -630,8 +631,17 @@ def main_replay(run_id, speed=1.0, start_time=0.0, nav=False):
     annot_sorted = sorted(zip(annot_times, annot_recs)) if annot_recs else []
     annot_times_sorted = [a_t for a_t, _ in annot_sorted]
 
+    # Clear matplotlib default keybindings that conflict with nav controls
+    # (f=fullscreen, b=back). Must be set BEFORE plt.show() so the backend
+    # picks up the overrides when it initializes its keypress handler.
+    if nav:
+        plt.rcParams['keymap.fullscreen'] = ['ctrl+f']
+        plt.rcParams['keymap.back'] = ['c']
+        plt.rcParams['keymap.forward'] = ['v']
+
     plt.ion()
     fig = plt.figure(figsize=(16, 9), facecolor='#121212')
+    fig.canvas.manager.set_window_title(f"R2K Replay — {run_id}")
 
     momentum_history.clear()
     goal_events.clear()
@@ -657,14 +667,13 @@ def main_replay(run_id, speed=1.0, start_time=0.0, nav=False):
     seek_target = None      # timestamp to jump to
     seek_annotation = None  # annotation record to display after jump
 
+    SEEK_STEP = 5.0  # seconds per arrow-key seek
+
     def on_key(event):
         nonlocal replay_paused, seek_target, seek_annotation
 
         if event.key == 'q':
             plt.close(fig)
-            return
-
-        if not nav:
             return
 
         if event.key == ' ':
@@ -674,6 +683,19 @@ def main_replay(run_id, speed=1.0, start_time=0.0, nav=False):
             else:
                 replay_paused = True
                 print("⏸ Paused")
+            return
+
+        # Arrow-key seek: jump ±SEEK_STEP seconds (clamped to match duration)
+        if event.key in ('right', 'left'):
+            cur_t = world_times[w_idx] if w_idx < len(world_times) else 0.0
+            match_end = world_times[-1] if world_times else 0.0
+            if event.key == 'right':
+                seek_target = min(cur_t + SEEK_STEP, match_end)
+                print(f"⏩ Seek +{SEEK_STEP:.0f}s -> t={seek_target:.1f}s")
+            else:
+                seek_target = max(cur_t - SEEK_STEP, 0.0)
+                print(f"⏪ Seek -{SEEK_STEP:.0f}s -> t={seek_target:.1f}s")
+            seek_annotation = None
             return
 
         if event.key not in ('f', 'b'):
@@ -686,14 +708,21 @@ def main_replay(run_id, speed=1.0, start_time=0.0, nav=False):
         cur_t = world_times[w_idx] if w_idx < len(world_times) else 0.0
 
         if event.key == 'f':
-            # Find next annotation after current position
+            # Find next annotation strictly after current position.
+            # Skip the annotation we're currently on (within seek slack).
             jump_idx = bisect.bisect_right(annot_times_sorted, cur_t + 0.01)
+            if jump_idx < len(annot_sorted) and abs(annot_times_sorted[jump_idx] - cur_t) < 0.5:
+                jump_idx += 1
             if jump_idx >= len(annot_sorted):
                 print("⛔ No more annotations (already at last)")
                 return
         else:  # 'b'
-            # Find previous annotation before current position
-            jump_idx = bisect.bisect_left(annot_times_sorted, cur_t - 0.01) - 1
+            # Find previous annotation strictly before current position.
+            # bisect_right - 1 skips the annotation we're currently sitting on
+            # (after an f-jump, cur_t lands just past the annotation's world-time).
+            jump_idx = bisect.bisect_right(annot_times_sorted, cur_t + 0.01) - 1
+            if jump_idx >= 0 and abs(annot_times_sorted[jump_idx] - cur_t) < 0.5:
+                jump_idx -= 1
             if jump_idx < 0:
                 print("⛔ Already at first annotation")
                 return
@@ -707,11 +736,6 @@ def main_replay(run_id, speed=1.0, start_time=0.0, nav=False):
         print(f"{'⏩' if event.key == 'f' else '⏪'} Annotation #{a_idx + 1} t={a_t:.1f}s: \"{comment}\"")
 
     if nav:
-        # Clear matplotlib default keybindings that conflict with nav controls
-        # f=fullscreen, b=back, backspace=back — all conflict with f/b nav
-        plt.rcParams['keymap.fullscreen'] = ['ctrl+f']
-        plt.rcParams['keymap.back'] = ['c']
-        plt.rcParams['keymap.forward'] = ['v']
         fig.canvas.mpl_connect('key_press_event', on_key)
 
     # Seek to start_time
@@ -833,13 +857,16 @@ def main():
                         help="Replay playback speed multiplier (default: 1.0 = real time)")
     parser.add_argument("--start", type=float, default=0.0,
                         help="Replay start time in seconds from match start (default: 0.0)")
+    parser.add_argument("--live", action="store_true",
+                        help="Run in live mode (subscribes to live ROS 2 topics). "
+                             "Without this flag, defaults to replaying the last saved match.")
     parser.add_argument("--nav", action="store_true",
-                        help="Replay mode: enable annotation navigation (f=next, b=prev, "
-                             "SPACE=pause/resume, q=quit). Jumps to annotated timestamps, "
-                             "pauses, and displays the note. Default: off (continuous playback).")
+                        help=argparse.SUPPRESS)  # deprecated: nav is always on in replay mode
     args = parser.parse_args()
 
-    if args.replay is not None:
+    # Default behavior (no --replay, no --live): replay the last saved match.
+    # launch_r2k.sh passes --live explicitly for the live path.
+    if not args.live:
         run_id = args.replay
         if not run_id:
             # Default to last game: newest world_trace_* file
@@ -849,11 +876,12 @@ def main():
                 reverse=True,
             )
             if not traces:
-                print("❌ No saved matches found in logs/. Run a match first.")
+                print("❌ No saved matches found in logs/. Run a match first "
+                      "(or use --live for live mode).")
                 sys.exit(1)
             run_id = traces[0].replace("world_trace_", "").replace(".jsonl", "")
             print(f"Replaying last game: {run_id}")
-        main_replay(run_id, speed=args.speed, start_time=args.start, nav=args.nav)
+        main_replay(run_id, speed=args.speed, start_time=args.start, nav=True)
         return
 
     if not HAS_ROS2:

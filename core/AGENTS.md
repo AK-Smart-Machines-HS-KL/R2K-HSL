@@ -121,9 +121,12 @@ opencode session via `.opencode/opencode.json → instructions`.
   (`scene_type`/`label`) and v6 schema (`scenario_name`/`mode`/`tactical_situation`) coexist;
   see `scenario/README.md`.
 - `core/src/strategy/fragments/` — prompt fragments (`header.txt`, `rules_core.txt`,
-  `rules_<mode>.txt`, `samples_<mode>.txt`) assembled by `setup_r2k.py` into
-  `ai_tactics/system_prompt.txt` on each boot. `strategy/strat_*.txt` are build artifacts
-  (gitignored) — do NOT hand-edit them; edit `fragments/` instead.
+  `rules_<mode>.txt`, `samples_<mode>.txt`, `rules_ball_out.txt`, `rules_goal_kick.txt`,
+  `rules_corner_kick_in.txt`, `rules_kickoff.txt`) assembled by `setup_r2k.py` into
+  `ai_tactics/system_prompt.txt` on each boot (for `dump_prompt.py` dry-runs only —
+  the evaluator assembles from fragments directly at runtime via dynamic prompt
+  injection). `strategy/strat_*.txt` are build artifacts (gitignored) — do NOT hand-edit
+  them; edit `fragments/` instead.
 - `core/src/shared_state/` — runtime state files (`Worldstate.json`, `current_strategy.json`).
   Should be on tmpfs in production; tracked in git as scaffolding.
 - `core/src/ros2_ws/src/brain/msg/` — custom ROS 2 msgs. Rebuild with colcon when changed.
@@ -155,6 +158,9 @@ See `META_KNOWLEDGE_ROUTER.md` §3.
 - `launch_r2k.sh` wipes `shared_state/current_strategy.json` and `Worldstate.json` on every start.
 - `setup_r2k.py` overwrites `ai_tactics/system_prompt.txt` on every boot.
   `strategy/strat_*.txt` are no longer written (Phase 0 disentanglement); edit `fragments/` instead.
+  **[V6.3]** The evaluator no longer reads `system_prompt.txt` at runtime — it assembles
+  the prompt directly from fragments via dynamic prompt injection, based on `match_state.status`.
+  `system_prompt.txt` is now only for `dump_prompt.py` dry-runs.
 - The `ros2_ws/build` and `ros2_ws/install` dirs are root-owned (created inside Docker) — may need
   `sudo rm -rf` to rebuild natively on U22.
 - `numpy<2.0` is pinned (install.sh + Dockerfile) — Gazebo compatibility. Don't bump blindly.
@@ -172,8 +178,12 @@ See `META_KNOWLEDGE_ROUTER.md` §3.
   use plain `docker compose up -d` then `docker exec ... colcon build` instead.
 - `r2k_evaluator.py` polls `Worldstate.json` mtime every 20ms; it only POSTs to Ollama when the file
   changes. A stale `Worldstate.json` ⇒ no AI output. Check `state_aggregator.py` is running first.
+  **[V6.3]** Content-hash skip: the evaluator also hashes `min_ents` and skips the LLM call if
+  positions are unchanged. `current_strategy.json` may not update for seconds during stable
+  positions — this is normal, not failure. Effective latency ~684ms (was ~1328ms).
 - `temperature: 0.0` and `num_predict` (150 no-explain / 600 explain) are hardcoded in
-  `r2k_evaluator.py` — tune there, not via flags.
+  `r2k_evaluator.py` — tune there, not via flags. **[V6.3]** `R2K_EXPLAIN` env var
+  (set by `launch_r2k.sh`) controls `{{EXPLAIN_INSTRUCTION}}` replacement in `header.txt`.
 
 ## Session continuity protocol
 

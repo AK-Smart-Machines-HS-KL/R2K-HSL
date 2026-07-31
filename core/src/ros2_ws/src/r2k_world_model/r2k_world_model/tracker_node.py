@@ -24,7 +24,7 @@ class WorldModelTracker(Node):
             10
         )
         
-        self.get_logger().info("👁️ Tracker V4 Online: Pure Realtime Topic [/world_positions] (Zero File I/O)")
+        self.get_logger().info("Tracker V4 Online: Pure Realtime Topic [/world_positions] (Zero File I/O)")
 
     def listener_callback(self, msg):
         entities = {}

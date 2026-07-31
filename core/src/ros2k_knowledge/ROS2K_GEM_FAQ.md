@@ -1,20 +1,22 @@
 ---
-title: "ROS2K Architecture Mentor - System FAQ (V6.2)"
+title: "ROS2K Architecture Mentor - System FAQ (V6.3)"
 type: DOCUMENTATION
-tags: [faq, onboarding, gem-capabilities, q-and-a, ros2, relay, booster-k1, watchdog, hybrid-os, qwen, v6, v6.1, v6.2, momentum, reward, trace-logging, set-piece, headless, kpi, analyze-trace, dump-prompt, goalie-idle, closed-loop, test-non-functional, composite-score, pytest, regression-suite, kpi-targets, skip-slow]
-last_modified: 2026-07-25
-version: v6.2
+tags: [faq, onboarding, gem-capabilities, q-and-a, ros2, relay, booster-k1, watchdog, hybrid-os, qwen, v6, v6.1, v6.2, v6.3, momentum, reward, trace-logging, set-piece, headless, kpi, analyze-trace, dump-prompt, goalie-idle, closed-loop, test-non-functional, composite-score, pytest, regression-suite, kpi-targets, skip-slow, dynamic-prompt-injection, content-hash-skip, role-condensation, replay-system, attack-kpis]
+last_modified: 2026-07-29
+version: v6.3
 ---
 # ROS2K Architecture Mentor: FAQ & Capabilities
 
 Dieses Dokument demonstriert die Fähigkeiten des KI-gestützten ROS2K-Mentors. Die Anfragen sind nach Nutzer-Intention klassifiziert: **[Neugierig]** (Onboarding & Grundlagen), **[Team Mitglied]** (Architektur-Verständnis & Use Cases) und **[Weiterentwicklung]** (Skalierung & Performance).
 
-> [!info] V6.2 Addendum (2026-07-16)
+> [!info] V6.3 Addendum (2026-07-29)
 > Q1-Q12 stammen aus V5 (2026-06-03) und wurden dort, wo nötig, inline aktualisiert
 > (Flags, Szenarien). Q13-Q23 sind neu in V6.2 und decken Scoring/Momentum/Reward,
 > Set-Pieces, Trace-Logging, KPI-Messung, Prompt-Architektur, Goalie-Idle und die
-> Closed-Loop-Feedback-Lücke ab. Autoritative Referenzen: `core/docs/referee_rulebook.md`,
-> `core/docs/optimization_spec_v6.2.md` sowie Section 7 der User-Docs.
+> Closed-Loop-Feedback-Lücke ab. Q24 (Regression Suite) ist V6.2. Q25 (Dynamic Prompt
+> Injection) und Q26 (Content-Hash Skip) sind neu in V6.3. Autoritative Referenzen:
+> `core/docs/referee_rulebook.md`, `core/docs/optimization_spec_v6.3.md` sowie Section 7
+> der User-Docs.
 
 ---
 
@@ -213,8 +215,8 @@ ROS2K nutzt heute **nur Threshold + Hysterese**. Korridor (Bänder mit gradierte
 **Gem:** Drei Schritte, alle offline (kein ROS, kein Ollama nötig):
 
 1. **Während des Laufs:** `launch_r2k.sh:82` exportiert `R2K_RUN_ID="${SCENARIO}_${STRATEGY}_$(date +%Y%m%d_%H%M%S)"`. Der `r2k_evaluator.py` schreibt `logs/llm_trace_<run_id>.jsonl` (eine JSON-Zeile pro LLM-Call), der `state_aggregator.py` schreibt `logs/world_trace_<run_id>.jsonl` (eine Zeile pro 10Hz World-State-Write).
-2. **Nach dem Lauf:** `python3 tools/analyze_trace.py --run-id <ID> --output results/kpis_<ID>.json`. Joint beide Trace-Files per Timestamp, berechnet **15 KPIs** (V6.2: +`goalie_tactical_pct`).
-3. **Lesen:** `world_kpis` (Goals, Cluster%, OOB%, Goalie-Idle%, **Goalie-Tactical%** [V6.2], Possession, Tactical-Score Avg/Final, Status-Distribution) + `llm_kpis` (LLM-Calls, Latenz p50/p95/max, Parse-Error-Rate, Role-Diversity, Roles-Counter, Avg-Tokens).
+2. **Nach dem Lauf:** `python3 tools/analyze_trace.py --run-id <ID> --output results/kpis_<ID>.json`. Joint beide Trace-Files per Timestamp, berechnet **18 KPIs** (V6.2: +`goalie_tactical_pct`; V6.3: +`shots_on_goal`, +`shots_on_target`, +`pass_completion_pct`, +`restart_recovery_time_s`; V6.3: -`role_diversity` — dead metric nach Role Condensation).
+3. **Lesen:** `world_kpis` (Goals, Cluster%, OOB%, Goalie-Idle%, **Goalie-Tactical%** [V6.2], **Shots on Goal/Target** [V6.3], **Pass Completion%** [V6.3], **Restart Recovery Time** [V6.3], Possession, Tactical-Score Avg/Final, Status-Distribution) + `llm_kpis` (LLM-Calls, Latenz p50/p95/max, Parse-Error-Rate, Roles-Counter, Avg-Tokens).
 
 **Wichtig:** Trace-Files sind gitignored, werden beim Boot **nicht** gelöscht, akkumulieren sich. Manuell aufräumen: `rm src/logs/*.jsonl`. Wenn `R2K_RUN_ID` nicht gesetzt ist, fallen beide Nodes auf `run_{timestamp}` zurück — Traces lassen sich dann nicht mit dem Console-Log korrelieren. Siehe [[7_03_CHEATPAGE_Tools_and_Utils]].
 
@@ -260,8 +262,9 @@ ROS2K nutzt heute **nur Threshold + Hysterese**. Korridor (Bänder mit gradierte
 ### Q19 [Team Mitglied]: Wie baue ich den System-Prompt zusammen und wo leben die Fragments?
 **User:** "Ich sehe kein `system_prompt.txt` im Repo. Wie wird der Prompt erzeugt?"
 
-**Gem:** Es gibt **kein** statisches `system_prompt.txt` in der Versionierung. Es wird zur Boot-Zeit von `setup_r2k.py:111-136` aus Text-Fragmenten in `strategy/fragments/` zusammengesetzt:
+**Gem:** Es gibt **kein** statisches `system_prompt.txt` in der Versionierung. Es wird zur Boot-Zeit von `setup_r2k.py:111-136` aus Text-Fragmenten in `strategy/fragments/` zusammengesetzt — aber **nur für `dump_prompt.py` Dry-Runs**. Zur Laufzeit assembliert der `r2k_evaluator.py` den Prompt selbst (Dynamic Prompt Injection, V6.3 — siehe Q25).
 
+**Boot-Zeit (nur `system_prompt.txt` für `dump_prompt.py`):**
 ```
 header.txt          → ACT_ON_BOTS line + MODE line + {{EXPLAIN_INSTRUCTION}}
 rules_core.txt      → Field Limits, Valid Actions, Strict Laws, Kick-In Exception
@@ -269,7 +272,20 @@ rules_{strat}.txt   → Strategie-spezifische Rules (OVERRIDES rules_{mode}.txt 
 samples_{strat}.txt → Strategie-spezifische Samples (OVERRIDES samples_{mode}.txt wenn vorhanden)
 ```
 
-**Override-Logik (V6.1 Fix):** Strategie-spezifische Fragmente ersetzen Mode-Fragmente. Wenn `rules_recover.txt` existiert, ersetzt es `rules_3vs3.txt`. Früher wurden beide appended → widersprüchliche Signale. Die `strat_*.txt` Build-Artefakte wurden V6.1 entfernt (gitignored). Die Fragmente sind die einzige Source of Truth.
+**Laufzeit (Evaluator — V6.3 Dynamic Injection):** Der Evaluator liest `match_state.status` aus `Worldstate.json` und assembliert den Prompt basierend auf dem aktuellen Spielstatus:
+```
+header.txt              → immer
+rules_core.txt          → immer
+rules_ball_out.txt      → nur wenn status="ball_out" (ADDITIV zu rules_{mode}.txt)
+rules_goal_kick.txt     → nur wenn status="goal_kick"
+rules_corner_kick_in.txt→ nur wenn status="corner_kick_in"
+rules_kickoff.txt       → nur wenn status="kickoff"
+rules_{mode}.txt        → immer (IST die "playing"-Regel wenn status="playing")
+samples_{mode}.txt      → immer
+```
+Game-Phase-Fragmente sind **additiv** — sie ersetzen nicht, sie ergänzen. Ollama ist stateless (sendet `system` per call), also kann der Prompt zwischen Calls wechseln. Gecacht pro `(status, mode)`-Tuple — File-Reads nur bei Status-Transition (<10/match).
+
+**Rollen (V6.3):** 3 Rollen — `goalie`/`attacker`/`defender` (war 5: striker/midfielder/passer/receiver/supporter). Die Bridge prüft nur `role == 'goalie'`; alle anderen Rollen waren kosmetische Labels. `role_diversity` KPI wurde gedroppt (dead metric, CV=0%).
 
 **Verifikation ohne ROS/Ollama:** `python3 tools/dump_prompt.py --scenario 3vs3_attack_center --strategy strat_default --no-explain` druckt den assemblierten Prompt + Per-Fragment-Breakdown + Token-Schätzung. Siehe [[7_04_SPECIFICATION_Prompt_Architecture]].
 
@@ -282,11 +298,13 @@ samples_{strat}.txt → Strategie-spezifische Samples (OVERRIDES samples_{mode}.
 
 **Was die KI sieht:** `{"blue_1": {"x": -1.5, "y": 0.3}, ..., "soccer_ball": {"x": 0.0, "y": 0.1}}`
 
-**Was ausgeblendet wird:** `match_state` (Score, Status, Fouls, restart_team), `tactical_score` (Momentum, Trend, Possession), `tactical_reward`, alle Yaw-Winkel, alle Geschwindigkeiten.
+**Was ausgeblendet wird:** `match_state` (Score, Status, Fouls, restart_team — **aber:** der Evaluator liest `match_state.status` für Dynamic Prompt Injection, siehe Q25), `tactical_score` (Momentum, Trend, Possession), `tactical_reward`, alle Yaw-Winkel, alle Geschwindigkeiten.
 
-**Optional:** Mit `export R2K_INCLUDE_MATCH_STATE=1` wird ein `match_state`-Objekt (Status + restart_team) injiziert. **Aber:** B3-Experiment (Phase 1) zeigte **keine Verbesserung** — das 3B-Modell nutzt Game-State-Information nicht effektiv. Dynamic Prompt Selection (Phase 5.5) ist vermutlich der bessere Ansatz. Siehe [[7_02_ARCHITECTURE_World_Model_Components]].
+**V6.3 Dynamic Prompt Injection (ersetzt `R2K_INCLUDE_MATCH_STATE`):** Statt den `match_state` in den Prompt zu injizieren (B3-Experiment: keine Verbesserung — das 3B-Modell nutzt Game-State-Information nicht effektiv), wechselt der Evaluator jetzt den **gesamten System-Prompt** basierend auf `match_state.status`. Bei `status="ball_out"` wird `rules_ball_out.txt` additiv hinzugefügt. Der Prompt ändert sich, nicht die Eingabedaten. Siehe Q25.
 
-**Staleness-Problem:** Die Positionen sind bis zu 100ms alt (Aggregator-Write) + ~800ms LLM-Latenz ≈ die KI entscheidet über eine ~1s alte Welt. Motiviert Phase 5.2 (Predictive World Model).
+**V6.3 Content-Hash Skip:** Der Evaluator hasht die Entity-Positionen (`min_ents` JSON) und überspringt den LLM-Call wenn identisch mit dem vorherigen Call. Bei `temperature: 0.0` → identischer Input → identischer Output → 64% der Calls waren verschwendet (171→62 pro Match). Effektive Latenz sinkt von ~1328ms auf ~684ms. Der Evaluator ist 64% der Zeit idle statt 100% beschäftigt.
+
+**Staleness-Problem:** Die Positionen sind bis zu 100ms alt (Aggregator-Write) + **~684ms** effektive LLM-Latenz (V6.3, war ~800ms — Content-Hash-Skip halbiert die effektive Latenz) ≈ die KI entscheidet über eine ~0.8s alte Welt. Motiviert Phase 5.2 (Predictive World Model).
 
 ---
 
@@ -382,7 +400,7 @@ composite = 0.4 * goal_diff_norm + 0.3 * tac_score_norm
 
 Range [0, 1]. Höher ist besser. Gewichtung: 40% Tor-Differenz, 30% Tactical-Score, 20% Possession, 10% Latenz.
 
-**Per-Szenario-Thresholds:** Jedes Szenario-Paket (`scenario/<name>/`) enthält eine `kpi_targets.json` mit akzeptablen KPI-Ranges. Der Test assertet, dass jeder KPI innerhalb seiner Szenario-spezifischen `[min, max]`-Range liegt. Die Thresholds werden in Phase 2e (27-Run-Baseline) aus echten Daten kalibriert — aktuelle Werte sind Spec-Schätzungen.
+**Per-Szenario-Thresholds:** Jedes Szenario-Paket (`scenario/<name>/`) enthält eine `kpi_targets.json` mit akzeptablen KPI-Ranges. Der Test assertet, dass jeder KPI innerhalb seiner Szenario-spezifischen `[min, max]`-Range liegt. Die Thresholds sind kalibriert aus der v6.3 27-Run-Baseline (Phase 2.5d, commit `532360b`) mit 30-50% Margin.
 
 **Wann was laufen:**
 - Nach jeder Code-Änderung: `pytest tests/ --skip-slow` (Fast-Tier, ~2s Feedback-Loop)
@@ -390,3 +408,40 @@ Range [0, 1]. Höher ist besser. Gewichtung: 40% Tor-Differenz, 30% Tactical-Sco
 - Einzelner Slow-Test: `pytest tests/test_non_functional.py::test_attack_center_latency -v -s`
 
 Siehe [[7_03_CHEATPAGE_Tools_and_Utils]] §6.5 für Details.
+
+---
+
+### Q25 [Team Mitglied] [V6.3]: Was ist Dynamic Prompt Injection und wie funktioniert es?
+**User:** "Der Evaluator wechselt den System-Prompt zur Laufzeit? Geht das ohne Restart?"
+
+**Gem:** Ja. Ollama ist **stateless** — es sendet den `system`-Parameter bei jedem `/api/generate`-Call neu. Der Evaluator nutzt das, um den Prompt basierend auf `match_state.status` zu wechseln, ohne etwas zu restarten.
+
+**Mechanismus (`r2k_evaluator.py`):**
+1. Evaluator liest `Worldstate.json` alle 20ms → extrahiert `match_state.status`
+2. `_assemble_prompt(status, mode)` baut den Prompt aus Fragmenten:
+   - Statische Fragmente (immer): `header.txt`, `rules_core.txt`, `rules_{mode}.txt`, `samples_{mode}.txt`
+   - Game-Phase-Fragmente (additiv, nur wenn status ≠ "playing"): `rules_{status}.txt`, `samples_{status}.txt`
+3. Prompt wird pro `(status, mode)`-Tuple gecacht → File-Reads nur bei Status-Transition (<10/match)
+4. Ollama bekommt den neuen `system`-Parameter im nächsten Call — kein State, kein Cache-Miss
+
+**Warum nicht alles in einen Prompt?** Das 3B-Modell kann große Prompts schlecht verarbeiten (B-Studie: 1 Sample > 6 Samples). Game-Phase-Fragmente halten den Prompt fokussiert auf die aktuelle Situation. Bei `status="ball_out"` weiß der Prompt, dass ein Einwurf kommt — ohne dass der "playing"-Prompt mit Einwurf-Regeln überladen wird.
+
+**4 minimale Game-Phase-Fragmente (V6.3 Phase 2.5c):** `rules_ball_out.txt`, `rules_goal_kick.txt`, `rules_corner_kick_in.txt`, `rules_kickoff.txt` (je 2 Zeilen). Fallback: wenn ein Game-Phase-Fragment fehlt, fällt der Evaluator auf den "playing"-Prompt zurück (kein Crash).
+
+**Ersetzt `R2K_INCLUDE_MATCH_STATE`:** Statt `match_state`-Daten in den Prompt zu injizieren (B3-Experiment: keine Verbesserung — das Modell ignorierte sie), wechselt der Prompt selbst. Das ist wirkungsvoller: der Prompt *ist* kontext-aware, ohne dass das Modell Game-State-Daten parsen muss.
+
+---
+
+### Q26 [Team Mitglied] [V6.3]: Was ist der Content-Hash Skip und warum spart er 64% der LLM-Calls?
+**User:** "Die KI wiederholt sich oft im Visualizer. Warum ruft sie Ollama so oft auf?"
+
+**Gem:** Das war ein V6.2-Problem — der `state_aggregator.py` schreibt `Worldstate.json` bei 10Hz bedingungslos. 67% der Writes haben identische Positionen → `mtime` ändert sich → Evaluator triggert LLM-Call → identischer Input bei `temperature: 0.0` → identischer Output → 64% verschwendete Calls (153s GPU-Zeit pro Match).
+
+**V6.3 Fix (`r2k_evaluator.py:259-266`):** Der Evaluator hasht die `min_ents`-Entity-Positionen (JSON-String) und überspringt den LLM-Call wenn der Hash identisch mit dem vorherigen Call ist. ~7 Zeilen Code.
+
+**Impact:**
+- ~62 Calls pro Match (war 171) — **64% weniger**
+- Effektive Latenz (Situation ändert sich → Strategie-Output): **~684ms** (war ~1328ms)
+- Der Evaluator ist 64% der Zeit **idle** statt 100% beschäftigt — er reagiert auf echte Änderungen innerhalb eines Poll-Cycles (~20ms) statt auf einen redundanten Call zu warten.
+
+**Warum ist das safe?** `temperature: 0.0` ist deterministisch. Identische Positionen → identische Strategie. Es gibt keinen Grund, denselben Input zweimal an Ollama zu senden.

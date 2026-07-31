@@ -1,4 +1,5 @@
 import json
+import math
 import time
 import requests
 import os
@@ -234,10 +235,12 @@ def fast_parse(text):
     return None, 3
 
 def main():
-    print(f"--- 🟢 R2K Evaluator (Native Edition) ---", flush=True)
-    print(f"📋 Trace log: {LLM_TRACE_PATH}", flush=True)
+    print(f"--- R2K Evaluator (Native Edition) ---", flush=True)
+    print(f"Trace log: {LLM_TRACE_PATH}", flush=True)
     last_mtime = 0
     last_ents_hash = 0
+    prev_ents = {}  # position history for velocity computation
+    prev_ents_time = 0.0  # timestamp of last prev_ents update
     
     while True:
         try:
@@ -256,20 +259,59 @@ def main():
             ents = world_data.get("entities", {})
             if not any("blue" in k for k in ents.keys()):
                 last_mtime = mtime; continue
-            
-            # Skip LLM call if entity positions haven't changed (aggregator writes
-            # at 10Hz unconditionally — 64% of writes have identical positions).
-            # temperature: 0.0 makes the LLM deterministic, so identical input →
-            # identical output → wasted GPU time + repetitive visualizer output.
-            ents_hash = hash(json.dumps(ents, sort_keys=True))
+
+            match_state = world_data.get("match_state", {})
+            status = match_state.get("status", "playing")
+
+            # Skip LLM call if entity positions AND status haven't changed
+            # (aggregator writes at 10Hz unconditionally — 64% of writes have
+            # identical positions). temperature: 0.0 makes the LLM deterministic,
+            # so identical input → identical output → wasted GPU time + repetitive
+            # visualizer output. Including status in the hash prevents missing
+            # status transitions (e.g. ball_out while bots hold still).
+            ents_hash = hash(json.dumps({"ents": ents, "status": status}, sort_keys=True))
             if ents_hash == last_ents_hash:
                 last_mtime = mtime; continue
             last_ents_hash = ents_hash
-            
+
+            # Future world model — project all entities to t + horizon.
+            # Ball: exponential velocity decay (k=1.26, empirically measured).
+            # Bots: linear motion capped at max speed (bridge PD controller).
+            # Blue bot prediction is valid: at t+horizon they're still executing
+            # the PREVIOUS command, not the one being generated now.
+            PREDICT_HORIZON_S = 0.746  # hardwired; future: dynamic from measured latency
+            BALL_DECAY_K = 1.26
+            BOT_MAX_SPEED = 0.8
+
+            velocities = {}
+            now_t = time.time()
+            dt = now_t - prev_ents_time if prev_ents_time > 0 else 0.1
+            prev_ents_time = now_t
+            if dt < 0.01:
+                dt = 0.1
+            for k, v in ents.items():
+                if k in prev_ents:
+                    pv = prev_ents[k]
+                    velocities[k] = ((v["x"] - pv["x"]) / dt, (v["y"] - pv["y"]) / dt)
+
+            prev_ents = {k: {"x": v["x"], "y": v["y"]} for k, v in ents.items()}
+
+            for k, v in ents.items():
+                if k not in velocities:
+                    continue
+                vx, vy = velocities[k]
+                speed = math.hypot(vx, vy)
+                if speed < 0.3:
+                    continue
+                if k == "soccer_ball":
+                    dist = (speed / BALL_DECAY_K) * (1 - math.exp(-BALL_DECAY_K * PREDICT_HORIZON_S))
+                else:
+                    dist = min(speed * PREDICT_HORIZON_S, BOT_MAX_SPEED * PREDICT_HORIZON_S)
+                v["x"] = v["x"] + (vx / speed) * dist
+                v["y"] = v["y"] + (vy / speed) * dist
+
             # Phase 2.5b: Dynamic prompt injection — assemble prompt from fragments
             # based on match_state.status. Cached by (status, mode) tuple.
-            match_state = world_data.get("match_state", {})
-            status = match_state.get("status", "playing")
             sys_prompt = _get_sys_prompt(status)
             
             min_ents = {k: {"x": round(v["x"], 1), "y": round(v["y"], 1)} for k, v in ents.items()}
@@ -300,8 +342,6 @@ def main():
                 }
             }
             
-            if "nemotron" in MODEL_NAME.lower() or "llama" in MODEL_NAME.lower():
-                payload["format"] = "json"
             payload["stream"] = False
             
             start_t = time.time()

@@ -2,11 +2,9 @@
 id: META_ROUTER
 title: "Semantic Glossary & Routing Matrix (Inverted Index)"
 type: KNOWLEDGE_BASE_POWER_FILE
-tags: [router, glossary, index, rag, meta, flat-json, phantom-kick, setup_r2k, active_relay, watchdog, hybrid-os, uros_ws, xid-31, mermaid, v6, v6.1, v6.2, foul, ball-out, kick-in, momentum, reward-node, batch-evaluator, aggression, set-piece, goal-kick, corner-kick-in, kickoff, own-half-warp, blitting, referee-rulebook, trace-logging, llm-trace, world-trace, r2k-run-id, analyze-trace, kpi, prompt-disentanglement, dump-prompt, strat-artifact, goalie-idle, red-p1-p5, blocking-avoidance, headless-gzserver, docker-env-passthrough, test-non-functional, composite-score, pytest, regression-suite, kpi-targets, skip-slow]
-last_modified: 2026-07-25
-version: v6.2
-last_modified: 2026-07-22
-version: v6.2
+tags: [router, glossary, index, rag, meta, flat-json, phantom-kick, setup_r2k, active_relay, watchdog, hybrid-os, uros_ws, xid-31, mermaid, v6, v6.1, v6.2, v6.3, foul, ball-out, kick-in, momentum, reward-node, batch-evaluator, aggression, set-piece, goal-kick, corner-kick-in, kickoff, own-half-warp, blitting, referee-rulebook, trace-logging, llm-trace, world-trace, r2k-run-id, analyze-trace, kpi, prompt-disentanglement, dump-prompt, strat-artifact, goalie-idle, red-p1-p5, blocking-avoidance, headless-gzserver, docker-env-passthrough, test-non-functional, composite-score, pytest, regression-suite, kpi-targets, skip-slow, dynamic-prompt-injection, content-hash-skip, role-condensation, replay-system, attack-kpis, shots-on-goal, pass-completion, restart-recovery, r2k-explain, match-annotate, replay-trace]
+last_modified: 2026-07-29
+version: v6.3
 ---
 # Semantic Glossary & Routing Matrix
 
@@ -56,6 +54,24 @@ This section strictly defines architectural components to prevent hallucinated s
 * **0.2s Asynchronous Watchdog:**
   * *Definition:* A fast-polling loop in 'launch_r2k.sh' that detects UI closure.
   * *Constraint:* Replaces old "Nuke & Pave" scripts. Fires asynchronous Kinematic Freeze (Twist-zeroes / API 2000) and executes 'pkill -9' (SIGKILL) on Ollama and ROS 2 processes to prevent RCLError tracebacks and zombie ports.
+* **V6.3 Dynamic Prompt Injection [NEW in v6.3]:**
+  * *Definition:* Evaluator assembles system prompt at runtime from fragment files, based on `match_state.status`. At `status="ball_out"`, `rules_ball_out.txt` is added additively. Ollama is stateless (sends `system` per call), so prompt can change between calls. Cached by `(status, mode)` tuple.
+  * *Constraint:* Game-phase fragments are ADDITIVE to mode fragments (not replacements). `system_prompt.txt` written by `setup_r2k.py` at boot is now only for `dump_prompt.py` dry-runs — evaluator reads fragments directly at runtime.
+* **V6.3 Content-Hash Skip [NEW in v6.3]:**
+  * *Definition:* Evaluator hashes entity positions (`min_ents` JSON) and skips LLM call if identical to previous call. At `temperature: 0.0`, identical input → identical output. Saves 64% of calls per match (171→62). Effective latency ~684ms (was ~1328ms).
+  * *Constraint:* Makes `current_strategy.json` mtime unreliable as staleness indicator (file may not update for seconds during stable positions — normal, not failure). Phase 5.4 failsafe must check `llm_trace` records, not file mtime.
+* **V6.3 Role Condensation [NEW in v6.3]:**
+  * *Definition:* Roles reduced from 5 (striker/midfielder/passer/receiver/supporter) to 3 (goalie/attacker/defender). Bridge only checks `role == 'goalie'`; all others were cosmetic labels. `role_diversity` KPI dropped (dead metric, CV=0%).
+  * *Constraint:* All fragments and `analyze_trace.py` updated. Pass detection is now position-based (kicker NOT in opponent half = pass), not role-based.
+* **V6.3 Replay System [NEW in v6.3]:**
+  * *Definition:* `match_annotate.py` (live: pause Gazebo, record comment) + `replay_trace.py` (CLI: step through annotations) + `r2k_visualizer.py --replay` (visual: f/b/SPACE/arrow controls, annotation overlay). No ROS 2 required for replay.
+  * *Constraint:* Sim-time (`/clock`) requires `libgazebo_ros_init.so` built into Docker container. Without it, all timestamps are wall-clock (`t_wall`). Annotation navigation (`--nav`) is deprecated — always on in replay mode.
+* **V6.3 Attack KPIs [NEW in v6.3]:**
+  * *Definition:* 4 new KPIs in `analyze_trace.py`: `shots_on_goal` (Kick in opp half, ball moves toward goal), `shots_on_target` (subset within goal posts), `pass_completion_pct` (different blue bot closest to ball within 2s), `restart_recovery_time_s` (status change → restart-team bot within 0.35m of ball). Joins `llm_trace` actions with `world_trace` ball deltas.
+  * *Constraint:* Uses `t_wall` (wall-clock) for timestamps — sim-time is 0.0 in all traces without `libgazebo_ros_init.so`. KPI count is 18 (was 15; +4 attack, +1 goalie_tactical, -1 role_diversity).
+* **V6.3 `R2K_EXPLAIN` env var [NEW in v6.3]:**
+  * *Definition:* Env var set by `launch_r2k.sh` (`--explain` → `1`, `--no-explain` → `0`). Evaluator replaces `{{EXPLAIN_INSTRUCTION}}` in `header.txt` based on this var. Fixes explain-mode broken by Phase 2.5b dynamic injection (which bypassed `setup_r2k.py`'s `clean_json_samples()`).
+  * *Constraint:* `r2k_evaluator.py` duplicates `clean_json_samples()` (~70 lines) from `setup_r2k.py` — needed at runtime to inject default analysis/oracle strings into samples. Without this, Qwen 3B fills oracle with JSON strategy data.
 
 ## 2. Routing Matrix (Inverted Index)
 If the user query involves [SYMPTOM / KEYWORD], explicitly retrieve and reference [POWER-FILE]:
@@ -77,6 +93,8 @@ If the user query involves [SYMPTOM / KEYWORD], explicitly retrieve and referenc
 | **[V6.1]** Headless Gazebo, `gzserver` only, `--headless` flag, `headless:=true`, Docker env passthrough, `R2K_RUN_ID` Docker, `R2K_OLLAMA_MODEL` Docker, `docker exec -e` | **'5_HYBRID_INFRASTRUCTURE_V5.md' §V6.1 Addendum** |
 | **[V6.2]** `test_non_functional`, `pytest`, `--skip-slow`, regression suite, slow marker, fast tier, slow tier, composite score, `compute_composite`, `goal_diff_norm`, `tac_score_norm`, `possession_norm`, `latency_factor`, `kpi_targets.json`, per-scenario thresholds, `run_match_headless`, `goalie_tactical_pct` | **'6_DATA_SCHEMAS_AND_LIFECYCLE.md' §V6.2 Addendum** |
 | **[V6.2]** Docker colcon rebuild, `numpy/ndarrayobject.h` not found, stale build cache, `rm -rf build install`, rosidl CMake numpy fallback, `docker compose up -d`, `docker exec colcon build` | **'5_HYBRID_INFRASTRUCTURE_V5.md' §V6.2 Addendum** |
+| **[V6.3]** Dynamic prompt injection, `rules_ball_out.txt`, `rules_goal_kick.txt`, `rules_corner_kick_in.txt`, `rules_kickoff.txt`, game-phase fragments, `_assemble_prompt`, `sys_prompt_hash`, `R2K_EXPLAIN`, explain-mode fix, `{{EXPLAIN_INSTRUCTION}}`, content-hash skip, 64% fewer calls, effective latency 684ms, `min_ents` hash, role condensation, 5→3 roles, goalie/attacker/defender, `role_diversity` dropped, replay system, `match_annotate.py`, `replay_trace.py`, `--replay`, `--nav`, annotation overlay, `--live`, arrow-key seek | **'3_AI_LOGIC_AND_EDGE_CASES.md' §V6.3 Addendum** + **'6_DATA_SCHEMAS_AND_LIFECYCLE.md' §V6.3 Addendum** |
+| **[V6.3]** Attack KPIs, `shots_on_goal`, `shots_on_target`, `pass_completion_pct`, `restart_recovery_time_s`, 18 KPIs, v6.3 baseline, `kpis_baseline_v63`, `R2K_EXPLAIN` env var, `R2K_RUN_LABEL` | **'6_DATA_SCHEMAS_AND_LIFECYCLE.md' §V6.3 Addendum** |
 
 ## 3. Mermaid Rendering Constraints
 > **CRITICAL DIRECTIVE FOR LLMs:** To prevent fatal parsing errors in our documentation renderer, all Mermaid `graph TD` diagrams MUST strictly adhere to the following syntax limitations. DO NOT use advanced brackets.

@@ -458,7 +458,7 @@ where:
 * Schema: `{ "scenario_name": "...", "<kpi_name>": { "min": N, "max": N, "note": "..." } }`.
 * KPIs covered: `composite_score`, `oob_pct`, `cluster_pct`, `goalie_idle_pct`, `latency_p50`, `ball_possession_blue_pct`, `goals_for_blue`.
 * `test_non_functional.py` asserts each KPI is within its scenario's `[min, max]` range.
-* Thresholds are calibrated from the 27-run baseline (Phase 2e, not yet run). Current values are estimates from the spec.
+* Thresholds are calibrated from the v6.3 27-run baseline (Phase 2.5d, commit `532360b`) with 30-50% margin.
 
 ### Current Test Scenarios (grows in Phase 2f)
 
@@ -472,3 +472,92 @@ where:
 * Ball far from goal → goalie should be forward (angle-block). Ball near → goalie near goal line + tracking Y.
 * Computed by `analyze_trace.py` alongside `goalie_idle_pct` (which is kept for backward comparison).
 * `test_non_functional.py` asserts `goalie_tactical_pct >= 60%`.
+
+## V6.3 Addendum: Attack KPIs, Dynamic Prompt Injection, Content-Hash Skip, Replay System
+
+### 4 New Attack/Passing/Restart KPIs (Phase 2.5a)
+
+Computed by `analyze_trace.py`'s `compute_attack_kpis()` function, joining `llm_trace`
+actions (Kick/Pass with `world_snapshot` at decision time) with `world_trace` ball
+position deltas after the action. Uses `t_wall` (wall-clock) for timestamps — sim-time
+(`t`) is 0.0 in all existing traces without `libgazebo_ros_init.so`.
+
+| KPI | Definition | Source |
+|-----|-----------|--------|
+| `shots_on_goal` | Kick action where kicker x > 0, ball within 2m of kicker, AND ball x-velocity > 0.5 m/s in the 5 frames (0.5s) after the LLM call | Join `llm_trace` Kick events with `world_trace` ball deltas |
+| `shots_on_target` | Subset of `shots_on_goal` where ball Y extrapolated to x=4.5 is within ±1.3m (goal posts) | Same join + linear extrapolation |
+| `pass_completion_pct` | % of Pass actions (kicker NOT in opponent half) where a different blue bot is closest to ball within 20 frames (2s) | Join `llm_trace` Pass events with `world_trace` closest-bot |
+| `restart_recovery_time_s` | Mean time from `status != "playing"` transition to first frame where restart-team bot within 0.35m of ball | Pure `world_trace` computation |
+
+**KPI count:** 18 (was 15 in v6.2). Changes: +4 attack KPIs, +`goalie_tactical_pct` (v6.2), -`role_diversity` (v6.3, dead metric after role condensation).
+
+### Dynamic Prompt Injection (Phase 2.5b)
+
+The evaluator (`r2k_evaluator.py`) assembles the system prompt at runtime from fragment
+files, based on `match_state.status`. Ollama is stateless (sends `system` per call), so
+the prompt can change between calls without restarting anything.
+
+**Fragment assembly order (additive):**
+1. `header.txt` (static)
+2. `rules_core.txt` (static)
+3. `rules_{status}.txt` (game-phase, only if status ≠ "playing")
+4. `rules_{mode}.txt` (mode rules — IS the "playing" rules when status = "playing")
+5. `samples_{status}.txt` (game-phase, only if status ≠ "playing")
+6. `samples_{mode}.txt` (mode samples — always)
+
+**Caching:** Prompt cached by `(status, mode)` tuple. Fragment files re-read only on
+status transitions (<10 per match). `system_prompt.txt` written by `setup_r2k.py` at
+boot is now only for `dump_prompt.py` dry-runs — the evaluator no longer reads it at
+runtime.
+
+**`sys_prompt_hash` in `llm_trace`:** Each `llm_trace` record includes a hash of the
+system prompt used for that call. Use this to verify which prompt variant was active
+when debugging behavior.
+
+### `R2K_EXPLAIN` env var (Phase 2.3, fix for explain-mode)
+
+`launch_r2k.sh` sets `R2K_EXPLAIN=1` (`--explain`) or `R2K_EXPLAIN=0` (`--no-explain`).
+The evaluator replaces `{{EXPLAIN_INSTRUCTION}}` in `header.txt` based on this var:
+- `0` → assignments-only instruction (150 tokens, `num_predict`)
+- `1` → analysis + oracle + assignments instruction (600 tokens)
+
+This fixes the explain-mode broken by Phase 2.5b (dynamic injection bypassed
+`setup_r2k.py`'s `clean_json_samples()`). The evaluator duplicates
+`clean_json_samples()` (~70 lines) from `setup_r2k.py` to inject default analysis/oracle
+strings into samples at runtime.
+
+### Content-Hash Skip (Phase 2.3)
+
+Evaluator hashes entity positions (`min_ents` JSON) and skips LLM call if identical to
+previous call. At `temperature: 0.0`, identical input → identical output → 64% of calls
+were wasted (171→62 per match). Effective latency drops from ~1328ms to ~684ms.
+
+**Impact on staleness checks:** `current_strategy.json` mtime is no longer a reliable
+staleness indicator — the file may not update for seconds during stable positions
+(normal, not failure). Phase 5.4 failsafe must check `llm_trace` records, not file mtime.
+
+### v6.3 Baseline (Phase 2.5d, commit `532360b`)
+
+27-run v6.3 re-baseline (9 scenarios × 3 × 120s). All runs completed with warm-up curl
+(zero dead-blue-team). Content-hash skip active (~170 LLM calls/match, ~738ms p50
+latency). Dynamic prompt injection active.
+
+| Scenario | B:R | Comp | Shots | PassCmp% | RstrtRcv |
+|----------|------|------|-------|----------|----------|
+| attack_center | 3:4 | 0.34 | 11.1 | 50.5% | 13.4s |
+| attack_wing | 0:1 | 0.36 | 5.7 | 74.4% | 19.0s |
+| contain_delay | 1:1 | 0.35 | 23.7 | 39.4% | 10.5s |
+| def_transition | 1:2 | 0.28 | 7.7 | 70.9% | 20.6s |
+| defensive_crisis | 0:1 | 0.29 | 7.7 | 89.6% | 20.0s |
+| fast_counter | 0:3 | 0.34 | 9.0 | 85.8% | 25.5s |
+| high_line | 0:2 | 0.26 | 12.0 | 59.9% | 22.8s |
+| long_shot | 0:2 | 0.35 | 7.7 | 72.3% | 23.3s |
+| pressing_trap | 1:2 | 0.34 | 14.0 | 77.3% | 16.5s |
+
+3 worst by composite: `high_line` (0.26), `def_transition` (0.28), `defensive_crisis` (0.29).
+Blue scores rarely (5 goals total vs 18 conceded across 27 runs).
+
+**Note:** The stored KPI JSONs (`results/kpis_baseline_v63_*.json`) show 0 for the 4
+new attack KPIs because they were generated before the `t_wall` bugfix in
+`compute_attack_kpis()`. The code fix is committed; the JSONs need a re-run to reflect
+correct values. The table above contains the post-fix numbers from the commit message.

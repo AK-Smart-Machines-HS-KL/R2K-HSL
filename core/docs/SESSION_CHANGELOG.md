@@ -2737,3 +2737,485 @@ ball trajectory. Recover from an interrupted session (license limit).
   from 2026-07-13)
 - Visualizer blitting refactor still untested with live ROS 2 + Gazebo
   (carried from 2026-07-14 — now also applies to replay mode TkAgg)
+
+## 2026-07-29 — Replay nav fix, --nav deprecation, log name display, Phase 2.5f KB + docs update
+
+**Goal:** Fix broken replay `b`-key (off-by-one after `f`-jump), make nav
+always-on in replay mode (deprecate `--nav`), add log file name display,
+add arrow-key seek + `--live` flag, and complete Phase 2.5f (KB + docs
+update to reflect 2.5d/e done state).
+
+**Done:**
+
+### Replay visualizer fixes (`r2k_visualizer.py`)
+- **`b`-key off-by-one fix** (`on_key` handler, line 696-712): After an
+  `f`-jump to annotation #2, `cur_t` lands at the nearest world record
+  (e.g. 26.500s for an annotation at 26.486s). The old `bisect_left(...) - 1`
+  re-selected the same annotation (jump_idx=1 = current). Fixed: both `f`
+  and `b` now use `bisect_right(...) - 1` + a 0.5s "skip current" check so
+  neither no-ops when sitting on an annotation after a jump.
+- **`--nav` deprecated** (line 845-846): `argparse.SUPPRESS` hides the flag
+  from `--help`. `main_replay()` always called with `nav=True`. Controls
+  hint updated to mention `ctrl+f=fullscreen` (since `f` is rebound to
+  next-annotation).
+- **`--live` flag added** (line 858-862): No-args now defaults to replaying
+  the last saved match (was: live mode). `--live` opts into live mode.
+  `launch_r2k.sh` untouched (calls `python3 r2k_visualizer.py` with no args
+  → now replays instead of live; if live is needed via launcher, add
+  `--live` manually).
+- **Arrow-key seek** (line 687-695): `←`/`→` seek ∓5 seconds (clamped to
+  match duration). Uses existing `seek_target` mechanism — main loop handles
+  the jump + clock reset.
+- **Log file name display**: Terminal prints `Log: <run_id>` at startup
+  (line 617). Window title bar shows `R2K Replay — <run_id>` (line 644).
+- **Content-hash skip note**: updated AGENTS.md gotcha to note
+  `current_strategy.json` mtime is unreliable with content-hash skip.
+- 92 fast tests pass, no regressions.
+
+### Phase 2.5f — KB + docs update (7 files)
+
+**`optimization_spec_v6.3.md`** (spec correction):
+- Phase 2.5 table row: ⬜ → ✅ **DONE**
+- Phase 2.5 section header: ⬜ NEXT → ✅ DONE
+- 2.5d, 2.5e markers: ⬜ → ✅ DONE (commit `532360b`)
+- 2.5f marker: ⬜ IN PROGRESS
+- Phase 3 header: "BLOCKED BY PHASE 2.5d" → "NEXT (UNBLOCKED)"
+- Run budget table: 2.5 re-baseline ⬜ → ✅, total 172 → 145 new runs
+- Fixed stale "15 → 19 KPIs" → "15 → 18 KPIs" in 2.5f section
+- Noted stored v6.3 baseline JSONs show 0 for 4 new attack KPIs (generated
+  before t_wall bugfix; code fix committed, JSONs need re-run)
+
+**`ROS2K_GEM_FAQ.md`** (v6.2 → v6.3, +Q25/Q26):
+- Front matter: v6.2 → v6.3, tags updated, addendum header rewritten
+- Q16: "15 KPIs" → "18 KPIs", added 4 new attack KPIs to the list,
+  removed `role_diversity` and `avg_response_tokens`
+- Q19: rewritten — documents dynamic prompt injection (runtime assembly
+  from fragments, game-phase additive, `sys_prompt_hash` in trace),
+  role condensation (5→3), updated fragment assembly order
+- Q20: replaced `R2K_INCLUDE_MATCH_STATE` section with dynamic prompt
+  injection reference; added content-hash skip section; updated staleness
+  figure (~684ms, was ~800ms)
+- Q24: fixed stale threshold note ("estimates" → "calibrated from v6.3
+  27-run baseline, commit `532360b`")
+- Q25 (NEW): Dynamic Prompt Injection — mechanism, fragment taxonomy,
+  why it replaces R2K_INCLUDE_MATCH_STATE, 4 game-phase stubs
+- Q26 (NEW): Content-Hash Skip — 64% fewer calls, ~684ms effective
+  latency, why safe at temperature:0.0
+
+**`META_KNOWLEDGE_ROUTER.md`** (v6.2 → v6.3):
+- Front matter: v6.2 → v6.3, tags updated, duplicate version lines removed
+- 6 new glossary entries: Dynamic Prompt Injection, Content-Hash Skip,
+  Role Condensation, Replay System, Attack KPIs, R2K_EXPLAIN env var
+- 2 new routing matrix rows (V6.3): dynamic injection/content-hash/replay/
+  role-condensation, attack KPIs/R2K_EXPLAIN/R2K_RUN_LABEL
+
+**`6_DATA_SCHEMAS_AND_LIFECYCLE.md`** (v6.3 addendum):
+- New "V6.3 Addendum" section: 4 new attack KPIs table, dynamic prompt
+  injection (fragment assembly order, caching, `sys_prompt_hash`),
+  `R2K_EXPLAIN` env var, content-hash skip (mtime staleness note),
+  v6.3 baseline table (9 scenarios × 3 runs, with B:R/comp/shots/
+  passCmp/restartRecovery)
+- Fixed stale threshold note: "estimates" → "calibrated from v6.3 baseline"
+
+**`3_AI_LOGIC_AND_EDGE_CASES.md`** (v6.2 → v6.3):
+- Front matter: v6.2 → v6.3, tags updated
+- New "V6.3 Addendum" section: dynamic prompt injection (status update
+  from "planned Phase 4a" to "implemented Phase 2.5b"), content-hash skip,
+  role condensation, explain-mode fix (R2K_EXPLAIN), replay system
+
+**`AGENTS.md`** (gotchas + file layout):
+- Fragment list: added 4 game-phase fragment names, noted evaluator
+  assembles at runtime (system_prompt.txt now only for dump_prompt.py)
+- Gotcha: setup_r2k.py note updated for dynamic injection
+- Gotcha: r2k_evaluator.py note updated for content-hash skip + R2K_EXPLAIN
+
+**`workshop v6.2/cheatpage.md`** (v6.2 → v6.3):
+- Title/header: v6.2 → v6.3
+- Launch flags: added `--analyze` flag
+- Testing: rewritten for two-tier system (fast/slow, 92 tests, 9 files,
+  `--skip-slow` flag, `test_non_functional.py` 11 slow tests,
+  `test_prompt_assembly.py` 1 test)
+- KPIs: "14 metrics" → "18 metrics", added `goalie_tactical_pct`,
+  `shots_on_goal`, `shots_on_target`, `pass_completion_pct`,
+  `restart_recovery_time_s`; removed `role_diversity`, `avg_response_tokens`
+- File locations: tools list updated (added `match_annotate`,
+  `replay_trace`), test count 7→9 files / 91→92 tests, spec reference
+  v6.2→v6.3, added replay entry
+
+**Files touched:**
+- `core/src/r2k_visualizer.py` (b-key fix, --nav deprecated, --live flag,
+  arrow-key seek, log name display, window title)
+- `core/docs/optimization_spec_v6.3.md` (Phase 2.5 status corrections,
+  run budget update, 15→18 KPI typo fix)
+- `core/src/ros2k_knowledge/ROS2K_GEM_FAQ.md` (v6.3, Q16/Q19/Q20/Q24
+  updated, Q25/Q26 added)
+- `core/src/ros2k_knowledge/META_KNOWLEDGE_ROUTER.md` (v6.3, 6 glossary
+  entries, 2 routing rows)
+- `core/src/ros2k_knowledge/6_DATA_SCHEMAS_AND_LIFECYCLE.md` (v6.3
+  addendum, baseline table, threshold note fix)
+- `core/src/ros2k_knowledge/3_AI_LOGIC_AND_EDGE_CASES.md` (v6.3 addendum)
+- `core/AGENTS.md` (gotchas + file layout updates)
+- `core/docs/workshop v6.2/cheatpage.md` (v6.3, testing + KPIs + tools)
+- `core/docs/SESSION_CHANGELOG.md` (this entry)
+
+**New files (untracked):**
+- (none)
+
+**Files deleted:**
+- (none)
+
+**Not yet done:**
+- Stored v6.3 baseline KPI JSONs (`results/kpis_baseline_v63_*.json`) show
+  0 for the 4 new attack KPIs (generated before t_wall bugfix). Code fix
+  is committed; JSONs need a re-run to reflect correct values. The commit
+  message table and spec contain the correct post-fix numbers.
+- Lecturer guide (`workshop_lecturer_guide.md`) intentionally NOT updated
+  per user instruction — left as-is.
+- Nothing committed — all work uncommitted in working tree on
+  `feature/ros2k_behavior_optimization` (or whatever branch is current).
+- `libgazebo_ros_init.so` still not rebuilt into Docker container —
+  sim-time (`/clock`) not flowing. Replay falls back to `t_wall`.
+- Phase 3 `format: "json"` confound in `r2k_evaluator.py:303-304` not
+  fixed — different models get different Ollama options. Must be
+  unified before Phase 3.
+
+**Next:**
+- Commit the visualizer fixes + Phase 2.5f KB/docs update
+- Phase 3: fix `format: "json"` confound, pull 2 new models, run 135 runs
+
+**Blockers:**
+- `batch_evaluator.py` KPI collection still broken (deprecated, carried
+  from 2026-07-13)
+- Phase 3 requires live Gazebo + Ollama + 2 new models pulled
+
+## 2026-07-30 — C-Series experiments, literature survey, format:json confound discovery, architecture research
+
+**Goal:** Validate project design decisions against scientific literature,
+run pre-Phase-3 experimental probes (C1-C6), discover and fix a critical
+methodological confound (format:json), and research architecture
+alternatives (task decomposition, problem space transformation).
+
+**Done:**
+
+### Literature survey (breadth-first, arxiv)
+
+Searched 6 arxiv clusters: "LLM robot control survey", "multi-robot
+cooperative LLM", "world model robot learning", "chain of thought robot
+control planning", "hierarchical LLM planning", "problem reformulation LLM".
+Deep-read 2 papers:
+
+- **ECoT (Zawalski et al. 2024, arxiv 2407.08693):** Embodied CoT for VLA.
+  +28% success from training (not prompting) the model to reason step-by-step.
+  Prompt-only CoT on a 7B model gave +4pp (noise). The gains came from
+  fine-tuning on synthetic CoT data, not from prompt design. Embodied
+  reasoning steps (visual grounding: bounding boxes, gripper positions) were
+  essential; semantic-only CoT (sub-task plans) was insufficient.
+- **"Two Calls Beat Five Agents" (Prajapati & Mohite 2026, arxiv 2607.26922):**
+  5-agent pipeline on Qwen2.5-7B DROPPED accuracy 30pp (JSON communication
+  fails 30-40% on 7B → error accumulation). Two-call self-refinement beat the
+  5-agent pipeline (+4.2%) with 7.4× fewer tokens. But self-refinement
+  actively HARMED tasks where the model was already good (>90% accuracy).
+  Key finding: "If direct accuracy <85%, self-refinement helps. If >90%,
+  it costs extra but yields nothing."
+
+### Codebase audit (2 explore agents, parallel)
+
+- **Prompt architecture audit:** Catalogued 20+ magic numbers, 6 known
+  contradictions (prompt says goalie Y must match ball Y; bridge damps to
+  30-50%. Prompt says goalie X=-4.0; bridge uses -4.32. Game-phase fragments
+  have rules but no samples, contradicting B-study RQ1. Content-hash skip
+  ignores status changes. LLM never sees score/status/velocity/orientation.
+  format:json only for some models.)
+- **KPI/calibration evidence audit:** B-study "1-sample is best" based on
+  n=3 with 50pp OOB variance. Role condensation has NO A/B test. Goalie
+  blending parameters never swept (D9 deferred). Composite score weights
+  (0.4/0.3/0.2/0.1) never validated. kpi_targets.json for 4 new attack KPIs
+  calibrated against invalid baseline data (all zeros, t_wall bug).
+  experiment_matrix.md (179 lines) never filled in — only means exist.
+
+### Phase 0: Re-baseline (27 runs, commit-ready)
+
+- Re-ran `tools/run_baseline.sh baseline_v63_revalidate` (9 scenarios × 3 × 120s).
+- Attack KPIs now non-zero (t_wall fix confirmed working): shots_on_goal
+  4-22 per scenario, pass_completion 42-93%.
+- Recalibrated 9 `kpi_targets.json` from valid baseline data.
+
+### C6: 1-sample vs 3-sample (n=10 vs n=10) — NO SIGNIFICANT DIFFERENCE
+
+All p > 0.05. The B-study "1-sample is best" finding does NOT replicate at
+n=10. The 3-sample config shows slightly more goals (0.7 vs 0.2, p=0.20)
+and less cluster (23.9% vs 40.5%, p=0.15) — directional but not significant.
+
+### Critical discovery: format: "json" confound
+
+Enabled `format: "json"` for all models (to fix Phase 3 confound). Measured
+impact: latency jumped from 746ms to 2081ms (+180%). This suppressed
+offensive behavior (shots dropped 3×) and distorted all C-series results.
+Reverted to model-specific (nemotron/llama only). Re-ran clean baseline
+(C6_clean, n=10) at 746ms.
+
+### C-Series v1 (with format:json — INVALID, all confounded)
+
+| Exp | v1 verdict | Why invalid |
+|-----|-----------|-------------|
+| C1 (enrichment) | No improvement | +1606ms latency masked the effect |
+| C5 (no-blending) | Goalie -22pp | Latency, not blending removal, caused most of the drop |
+| C2 (schema) | OOB increased | Latency-driven OOB, not schema-driven |
+| C4 (temporal) | Shots killed + goals_red up + goalie down | Shots finding holds; others were latency artifacts |
+
+### C-Series v2 (clean, no format:json — VALID)
+
+| Exp | v2 verdict | Key finding |
+|-----|-----------|-------------|
+| **C1** | **Goals improved significantly** | 0.4→1.2 goals/match (p=0.037*). +40ms latency. The 3B model CAN use velocity/yaw/score. |
+| C5 | Goalie borderline regression | -7.8pp tactical (p=0.058, borderline). OOB improved (17%→4.2%, p=0.086). Blending still helps but side effects are interesting. |
+| C2 | No significant change | Schema-only works as well as 1-sample at clean latency. +21ms latency. |
+| C4 | Shots still killed | 0 vs 18 shots (p=0.014*). But only +70ms latency (was +1606ms). Temporal context confirmed harmful for 3B regardless of latency. |
+
+### Baseline reliability analysis (C6_clean, n=10)
+
+| KPI | CV | Reliability |
+|-----|----|-------------|
+| latency_p50 | 0.7% | Rock-solid (infrastructure deterministic) |
+| llm_calls | 0.8% | Rock-solid |
+| goalie_tactical_pct | 12.1% | Moderate |
+| possession | 27.1% | Moderate |
+| pass_completion_pct | 67.6% | Poor |
+| cluster_pct | 91.2% | Terrible (1.7% to 73.2%) |
+| oob_pct | 90.1% | Terrible (0% to 44.6%) |
+| shots_on_goal | 83.9% | Terrible (0 to 47) |
+| goals_blue | 129.1% | Terrible (0 or 1, basically random) |
+
+Infrastructure is perfectly reliable (latency CV=0.7%). Variance comes
+entirely from Gazebo physics (ball restitution=1.0, friction=0.01 → chaotic).
+At n=10: latency/goalie/possession are interpretable. Goals/shots/OOB need
+large effects (3× on goals) for significance.
+
+### Code changes (uncommitted)
+
+- `r2k_evaluator.py`: content-hash skip bug fix (include status in hash,
+  prevents missed status transitions). C1 state enrichment (velocity/yaw/score,
+  env: `R2K_ENRICH_STATE=1`). C4 temporal context (3-snapshot history,
+  env: `R2K_HISTORY_DEPTH=3`). format:json reverted to model-specific.
+- `ollama_sandbox_bridge.py`: goalie weights env-var controlled
+  (env: `R2K_GOALIE_TACTICAL_WEIGHT`, `R2K_GOALIE_LLM_WEIGHT`).
+- `tracker_node.py`: yaw extraction from quaternion (for C1, needs colcon
+  rebuild — done).
+- `launch_r2k.sh`: env var passthrough for `R2K_ENRICH_STATE`,
+  `R2K_HISTORY_DEPTH`, `R2K_GOALIE_TACTICAL_WEIGHT`, `R2K_GOALIE_LLM_WEIGHT`.
+- `tools/analyze_trace.py`: `--stats` flag for statistical comparison
+  (mean ± std, 95% CI, Mann-Whitney U, significance markers).
+- `tools/run_c_series.sh`: C-series experiment runner (N repeats, single
+  scenario, optional fragment swap, env var passthrough).
+- `optimization_spec_v6.3.md`: 3 KPI threshold corrections (cluster 1.5m→0.5m,
+  OOB 0.5m→0.1m, goalie_idle 0.1m→0.05m). Phase 2.5 marked DONE. Run budget
+  updated. 15→18 KPI typo fixed.
+- 9 `kpi_targets.json` recalibrated from v6.3 re-baseline.
+
+### Experiment infrastructure
+
+- `experiments/C6_3sample/fragments/samples_3vs3.txt`: 3-sample variant (3
+  examples with current 3-role taxonomy).
+- `experiments/C2/fragments/`: schema-first fragments (rules_core.txt with
+  JSON schema, empty samples_3vs3.txt).
+
+**Files touched:**
+- `core/src/ai_tactics/r2k_evaluator.py` (content-hash fix, C1 enrichment,
+  C4 history, format:json revert)
+- `core/src/ai_tactics/ollama_sandbox_bridge.py` (env-var goalie weights)
+- `core/src/ros2_ws/src/r2k_world_model/r2k_world_model/tracker_node.py`
+  (yaw extraction)
+- `core/launch_r2k.sh` (env var passthrough)
+- `core/src/tools/analyze_trace.py` (--stats flag)
+- `core/src/tools/run_c_series.sh` (NEW — C-series runner)
+- `core/docs/optimization_spec_v6.3.md` (KPI threshold corrections, Phase 2.5
+  status, run budget)
+- `core/src/scenario/*/kpi_targets.json` (9 files recalibrated)
+- `core/docs/SESSION_CHANGELOG.md` (this entry)
+
+**New files (untracked):**
+- `core/src/tools/run_c_series.sh`
+- `core/src/experiments/C6_3sample/fragments/samples_3vs3.txt`
+- `core/src/experiments/C2/fragments/` (rules_core.txt, samples_3vs3.txt,
+  + copies of header/rules_3vs3/game-phase fragments)
+
+**Not yet done:**
+- C1/C5/C2/C4 v1 results still in `results/` (invalid, confounded by
+  format:json). v2 results are valid. Should delete or clearly label v1
+  files to avoid confusion.
+- Sample-design experiment (analysis→strategy→waypoints chain embedded in
+  a single few-shot sample, 1 call) — designed but not yet run. Next step.
+- 3C architecture (LLM for intent + rule-based mapper for waypoints) —
+  deferred per user decision ("we go for full 3c later").
+- C6 1-vs-3-sample re-run at clean latency — lower priority (n=10 already
+  showed no significant difference, 3-sample has inherent latency confound
+  from larger prompt).
+- Nothing committed — all work uncommitted in working tree.
+
+**Next:**
+1. Run the sample-design experiment (n=10, ~20min) against C6_clean baseline.
+2. If sample-design shows directional improvement → invest in n=30 for
+   significance on goals/shots/OOB.
+3. Design the 3C architecture (LLM intent + code mapper) for later
+   implementation.
+4. Investigate Gazebo deterministic seeding to eliminate simulator variance.
+
+**Blockers:**
+- Gazebo physics variance (CV=90-129% on goals/shots/OOB) limits
+  statistical power. n=10 can only detect large effects on these KPIs.
+  Gazebo seeding investigation needed.
+- Visualizer blitting + replay TkAgg untested with live ROS 2 + Gazebo
+  (carried from 2026-07-14)
+- `batch_evaluator.py` KPI collection still broken (deprecated, carried
+  from 2026-07-13)
+
+## 2026-07-30 (continued) — C9: Future World Model, predicted positions
+
+**Goal:** Test whether feeding the LLM predicted positions at t+746ms
+(where things will be when the command takes effect) improves decision
+quality. Ball uses exponential velocity decay (k=1.26, empirically
+measured). Bots use linear motion capped at max speed (0.8 m/s). Blue
+bot prediction is valid — at t+746ms they're still executing the
+previous command, not the one being generated now.
+
+**Done:**
+
+### C9 experiment (n=10, `3vs3_attack_center`, horizon=746ms)
+
+| KPI | C6_clean (n=10) | C9 (n=10) | Δ | p |
+|---|---|---|---|---|
+| goals_blue | 0.40 | 0.30 | -0.10 | 0.55 (n.s.) |
+| goals_red | 0.60 | 0.90 | +0.30 | 0.38 (n.s.) |
+| shots_on_goal | 18.0 | 14.4 | -3.6 | 0.55 (n.s.) |
+| cluster_pct | 23.0% | 13.8% | -9.2 | 0.29 (n.s.) |
+| pass_completion | 45.8% | 63.4% | +17.5 | 0.21 (n.s.) |
+| goalie_tactical | 89.7% | 94.0% | +4.3 | 0.24 (n.s.) |
+| latency_p50 | 746ms | 749ms | +3ms | 0.26 (n.s.) |
+
+**Result: no significant improvement on any KPI.** Goals slightly worse
+(0.40→0.30, n.s.). Secondary KPIs directionally improved (cluster -9.2pp,
+pass_completion +17.5pp, goalie_tactical +4.3pp) but none significant
+at n=10.
+
+**Why goals didn't improve:** C1 (enrichment) gave the LLM *new
+information* (velocity direction, score awareness) → 3× goal
+improvement. C9 (prediction) gives the LLM *better positions* of the
+same information type. The LLM was already implicitly compensating for
+staleness by aiming at the ball's current position. Prediction shifts
+the reference frame but doesn't add capability. Shot conversion remains
+~2% (14.4 shots → 0.3 goals) — the LLM can't kick accurately regardless
+of position information quality.
+
+**C1 vs C9 comparison:**
+- C1 (enriched): goals 1.2 (p=0.037*), shots 20.2, cluster 29.5%
+- C9 (predicted): goals 0.30 (n.s.), shots 14.4, cluster 13.8%
+- C1 helps goals (velocity/score awareness). C9 helps positioning (less
+  stale world). Complementary — C1+C9 combined is the natural follow-up.
+
+**Code changes:**
+- `r2k_evaluator.py`: `import math` added; C9 prediction block (~25
+  lines) after content-hash check, before `min_ents` construction. C1/C9
+  isolation guard (C1 velocity computation disabled when C9 is active
+  to avoid predicted-vs-actual velocity confusion). `prev_ents` saved
+  before prediction so next cycle's velocity is computed from actual
+  positions.
+- `launch_r2k.sh`: `R2K_PREDICT_HORIZON_MS` env var passthrough added.
+
+**Files touched:**
+- `core/src/ai_tactics/r2k_evaluator.py` (C9 prediction, import math)
+- `core/launch_r2k.sh` (env var passthrough)
+
+**Not yet done:**
+- C1+C9 combined experiment (enrichment + prediction, n=10)
+- Sample-design experiment (analysis→strategy→waypoints chain in sample)
+- 3C architecture design (LLM for intent + rule-based mapper)
+- Gazebo deterministic seeding investigation
+
+**Blockers:**
+- Gazebo physics variance (CV=90-129% on goals/shots/OOB) — n=10 only
+  detects large effects. Seeding investigation needed.
+- Visualizer blitting + replay TkAgg untested with live ROS 2 + Gazebo
+  (carried from 2026-07-14)
+- `batch_evaluator.py` KPI collection still broken (deprecated, carried
+  from 2026-07-13)
+
+## 2026-07-30 (final session) — C1/C9 baselines launched for C3 evaluation
+
+**Goal:** Establish solid statistical baselines (n=17) for C1 (enrichment) and
+C1+C9 (enrichment + prediction) across all 9 scenarios, to evaluate the
+upcoming C3 architecture (LLM for intent + rule-based mapper for waypoints).
+
+**Context from earlier today:**
+- C1 enrichment (velocity/yaw/score): goals improved 3× (p=0.037*), 40% win
+  rate, 0 losses at n=5
+- C9 prediction (future world model): no goal improvement, but OOB -10pp,
+  pass completion +25pp. Future referee rules may penalize OOB with
+  time-outs, making OOB reduction a direct win-rate contributor
+- C1+C9 combined: 50% win rate (best), only 0.2 goals conceded (best
+  defense), but interference with C1's goal-scoring benefit
+- format: "json" confound discovered and reverted (+1336ms latency)
+
+**Fix applied:**
+- C1/C9 isolation guard removed. When both are active, C1 now uses the
+  `velocities` dict from C9 (computed from actual positions) instead of
+  recomputing from `prev_ents` (which would use predicted positions and
+  give wrong velocities). ~10 lines changed in `r2k_evaluator.py`.
+
+**Baselines launched:**
+- Config C1 (enrichment only, `R2K_ENRICH_STATE=1`): n=17 per scenario
+- Config C1+C9 (enrichment + prediction, `R2K_ENRICH_STATE=1` +
+  `R2K_PREDICT_HORIZON_MS=746`): n=17 per scenario
+- All 9 scenarios × 2 configs × 17 runs = 306 runs total (~12h)
+- Script: `tools/run_baselines.sh` (launched detached via `setsid`)
+- Output: `results/kpis_C1_<scenario>_r*.json` and
+  `results/kpis_C1C9_<scenario>_r*.json`
+
+**Status at session end:**
+- Running: C1 on `3vs3_attack_center` run 3/17, C1C9 on
+  `3vs3_attack_center` complete (10/10)
+- ~12h total compute expected, runs overnight
+
+**To check progress:**
+```bash
+# Count completed runs
+ls ~/R2K-HSL/core/src/results/kpis_C1_*.json | wc -l
+ls ~/R2K-HSL/core/src/results/kpis_C1C9_*.json | wc -l
+
+# Check log
+tail -20 ~/R2K-HSL/core/src/results/baselines.log
+```
+
+**To analyze results (after completion):**
+```bash
+cd ~/R2K-HSL/core/src
+# Per-scenario comparison
+python3 tools/analyze_trace.py \
+  --stats-a "results/kpis_C1_3vs3_attack_center_r*.json" \
+  --stats-b "results/kpis_C1C9_3vs3_attack_center_r*.json"
+
+# Win rate analysis (per scenario)
+python3 -c "
+import json, glob
+for scen in ['attack_center','attack_wing','contain_delay','def_transition','defensive_crisis','fast_counter','high_line','long_shot','pressing_trap']:
+    c1 = [json.load(open(f)) for f in sorted(glob.glob(f'results/kpis_C1_3vs3_{scen}_r*.json'))]
+    c1c9 = [json.load(open(f)) for f in sorted(glob.glob(f'results/kpis_C1C9_3vs3_{scen}_r*.json'))]
+    c1_wins = sum(1 for d in c1 if d['world_kpis']['goals_for_blue'] > d['world_kpis']['goals_for_red'])
+    c1c9_wins = sum(1 for d in c1c9 if d['world_kpis']['goals_for_blue'] > d['world_kpis']['goals_for_red'])
+    c1_draws = sum(1 for d in c1 if d['world_kpis']['goals_for_blue'] == d['world_kpis']['goals_for_red'])
+    c1c9_draws = sum(1 for d in c1c9 if d['world_kpis']['goals_for_blue'] == d['world_kpis']['goals_for_red'])
+    print(f'{scen:25s} C1: {c1_wins}W/{c1_draws}D/{len(c1)-c1_wins-c1_draws}L  C1+C9: {c1c9_wins}W/{c1c9_draws}D/{len(c1c9)-c1c9_wins-c1c9_draws}L')
+"
+```
+
+**Next session:**
+1. Check if baselines completed (~12h from launch)
+2. Analyze C1 vs C1+C9 win rates per scenario
+3. Design C3 architecture (LLM for intent + rule-based mapper)
+4. Run C3 experiments against baselines
+5. Gazebo deterministic seeding investigation (if time)
+
+**Blockers:**
+- Gazebo physics variance (CV=90-129% on goals/shots/OOB) — n=17 only
+  detects large effects. Seeding investigation needed.
+- `batch_evaluator.py` KPI collection still broken (deprecated, carried
+  from 2026-07-13)

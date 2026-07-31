@@ -1,11 +1,11 @@
 ---
-title: "ROS2K v6.2 Workshop — Cheat Page"
+title: "ROS2K v6.3 Workshop — Cheat Page"
 type: CHEATPAGE
-tags: [workshop, cheatpage, reference, v6.2, kpi, testing, scenarios]
-last_modified: 2026-07-23
+tags: [workshop, cheatpage, reference, v6.2, v6.3, kpi, testing, scenarios]
+last_modified: 2026-07-29
 ---
 
-# ROS2K v6.2 — Student Cheat Page
+# ROS2K v6.3 — Student Cheat Page
 
 > Print this page. It contains every command, KPI, and scenario you need
 > during the workshop. All commands run from `~/R2K-HSL/core`.
@@ -24,6 +24,7 @@ last_modified: 2026-07-23
 | `--no-explain` | on | LLM outputs ONLY `assignments` (150 tokens). Faster. Default for experiments. |
 | `--headless` | off | Gazebo without GUI (`gzserver` only). ~30% faster. Use for batch experiments and automated runs. |
 | `--duration <s>` | 0 (manual) | Auto-terminate after N seconds. `60` = quick test, `120` = B-study-compatible. 0 = run until CTRL+C or window close. |
+| `--analyze` | off | Opens annotator terminal after container starts. Press ENTER to pause Gazebo, type a comment, ENTER to resume. Annotations saved for post-match replay. |
 
 **Typical workshop command:**
 ```bash
@@ -34,8 +35,8 @@ last_modified: 2026-07-23
 
 ## 2. Testing (pytest)
 
-7 test files, 91 tests total. 62 pass without ROS2 (unit tests); 29 require
-a live ROS2 + Gazebo stack (integration tests, auto-skipped if `rclpy` missing).
+Two-tier test system: **fast** (unit tests, ~2s) and **slow** (real 120s Gazebo
+matches with KPI assertions, ~140s per test). 92 tests total (91 fast + 11 slow).
 
 | Test file | Tests | What it covers |
 |-----------|-------|----------------|
@@ -43,6 +44,8 @@ a live ROS2 + Gazebo stack (integration tests, auto-skipped if `rclpy` missing).
 | `test_integration_smoke.py` | 7 | End-to-end: scenario launches, momentum produces values, reward produces values, foul detection works, headless+duration, strategy files exist, launch script flags. **Skips if no ROS2.** |
 | `test_kickoff_and_ballout.py` | 28 | Sideline warp (top/bottom), goal-line warp (blue/red), warp always inside field, kickoff scoring-team freeze (blue/red), ball reset to center, freeze time = 5s, no-toucher neutral restart, toucher penalty, pushing/blocking/ball-out penalty values, frozen bots get zero Twist, expired bots removed, goal detection (within posts, wide, edge, in-field) |
 | `test_momentum.py` | 8 | OLS slope positive/negative, minimum samples (10), clamping ±10, flat scores, trend classification (ascending/collapsing) |
+| `test_non_functional.py` | 11 (slow) | Real 120s Gazebo matches with per-scenario KPI assertions (composite score, OOB, cluster, goalie, attack KPIs). **Requires live ROS2 + Gazebo + Ollama.** `@pytest.mark.slow` marker. |
+| `test_prompt_assembly.py` | 1 | Validates oracle/analysis fields in llm_trace are strings, not JSON dicts. |
 | `test_referee.py` | 7 | Pushing foul, blocking without ball, no foul with ball, sideline warp, ball-out sideline, goal-line out (no goal), last-touch tracking |
 | `test_reward.py` | 7 | Positive reward, negative reward (foul), 1Hz update rate, scale clamping ±10, neutral classification, foul penalty schema, decision timeout |
 | `test_set_piece.py` | 27 | Goal kick ball placement (4 corners), corner kick-in placement (4 corners), goal-line out classification (attacker vs defender, blue vs red), no-toucher neutral fallback, warp radius (bot within 1.5m warped 2m radially), warp direction, kickoff/goal_kick/corner countdown = 5s, scoring team frozen, status types distinct |
@@ -50,32 +53,28 @@ a live ROS2 + Gazebo stack (integration tests, auto-skipped if `rclpy` missing).
 ### How to run tests
 
 ```bash
-# All tests (62 unit tests pass without ROS2, 29 integration tests skip)
-python3 -m pytest tests/ -v
+# Fast tier (unit tests only, ~2s) — run after every code change:
+python3 -m pytest tests/ --skip-slow -v
 
-# Single test file
+# Full suite (unit + slow, ~21min) — run before commit:
+python3 -m pytest tests/ -v -s
+
+# Single slow test (real 120s Gazebo match + KPI assertions):
+python3 -m pytest tests/test_non_functional.py::test_attack_center_latency -v -s
+
+# Single unit test file:
 python3 -m pytest tests/test_foul_detection.py -v -s
-
-# Only referee + set-piece tests
-python3 -m pytest tests/test_referee.py tests/test_set_piece.py -v
-
-# Verbose with print output (-s shows print statements)
-python3 -m pytest tests/test_momentum.py -v -s
 ```
-
-Tests are in `src/tests/`. Run from `src/` with venv active (U22) or inside
-the Docker container (U24). No config file needed — invoke explicitly.
 
 ---
 
-## 3. KPIs (14 metrics from `analyze_trace.py`)
+## 3. KPIs (18 metrics from `analyze_trace.py`)
 
 `analyze_trace.py` joins `llm_trace` + `world_trace` by `R2K_RUN_ID` and
-computes 14 KPIs. Run after a match:
+computes 18 KPIs. Run after a match:
 
 ```bash
 python3 tools/analyze_trace.py --run-id <ID>
-python3 tools/analyze_trace.py --run-id <ID> --plot        # +latency histogram, score timeline
 python3 tools/analyze_trace.py --run-id <ID> --output results/  # save JSON instead of stdout
 ```
 
@@ -87,15 +86,18 @@ python3 tools/analyze_trace.py --run-id <ID> --output results/  # save JSON inst
 | `tactical_score_final` | world_trace | > -2.0 | Last `current_numerical_score` (end-of-match state) |
 | `cluster_pct` | world_trace | < 10% | % frames where min pairwise blue distance < 1.5m (bots bunching up) |
 | `goalie_idle_pct` | world_trace | < 70% (after Phase 2a) | % frames goalie moved < 0.1m (currently ~95% — structural limit) |
+| `goalie_tactical_pct` | world_trace | > 60% | % frames goalie is at a tactically correct position (vs stuck). Phase 2a KPI. |
 | `oob_pct` | world_trace | < 10% | % frames any blue bot > 0.5m outside field bounds (out-of-bounds) |
 | `ball_possession_blue_pct` | world_trace | > 50% | % frames where closest bot to ball is blue |
-| `latency_p50` | llm_trace | < 1000ms | 50th percentile LLM response time (median) |
+| `shots_on_goal` | llm+world | higher is better | Kick actions where kicker in opp half AND ball moves toward opp goal. Phase 2.5a. |
+| `shots_on_target` | llm+world | higher is better | Subset of shots_on_goal where ball Y at x=4.5 is within goal posts (±1.3m). |
+| `pass_completion_pct` | llm+world | higher is better | % Pass actions where a different blue bot is closest to ball within 2s. |
+| `restart_recovery_time_s` | world_trace | < 4.0s | Mean time from status change to restart-team bot within 0.35m of ball. |
+| `latency_p50` | llm_trace | < 1000ms | 50th percentile LLM response time (median). ~684ms with content-hash skip. |
 | `latency_p95` | llm_trace | < 2000ms | 95th percentile (tail latency) |
 | `latency_max` | llm_trace | — | Worst-case single LLM call (watch for cold-boot spikes) |
 | `parse_error_rate` | llm_trace | < 5% | % LLM calls with `parse_code > 0` (malformed/truncated JSON) |
-| `role_diversity` | llm_trace | > 2 | Count of distinct role strings assigned (e.g. striker, goalie, supporter) |
 | `status_distribution` | world_trace | — | Counter of `match_state.status` values (playing, ball_out, kickoff, etc.) |
-| `avg_response_tokens` | llm_trace | < 100 | Mean `len(raw_response) / 4` (approximate token count) |
 
 **Composite score** (weighted blend, single number for comparison):
 
@@ -181,8 +183,9 @@ Each scenario has a `scenario/{name}/` folder with `field_diagram.png`,
 | Scenario packages | `core/src/scenario/{name}/` | `scenario.json` + `field_diagram.png` + `analysis.md` + `kpi_targets.json` |
 | Relay profiles | `core/src/relay/*.json` | Hardware mapping |
 | Trace logs | `core/src/logs/*_*.jsonl` | `llm_trace` (per LLM call) + `world_trace` (per 10Hz tick). Gitignored. |
-| Tools | `core/src/tools/*.py` | `analyze_trace`, `dump_prompt`, `gen_field_diagrams`, `run_experiment`, `swap_fragments` |
-| Tests | `core/src/tests/test_*.py` | 7 files, 91 tests |
+| Tools | `core/src/tools/*.py` | `analyze_trace`, `dump_prompt`, `gen_field_diagrams`, `run_experiment`, `swap_fragments`, `match_annotate`, `replay_trace` |
+| Tests | `core/src/tests/test_*.py` | 9 files, 92 tests (91 fast + 11 slow) |
 | Knowledge base | `core/src/ros2k_knowledge/*.md` | 7 power-files + router. opencode reads these automatically. |
 | Referee rulebook | `core/docs/referee_rulebook.md` | Complete decision catalog — read before changing any rule |
-| Optimization spec | `core/docs/optimization_spec_v6.2.md` | Phases 0-5, experiment catalog, KPI definitions |
+| Optimization spec | `core/docs/optimization_spec_v6.3.md` | Phases 0-5, experiment catalog, KPI definitions |
+| Replay | `python3 r2k_visualizer.py --replay` | Visual replay of saved matches (no ROS2 needed). `--live` for live mode. |
