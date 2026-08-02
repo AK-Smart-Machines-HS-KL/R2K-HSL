@@ -146,6 +146,10 @@ opencode session via `.opencode/opencode.json → instructions`.
   One coherent change per branch. Name in CamelCase, English, no umlauts.
 - Code, comments, variables, commit messages: **English**. Team-internal docs/project work: German.
 - AI prompts living in code: English. AI prompts used by the team: German.
+- **[C3 inter-lingua] No meta-knowledge in model-facing text:** Anything fed to the
+  LLM (fragments, transforms, scenario text) contains ONLY soccer/referee knowledge
+  in dictionary vocabulary. Never mention ROS2K internals (JSON schema, PID, tmpfs,
+  phantom kick, file paths, etc.). Every positional/negational verb carries explicit X,Y.
 
 ## Mermaid in docs
 

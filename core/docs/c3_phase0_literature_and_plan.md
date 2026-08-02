@@ -187,7 +187,7 @@ No GitHub repos found on "robot instruction + controlled vocabulary + intermedia
 
 This document. Literature table, key takeaways, latency budget, phase plan.
 
-### Phase 1: Vocabulary probing — NEXT (interactive)
+### Phase 1: Vocabulary probing — DONE (56 probes, 2026-08-01)
 
 **Goal:** Discover Qwen2.5-3B-Instruct's soccer vocabulary through direct conversation. Create a controlled vocabulary of verb+noun+adjective sequences.
 
@@ -221,7 +221,65 @@ bash tools/run_baseline.sh baseline_qwen25_3b
 
 **No `llm_probe.py`.** Conversational discovery. Gazebo baseline runs in background.
 
-### Phase F: Few-shot paradigm rework — NEW (after Phase 1, text-only)
+**Completion note:** 56 probes run (A–G series + PS_* structure study + VERIFY_*). Delivered: `core/docs/c3_vocabulary_dictionary.md` (usable/borderline/reject entries), `c3_testcase_review.md` (P0–P3 fixes), `c3_scenario_generation_playbook.md` (patterns P1–P10 + anti-patterns A1–A5, validation protocol §10). Key findings: **coordinate rule** (every positional/negational verb carries explicit X,Y — probe-verified E/F/G series), **no derived role labels** (C2_striker_rule: dynamic role definitions rejected by 3B), referee mechanics stay referee-owned. Parallel baseline: 27 runs qwen2.5:3b measured (see §8).
+
+### Phase L: Fragment migration — NEXT (text-only)
+
+**Goal:** Rewrite all model-facing prompt fragments in dictionary vocabulary (`core/docs/c3_vocabulary_dictionary.md`). Pure content migration — no structural experiments here (that is Phase F).
+
+**Scope (22 files in `core/src/strategy/fragments/`):**
+- `rules_core.txt` — fix dynamic-goalie/static-role contradiction (C2_striker_rule): remove derived role definitions, use situation-triggered position verbs
+- `samples_2vs2.txt` — prose examples → structured coordinate form
+- `samples_recover.txt` — clean template (no prose)
+- All `rules_<mode>.txt` / `samples_<mode>.txt` / game-phase `rules_*.txt` — vocabulary sweep
+- `header.txt` EXCLUDED (fixed template, `{{EXPLAIN_INSTRUCTION}}` only)
+
+**Rules:**
+- Every positional/negational verb carries explicit X,Y (coordinate rule)
+- Vocabulary restricted to dictionary-usable entries; no striker/passer/supporter
+- **No ROS2K meta-knowledge in model-facing text** (AGENTS.md rule): never mention JSON schema, PID, tmpfs, phantom kick, etc.
+
+**Verification:** `tools/dump_prompt.py` token diff before/after · 3B spot-probes (playbook §10.4 V_A format) · pytest fast suite.
+
+**Deliverable:** 22 dictionary-compliant fragment files.
+
+### Phase I: Transform builder — NEXT (text-only)
+
+**Goal:** Replace the JSON `min_ents` world encoding in `r2k_evaluator.py` with a condensed text transform in dictionary vocabulary (~250 tok cap).
+
+**Method:**
+- Build transformed text from the world snapshot: positions (`blue_1 at (x, y)`), ball, score, status, velocity — rich fact tiers from `8_C3_SOCCER_KNOWLEDGE.md` patterns (P1–P10) where cheap
+- Content-hash skip hashes the TRANSFORMED text (not the JSON)
+- Output format locked: coords in text (`blue_1 move to (2.2, 0.3)`), one line per bot, regex parse + JSON-style fallback (extended `parse_code`)
+- `num_predict` no-explain 150→~200 (text output is longer than JSON)
+- Explain mode keeps `ANALYSIS:`/`ORACLE:`/bot-line sections, `num_predict` 600
+
+**I3 battery:** ~20 situations — verify transform renders sensibly, fits token budget, latency impact vs JSON encoding.
+
+**Deliverable:** transform implementation + battery results.
+
+### Phase K: Behavior battery — NEXT (text-only, the decision phase)
+
+**Goal:** The experiment that decides whether the inter-lingua works. Dual A/B of current JSON-in/JSON-out vs transformed-text-in/condensed-text-out.
+
+**K1: Situation corpus** — 40–60 hand-crafted situations from `8_C3_SOCCER_KNOWLEDGE.md` patterns (P1–P10, P-D6a) + referee states (ball-out, goal-kick, corner-kick-in, kickoff) + edge cases.
+
+**K2: Dual A/B (no-explain 2×2 first; explain axis deferred):**
+
+| Output format → / Input encoding ↓ | JSON (current) | Transformed text |
+|---|---|---|
+| JSON output | current baseline | — |
+| Condensed text output | — | candidate |
+
+Judged by: `parse_success`, `vocab_compliance`, `rule_following`, `contradiction_score`, `role_coverage` + human review.
+
+**K3: Selective rules + oracle evaluation** — pull rules from `8_C3_SOCCER_KNOWLEDGE.md` + 11 `analysis.md` files; per-gap rule-vs-example form test (RQ2 re-check — B-study "1-sample" finding doubted at n=3); oracle field kept and evaluated per decision.
+
+**K4: Gate** — candidate must close ≥80% of situations with a correct, parseable, executable instruction.
+
+**K5: Deliverable** — winning config → Phase 2 (description rework) + F (structure sweep).
+
+### Phase F: Few-shot paradigm rework — NEW (after Phase K, text-only)
 
 **Goal:** Find the prompt structure that makes the 3B model produce the best instruction sequences. No Gazebo — pure LLM text-output analysis with synthetic world data.
 
@@ -326,7 +384,7 @@ For the top 2–3 configs from F4:
 
 **Goal:** Rework `core/src/scenario/*/analysis.md` according to the new dictionary and prompt structure. Validate Qwen comprehends the refined descriptions.
 
-**Uses:** Phase 1 vocabulary + Phase F winning structure.
+**Uses:** Phase K5 winning config + Phase 1 vocabulary + Phase F winning structure.
 
 **Method:** Pair-programming (GLM + human). No Gazebo. Use `llm_probe.py` from Phase F1 for situational validation.
 
@@ -468,37 +526,39 @@ Compare Option A (re-prompt the 3B) vs Option B (second model monitor):
 ```
 Phase 0 (DONE)
     │
-    ├──> Phase 1 (vocabulary, interactive, qwen2.5:3b)
-    │       │  ┌──────────────────────────────────────────────────┐
-    │       │  │ PARALLEL: new Gazebo baseline (27 runs, ~45min)  │
-    │       │  │ → results/kpis_baseline_qwen25_3b_*.json          │
-    │       │  └──────────────────────────────────────────────────┘
-    │       │
-    │       └──> Phase F (few-shot rework, text-only)
-    │               │       ├── F1: build llm_probe.py + synthetic data
-    │               │       ├── F2: define metrics
-    │               │       ├── F3: structure sweep (~20 min)
-    │               │       ├── F4: content sweep (~20 min)
-    │               │       └── F5: qualitative deep-dive
-    │               │
-    │               └──> Phase 2 (rework descriptions, text-only)
-    │                       │
-    │                       └──> Phase 3 (validate comprehension, text-only)
-    │
-    └──> Phase W (watchdog, text-only, PARALLEL to Phase 2–3)
-            ├── W1: divergence scenarios
-            ├── W2: test Option A (re-prompt, ~2 min)
-            ├── W3: test Option B (second model, ~40 sec)
-            └── W4: compare and decide
+    └──> Phase 1 (vocabulary probing — DONE, 56 probes)
+            │
+            ├──> Phase L (fragment migration, text-only)
+            │       │
+            │       └──> Phase I (transform builder, text-only)
+            │               │
+            │               └──> Phase K (behavior battery, text-only, DECISION)
+            │                       │
+            │                       ├──> Phase F (few-shot rework, text-only)
+            │                       │       ├── F1: build llm_probe.py + synthetic data
+            │                       │       ├── F2: define metrics
+            │                       │       ├── F3: structure sweep (~20 min)
+            │                       │       ├── F4: content sweep (~20 min)
+            │                       │       └── F5: qualitative deep-dive
+            │                       │
+            │                       └──> Phase 2 (rework descriptions, text-only)
+            │                               │
+            │                               └──> Phase 3 (validate comprehension, text-only)
+            │
+            └──> Phase W (watchdog, text-only, PARALLEL to Phase 2–3)
+                    ├── W1: divergence scenarios
+                    ├── W2: test Option A (re-prompt, ~2 min)
+                    ├── W3: test Option B (second model, ~40 sec)
+                    └── W4: compare and decide
 
-Phase 4 (pilot, GAZEBO, qwen2.5:3b) ← requires Phase 1 + F + 2 + 3 (+ optionally W)
+Phase 4 (pilot, GAZEBO, qwen2.5:3b) ← requires Phase K5 + F + 2 + 3 (+ optionally W)
     │
     ├──> Phase 4b (Llama-3.2-3B regression test, text-only)
     │
     └──> Phase 5 (full evaluation, GAZEBO)
 ```
 
-**Key:** Phases 1, F, 2, 3, and W are all text-only (no Gazebo). Gazebo is deferred to Phase 4. The iteration loop is ~700ms (no-explain) or ~1100ms (explain) per probe, not 120s per Gazebo match. The new Gazebo baseline runs in the background during Phase 1.
+**Key:** Phases 1, L, I, K, F, 2, 3, and W are all text-only (no Gazebo). Gazebo is deferred to Phase 4. The iteration loop is ~700ms (no-explain) or ~1100ms (explain) per probe, not 120s per Gazebo match. The new Gazebo baseline ran in the background during Phase 1.
 
 ---
 
@@ -506,14 +566,17 @@ Phase 4 (pilot, GAZEBO, qwen2.5:3b) ← requires Phase 1 + F + 2 + 3 (+ optional
 
 | Phase | Probes | Mode | Est. time | Gazebo? |
 |---|---|---|---|---|
-| Phase 1 (vocab) | ~50 conversational | mixed | ~30 min | No (but parallel Gazebo baseline runs ~45min in background) |
+| Phase 1 (vocab) | 56 | mixed | ~30 min | No (parallel Gazebo baseline ran ~71min in background) |
+| Phase L (fragment migration) | ~5 spot-checks | no-explain | ~15 min (edits) | No |
+| Phase I (transform battery) | ~20 | no-explain | ~1 min | No |
+| Phase K (behavior battery) | ~120 (60 situations × 2 cells) + K3 gaps | no-explain | ~5 min | No |
 | Phase F3 (structure sweep) | 1200 | mixed | ~20 min | No |
 | Phase F4 (content sweep) | 1500 | mixed | ~20 min | No |
 | Phase F5 (qualitative) | ~60 | explain | ~1 min | No |
 | Phase W2 (Option A) | 100 | explain | ~2 min | No |
 | Phase W3 (Option B) | 100 | mixed | ~1 min | No |
 | Phase 4b (Llama 3.2 regression) | 100 | mixed | ~2 min | No |
-| **Total text-only** | **~3100** | — | **~76 min** | **No** |
+| **Total text-only** | **~4200** | — | **~95 min** | **No** |
 
 Compare: 27-run Gazebo baseline = ~45 min + container restart overhead. The entire text-only phase plan (Phases 1 + F + W) costs about the same as one Gazebo baseline run, but produces ~3000 data points vs 27.
 
@@ -561,6 +624,8 @@ Compare: 27-run Gazebo baseline = ~45 min + container restart overhead. The enti
 
 - **Tick-level LLM soccer coaching:** No prior work (LLCoach is play-level, seconds-to-minutes).
 - **Controlled vocabulary as inter-lingua for a 3B model:** BTGenBot-2 does this for XML BTs, not for NL instruction sequences.
+- **Evidence-based fragment migration (Phase L):** Prompt content rewritten to probe-verified vocabulary (coordinate rule, no derived roles), not human intuition.
+- **Dual A/B of input encoding + output format (Phase K):** Systematic comparison of JSON-in/JSON-out vs text-in/text-out on a hand-crafted situation corpus.
 - **Interwoven few-shot structure:** No prior work on embedding rules inside examples vs keeping them separate.
 - **Behavioral probing of a 3B model's soccer vocabulary:** No prior work.
 - **Text-only LLM evaluation for robot soccer:** No prior work (everyone uses sim runs). Our ~85× speedup enables rapid iteration.
