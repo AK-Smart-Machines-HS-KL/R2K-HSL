@@ -346,13 +346,22 @@ One JSON line per LLM call. Written to `logs/llm_trace_<run_id>.jsonl`.
   "latency_ms": 827,
   "model": "qwen2.5-coder:3b",
   "num_predict": 150,
-  "explain": false
+  "explain": false,
+  "timings": {
+    "prompt_eval_count": 881,
+    "eval_count": 118,
+    "prompt_eval_duration_ms": 19.2,
+    "eval_duration_ms": 548.4,
+    "load_duration_ms": 3.1,
+    "total_duration_ms": 734.6
+  }
 }
 ~~~
 
 * `parse_code`: `0` = clean JSON, `1` = trailing comma fix, `2` = assignments extraction fallback, `3` = total parse failure.
 * `raw_response` truncated to 2000 chars.
 * `sys_prompt_hash` is SHA1 of the system prompt (first 16 hex chars) — allows detecting prompt changes between runs without storing the full prompt.
+* `timings` [2026-08-01]: Ollama `timings` block passthrough for cache/latency analysis. **`prompt_eval_count` is NOT a cache indicator** (constant regardless of hits — reports full prompt length); the cache-hit signal is `prompt_eval_duration_ms` (identical calls measured: 68.9ms → 5.0ms → 3.8ms). `eval_count` differs between pretty/compact JSON formatting of the same semantic output.
 
 ### `world_trace_<run_id>.jsonl` (state_aggregator.py)
 
@@ -531,6 +540,15 @@ strings into samples at runtime.
 Evaluator hashes entity positions (`min_ents` JSON) and skips LLM call if identical to
 previous call. At `temperature: 0.0`, identical input → identical output → 64% of calls
 were wasted (171→62 per match). Effective latency drops from ~1328ms to ~684ms.
+
+> [!warning] [2026-08-01] `temperature: 0.0` is NOT bit-exact deterministic across
+> KV-cache states (measured in the cache-layout A/B study, `experiments/cache_layout_ab.py`):
+> byte-identical prompt + options produced different token streams (pretty vs compact
+> JSON, 118 vs 91 tokens) depending on cache history; the direction flipped between test
+> runs. Reproduced with `OLLAMA_KV_CACHE_TYPE=q8_0` AND default f16 — llama.cpp
+> cache-reuse numerics, not KV quantization. Semantic output stays stable → content-hash
+> skip remains safe. Latency A/B comparisons must control cache state (disturb with a
+> different world, or compare steady-state calls after warming both prefixes).
 
 **Impact on staleness checks:** `current_strategy.json` mtime is no longer a reliable
 staleness indicator — the file may not update for seconds during stable positions

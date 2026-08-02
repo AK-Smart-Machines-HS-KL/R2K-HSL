@@ -30,11 +30,10 @@ core/src/strategy/strat_*.txt
 # Phase 1 instrumentation logs
 core/src/logs/
 
-# KPI test artifacts (regenerated on each slow test run)
+# KPI test artifacts (regenerated on each slow test run / experiment sweep)
 core/src/results/kpis_*/
-core/src/results/kpis_baseline_*.json
-core/src/results/baseline_*.log
-core/src/results/baseline_run*.log
+core/src/results/kpis_*.json
+core/src/results/*.log
 core/src/results/baseline_summary.md
 
 # Backup files

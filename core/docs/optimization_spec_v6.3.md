@@ -1675,6 +1675,13 @@ did the LLM's reasoning match the human's reasoning?
   latency cost was from B-study (B5: 1190ms vs 825ms, `num_predict` 600 vs 150). With
   content-hash skip, explain calls are also skipped when positions don't change — the
   per-call cost is still ~44% higher, but effective cost per match is lower.
+  **[2026-08-01]** Caveat for Phase 3 latency comparisons: `temperature: 0.0` is NOT
+  bit-exact across KV-cache states (measured — pretty vs compact JSON, 118 vs 91 tokens
+  from identical input, direction flips between runs; q8_0 AND f16). Semantics stable,
+  so content-hash skip is safe, but any latency A/B must control cache state (disturb
+  with a different world before both sides, or compare steady-state calls after warming
+  both prefixes). `llm_trace` now carries Ollama `timings` (prompt_eval_count,
+  eval_duration_ms, ...) for this analysis; `prompt_eval_duration` is the cache indicator.
 - LLM-as-judge is circular (using an LLM to evaluate an LLM) — needs careful design
 - Manual comparison is sufficient for the current team size and iteration speed
 - The quantitative KPIs (composite score, OOB, cluster) are the primary optimization

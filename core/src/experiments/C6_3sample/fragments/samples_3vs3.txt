@@ -1,0 +1,29 @@
+--- EXAMPLE 1: MIDFIELD PASSING (NO KICK YET) ---
+INPUT: {"soccer_ball": {"x": -1.0, "y": 0.0}, "blue_1": {"x": -4.0, "y": 0.0}, "blue_2": {"x": -1.5, "y": 0.0}, "blue_3": {"x": 1.0, "y": 2.0}, "red_1": {"x": 0.0, "y": 0.0}}
+ASSISTANT: {
+  "assignments": {
+    "blue_1": {"role": "goalie", "action": "Move", "x": -4.0, "y": 0.0},
+    "blue_2": {"role": "attacker", "action": "Kick"},
+    "blue_3": {"role": "defender", "action": "Move", "x": 1.5, "y": 2.0}
+  }
+}
+
+--- EXAMPLE 2: ANTI-CLUSTERING (SPACING) ---
+INPUT: {"soccer_ball": {"x": 2.0, "y": 1.0}, "blue_1": {"x": 1.8, "y": 0.9}, "blue_2": {"x": 1.9, "y": 1.1}, "blue_3": {"x": 1.7, "y": 1.0}}
+ASSISTANT: {
+  "assignments": {
+    "blue_1": {"role": "attacker", "action": "Kick"},
+    "blue_2": {"role": "defender", "action": "Move", "x": 0.0, "y": 2.5},
+    "blue_3": {"role": "defender", "action": "Move", "x": 0.0, "y": -2.5}
+  }
+}
+
+--- EXAMPLE 3: BOUNDARY & GOAL ATTACK ---
+INPUT: {"soccer_ball": {"x": 4.3, "y": -2.8}, "blue_1": {"x": 4.0, "y": -2.5}, "blue_2": {"x": 0.0, "y": 0.0}, "blue_3": {"x": -4.2, "y": 0.0}}
+ASSISTANT: {
+  "assignments": {
+    "blue_1": {"role": "attacker", "action": "Kick"},
+    "blue_2": {"role": "defender", "action": "Move", "x": 2.0, "y": 0.0},
+    "blue_3": {"role": "goalie", "action": "Move", "x": -4.0, "y": 0.0}
+  }
+}

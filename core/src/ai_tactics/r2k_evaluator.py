@@ -195,7 +195,7 @@ def _get_sys_prompt(status):
         _prompt_cache[key] = _assemble_prompt(status, _active_mode)
     return _prompt_cache[key]
 
-def log_llm_call(world_snapshot, sys_prompt, raw_response, parse_code, latency_ms, tokens_limit, is_explain):
+def log_llm_call(world_snapshot, sys_prompt, raw_response, parse_code, latency_ms, tokens_limit, is_explain, timings=None):
     try:
         prompt_hash = hashlib.sha1(sys_prompt.encode()).hexdigest()[:16]
         record = {
@@ -209,6 +209,16 @@ def log_llm_call(world_snapshot, sys_prompt, raw_response, parse_code, latency_m
             "num_predict": tokens_limit,
             "explain": is_explain,
         }
+        # Ollama cache/timing metrics (from /api/generate response, ns → ms).
+        # prompt_eval_count drops on prefix-cache hits (system prompt reused);
+        # prompt_eval_duration vs eval_duration splits prefill vs generation.
+        if timings:
+            record["prompt_eval_count"] = timings.get("prompt_eval_count")
+            record["eval_count"] = timings.get("eval_count")
+            record["prompt_eval_duration_ms"] = round(timings.get("prompt_eval_duration", 0) / 1e6, 1)
+            record["eval_duration_ms"] = round(timings.get("eval_duration", 0) / 1e6, 1)
+            record["load_duration_ms"] = round(timings.get("load_duration", 0) / 1e6, 1)
+            record["total_duration_ms"] = round(timings.get("total_duration", 0) / 1e6, 1)
         with open(LLM_TRACE_PATH, 'a') as f:
             f.write(json.dumps(record) + "\n")
     except Exception:
@@ -350,7 +360,16 @@ def main():
             lat = int((time.time() - start_t) * 1000)
 
             if resp.status_code == 200:
-                raw_response = resp.json().get("response", "")
+                resp_data = resp.json()
+                timings = {
+                    "prompt_eval_count": resp_data.get("prompt_eval_count"),
+                    "eval_count": resp_data.get("eval_count"),
+                    "prompt_eval_duration": resp_data.get("prompt_eval_duration", 0),
+                    "eval_duration": resp_data.get("eval_duration", 0),
+                    "load_duration": resp_data.get("load_duration", 0),
+                    "total_duration": resp_data.get("total_duration", 0),
+                }
+                raw_response = resp_data.get("response", "")
                 data, err = fast_parse(raw_response)
                 
                 if data:
@@ -358,11 +377,11 @@ def main():
                     data["model_name"] = MODEL_NAME
                     with open(STRATEGY_PATH + ".tmp", 'w') as f: json.dump(data, f)
                     os.replace(STRATEGY_PATH + ".tmp", STRATEGY_PATH)
-                    log_llm_call(min_ents, sys_prompt, raw_response, 0, lat, tokens_limit, is_explain)
+                    log_llm_call(min_ents, sys_prompt, raw_response, 0, lat, tokens_limit, is_explain, timings)
                 else:
                     err_preview = raw_response[:150] if raw_response else "EMPTY RESPONSE"
                     print(f"❌ [Parse Error] KI-Antwort zerstört! Rohdaten: {err_preview}", flush=True)
-                    log_llm_call(min_ents, sys_prompt, raw_response, err, lat, tokens_limit, is_explain)
+                    log_llm_call(min_ents, sys_prompt, raw_response, err, lat, tokens_limit, is_explain, timings)
             else:
                 print(f"❌ [HTTP Error] Ollama meldet Code: {resp.status_code}", flush=True)
             

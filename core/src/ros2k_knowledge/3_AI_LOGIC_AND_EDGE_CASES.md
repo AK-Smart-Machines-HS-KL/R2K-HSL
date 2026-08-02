@@ -299,6 +299,20 @@ Evaluator hashes entity positions (`min_ents` JSON) and skips LLM call if identi
 previous call. At `temperature: 0.0`, identical input → identical output → 64% of calls
 were wasted (171→62 per match).
 
+> [!warning] [2026-08-01] `temperature: 0.0` is NOT bit-exact deterministic across
+> KV-cache states (measured, A/B cache-layout study). Byte-identical prompt + options
+> produced different token streams (pretty vs compact JSON, 118 vs 91 tokens) depending
+> on cache history — fresh prefill vs cached prefix, direction even flipped between
+> test runs. Reproduced with both `OLLAMA_KV_CACHE_TYPE=q8_0` and default f16; the
+> cause is llama.cpp cache-reuse numerics, not KV quantization. Semantic output stays
+> stable, so content-hash skip remains safe. Consequences:
+> - Latency A/B studies must control cache state (disturb with a different world first,
+>   or compare steady-state calls after warming both prefixes).
+> - `prompt_eval_count` is NOT a cache indicator (constant regardless of hits); use
+>   `prompt_eval_duration` (identical calls: 68.9ms → 5.0ms → 3.8ms).
+> - Cache/timing fields in `llm_trace` (prompt_eval_duration_ms, eval_duration_ms, ...)
+>   added 2026-08-01 — see `6_DATA_SCHEMAS_AND_LIFECYCLE.md`.
+
 **Impact:**
 - Effective latency (situation change → strategy output): ~684ms (was ~1328ms)
 - Evaluator is idle 64% of the time instead of busy 100%

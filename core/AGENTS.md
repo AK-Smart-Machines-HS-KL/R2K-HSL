@@ -181,6 +181,12 @@ See `META_KNOWLEDGE_ROUTER.md` §3.
   **[V6.3]** Content-hash skip: the evaluator also hashes `min_ents` and skips the LLM call if
   positions are unchanged. `current_strategy.json` may not update for seconds during stable
   positions — this is normal, not failure. Effective latency ~684ms (was ~1328ms).
+  **[2026-08-01]** `temperature: 0.0` is NOT bit-exact deterministic across KV-cache states
+  (measured): identical prompt+options can yield different token streams (e.g. pretty vs
+  compact JSON, 118 vs 91 tokens) depending on cache history (fresh prefill vs cached prefix).
+  Semantics stay stable, so content-hash skip remains safe; but A/B latency comparisons must
+  control cache state (disturb with a different world before both sides, or compare
+  steady-state calls).
 - `temperature: 0.0` and `num_predict` (150 no-explain / 600 explain) are hardcoded in
   `r2k_evaluator.py` — tune there, not via flags. **[V6.3]** `R2K_EXPLAIN` env var
   (set by `launch_r2k.sh`) controls `{{EXPLAIN_INSTRUCTION}}` replacement in `header.txt`.
