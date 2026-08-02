@@ -33,6 +33,147 @@ os.makedirs(LOG_DIR, exist_ok=True)
 _prompt_cache = {}  # (status, mode) -> assembled prompt string
 _active_mode = None  # determined once at startup from active_scenario.json
 
+# --- Phase I (C3 inter-lingua): text transform mode ---
+# R2K_TEXT_MODE=1 replaces the JSON min_ents world encoding with a condensed
+# text transform in dictionary vocabulary, and expects text-line output
+# ("blue_1 move to (2.2, 0.3)") instead of JSON. Env-gated so K2 can A/B
+# both encodings without code changes. Default 0 = current JSON behavior.
+TEXT_MODE = os.getenv("R2K_TEXT_MODE", "0") == "1"
+
+TEXT_OUTPUT_HEADER = (
+    "Output exactly one line per blue bot in the INPUT above (blue_1, blue_2, "
+    "blue_3, ...). Never use the same bot twice. Format: 'blue_1 move to (X, Y)', "
+    "'blue_1 kick', 'blue_1 cover the goal line at (-4.0, Y)', or "
+    "'blue_1 hold position'. Use the positions from the INPUT. "
+    "Do NOT copy example coordinates."
+)
+TEXT_EXPLAIN_INSTRUCTION = (
+    "Start with 'ANALYSIS: <assessment>', then 'ORACLE: <prediction>', "
+    "then one line per blue bot."
+)
+
+def _build_text_world(ents, match_state, velocities=None):
+    """Condensed text transform of the world snapshot in dictionary vocabulary.
+    Ball first, then blue bots, then red bots; score and status appended.
+    ~250 tok cap (~40 tokens for a 7-line 3vs3 world)."""
+    lines = []
+    if "soccer_ball" in ents:
+        b = ents["soccer_ball"]
+        lines.append(f"soccer_ball at ({b['x']:.1f}, {b['y']:.1f})")
+    for name in sorted(k for k in ents if k.startswith("blue")):
+        v = ents[name]
+        base = f"{name} at ({v['x']:.1f}, {v['y']:.1f})"
+        if velocities and name in velocities:
+            vx, vy = velocities[name]
+            if math.hypot(vx, vy) >= 0.3:
+                base += f" moving ({vx:.1f}, {vy:.1f})"
+        lines.append(base)
+    for name in sorted(k for k in ents if k.startswith("red")):
+        v = ents[name]
+        base = f"{name} at ({v['x']:.1f}, {v['y']:.1f})"
+        if velocities and name in velocities:
+            vx, vy = velocities[name]
+            if math.hypot(vx, vy) >= 0.3:
+                base += f" moving ({vx:.1f}, {vy:.1f})"
+        lines.append(base)
+    ms = match_state or {}
+    lines.append(f"score blue {ms.get('blue', 0)} : {ms.get('red', 0)} red")
+    lines.append(f"status {ms.get('status', 'playing')}")
+    return "\n".join(lines)
+
+def _world_text_from_dict(data):
+    """Render a sample INPUT JSON dict as text world lines (text-mode samples)."""
+    lines = []
+    if "soccer_ball" in data:
+        b = data["soccer_ball"]
+        lines.append(f"soccer_ball at ({b['x']:.1f}, {b['y']:.1f})")
+    for name in sorted(data):
+        if name == "soccer_ball" or not isinstance(data[name], dict):
+            continue
+        v = data[name]
+        if "x" not in v or "y" not in v:
+            continue
+        lines.append(f"{name} at ({v['x']:.1f}, {v['y']:.1f})")
+    return "\n".join(lines)
+
+def _text_from_assignments(assignments, explain_active, analysis_val, oracle_val):
+    """Render sample ASSISTANT assignments as text output lines."""
+    out = []
+    if explain_active:
+        out.append(f"ANALYSIS: {analysis_val}")
+        out.append(f"ORACLE: {oracle_val}")
+    for bot in sorted(assignments):
+        a = assignments[bot]
+        action = a.get("action", "Move")
+        if str(action).lower() == "kick":
+            out.append(f"{bot} kick")
+        elif a.get("role", "") == "goalie":
+            out.append(f"{bot} cover the goal line at ({a['x']}, {a['y']})")
+        else:
+            out.append(f"{bot} move to ({a['x']}, {a['y']})")
+    return "\n".join(out)
+
+def _extract_json_block(content, start_pos):
+    """Brace-match a JSON object starting at start_pos. Returns (json_str, end_idx)."""
+    brace_count = 0
+    json_start = -1
+    for idx in range(start_pos, len(content)):
+        char = content[idx]
+        if char == '{':
+            if brace_count == 0:
+                json_start = idx
+            brace_count += 1
+        elif char == '}':
+            brace_count -= 1
+            if brace_count == 0:
+                return content[json_start:idx + 1], idx + 1
+    return None, -1
+
+def _clean_text_samples(content, explain_active):
+    """Convert sample JSON blocks to text format (Phase I text mode).
+    INPUT JSON -> world lines; ASSISTANT JSON -> bot lines
+    (ANALYSIS:/ORACLE: prefixes in explain mode)."""
+    output = ""
+    last_idx = 0
+    for m in re.finditer(r'INPUT:\s*', content):
+        output += content[last_idx:m.start()]
+        input_json, after_input = _extract_json_block(content, m.end())
+        if input_json is None:
+            output += content[last_idx:]
+            return output
+        a_match = re.search(r'ASSISTANT:\s*', content[after_input:])
+        if not a_match:
+            output += content[last_idx:]
+            return output
+        assistant_pos = after_input + a_match.end()
+        output += content[after_input:after_input + a_match.start()] + "INPUT:\n"
+        try:
+            in_data = json.loads(input_json)
+            world_text = _world_text_from_dict(in_data)
+        except Exception:
+            world_text = ""
+        output += world_text + "\n"
+        assist_json, after_assist = _extract_json_block(content, assistant_pos)
+        if assist_json is None:
+            output += content[last_idx:]
+            return output
+        try:
+            data = json.loads(assist_json)
+        except Exception:
+            try:
+                data = json.loads(re.sub(r'\n\s*', ' ', assist_json))
+            except Exception:
+                data = {}
+        analysis_val = data.get("analysis", "Tactical assessment of entity positions and ball trajectory.")
+        oracle_val = data.get("oracle", "Predictive optimization of team response to secure match advantage.")
+        assignments = data.get("assignments", data)
+        assignments.pop("analysis", None)
+        assignments.pop("oracle", None)
+        output += "ASSISTANT:\n" + _text_from_assignments(assignments, explain_active, analysis_val, oracle_val) + "\n"
+        last_idx = after_assist
+    output += content[last_idx:]
+    return output
+
 def _determine_mode():
     """Read mode from active_scenario.json (written by setup_r2k.py at boot).
     Falls back to '3vs3' if unavailable."""
@@ -154,17 +295,26 @@ def _assemble_prompt(status, mode):
     Fallback: if rules_<status>.txt doesn't exist → skip it (mode rules suffice).
     """
     is_explain = os.getenv("R2K_EXPLAIN", "0") == "1"
-    explain_instr = (
-        "- Include 'analysis', 'oracle', and 'assignments' keys."
-        if is_explain
-        else "- Output ONLY the 'assignments' key."
-    )
+    if TEXT_MODE:
+        explain_instr = TEXT_EXPLAIN_INSTRUCTION if is_explain else TEXT_OUTPUT_HEADER
+        output_format = "OUTPUT FORMAT: " + (TEXT_EXPLAIN_INSTRUCTION if is_explain else TEXT_OUTPUT_HEADER)
+    else:
+        explain_instr = (
+            "- Include 'analysis', 'oracle', and 'assignments' keys."
+            if is_explain
+            else "- Output ONLY the 'assignments' key."
+        )
+        output_format = "Output ONLY pure, raw JSON."
     parts = []
     # Static fragments
     header = _read_fragment("header.txt")
+    header = header.replace("Output ONLY pure, raw JSON.", output_format)
     header = header.replace("{{EXPLAIN_INSTRUCTION}}", explain_instr)
     parts.append(header)
-    parts.append(_read_fragment("rules_core.txt"))
+    if TEXT_MODE:
+        parts.append(_read_fragment("rules_core_text.txt") or _read_fragment("rules_core.txt"))
+    else:
+        parts.append(_read_fragment("rules_core.txt"))
     # Game-phase rules (additive — falls back to nothing if missing)
     if status != "playing":
         phase_rules = _read_fragment(f"rules_{status}.txt")
@@ -176,11 +326,11 @@ def _assemble_prompt(status, mode):
     if status != "playing":
         phase_samples = _read_fragment(f"samples_{status}.txt")
         if phase_samples:
-            parts.append(_clean_json_samples(phase_samples, is_explain))
+            parts.append(_clean_text_samples(phase_samples, is_explain) if TEXT_MODE else _clean_json_samples(phase_samples, is_explain))
     # Mode samples (always loaded)
     mode_samples = _read_fragment(f"samples_{mode}.txt")
     if mode_samples:
-        parts.append(_clean_json_samples(mode_samples, is_explain))
+        parts.append(_clean_text_samples(mode_samples, is_explain) if TEXT_MODE else _clean_json_samples(mode_samples, is_explain))
     # Join with double-newlines between fragments, strip trailing whitespace
     return "\n\n".join(p for p in parts if p.strip()).strip()
 
@@ -244,6 +394,53 @@ def fast_parse(text):
             except: pass
     return None, 3
 
+TEXT_LINE_RE = re.compile(
+    r'^\s*blue_(\d+)\s+(?:move to \((-?[\d.]+),\s*(-?[\d.]+)\)|'
+    r'cover the goal line at \((-?[\d.]+),\s*(-?[\d.]+)\)|(kick)|(hold position))\s*$'
+)
+
+def text_parse(text):
+    """Parse condensed text output (Phase I text mode): one line per bot.
+    Accepts: 'blue_1 move to (2.2, 0.3)', 'blue_1 cover the goal line at
+    (-4.0, 1.5)', 'blue_1 kick', 'blue_1 hold position'. Ignores
+    ANALYSIS:/ORACLE:/prose lines.
+    Returns (assignments_dict, code); code 0 = all lines parsed,
+    1 = partial (some lines unparseable), None if no bot line found
+    (caller falls back to fast_parse)."""
+    assignments = {}
+    partial = False
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        m = TEXT_LINE_RE.match(line)
+        if not m:
+            if line.startswith("blue_"):
+                partial = True
+            continue
+        bot = f"blue_{int(m.group(1))}"
+        if m.group(6):  # kick
+            assignments[bot] = {"role": "attacker", "action": "Kick"}
+        elif m.group(7):  # hold position
+            assignments[bot] = {"role": "defender", "action": "Hold"}
+        elif m.group(4):  # cover the goal line at (x, y) -> role goalie
+            assignments[bot] = {
+                "role": "goalie",
+                "action": "Move",
+                "x": float(m.group(4)),
+                "y": float(m.group(5)),
+            }
+        else:  # move to (x, y)
+            assignments[bot] = {
+                "role": "attacker",
+                "action": "Move",
+                "x": float(m.group(2)),
+                "y": float(m.group(3)),
+            }
+    if not assignments:
+        return None, 2
+    return {"assignments": assignments}, 1 if partial else 0
+
 def main():
     print(f"--- R2K Evaluator (Native Edition) ---", flush=True)
     print(f"Trace log: {LLM_TRACE_PATH}", flush=True)
@@ -279,7 +476,12 @@ def main():
             # so identical input → identical output → wasted GPU time + repetitive
             # visualizer output. Including status in the hash prevents missing
             # status transitions (e.g. ball_out while bots hold still).
-            ents_hash = hash(json.dumps({"ents": ents, "status": status}, sort_keys=True))
+            # Phase I: hash the TRANSFORMED text (or JSON) — the exact payload.
+            if TEXT_MODE:
+                hash_src = _build_text_world(ents, match_state)
+            else:
+                hash_src = json.dumps({"ents": ents, "status": status}, sort_keys=True)
+            ents_hash = hash(hash_src)
             if ents_hash == last_ents_hash:
                 last_mtime = mtime; continue
             last_ents_hash = ents_hash
@@ -323,34 +525,58 @@ def main():
             # Phase 2.5b: Dynamic prompt injection — assemble prompt from fragments
             # based on match_state.status. Cached by (status, mode) tuple.
             sys_prompt = _get_sys_prompt(status)
-            
-            min_ents = {k: {"x": round(v["x"], 1), "y": round(v["y"], 1)} for k, v in ents.items()}
-            
-            # B3 experiment: optionally include match_state in the LLM payload
-            if os.getenv("R2K_INCLUDE_MATCH_STATE", "0") == "1":
-                if match_state:
-                    min_ents["match_state"] = {
-                        "status": match_state.get("status", "playing"),
-                        "restart_team": match_state.get("restart_team", ""),
-                    }
-            
+
             is_explain = os.getenv("R2K_EXPLAIN", "0") == "1"
-            tokens_limit = 600 if is_explain else 150
-            req_keys = "Include 'analysis', 'oracle', and 'assignments' keys." if is_explain else "Output ONLY the 'assignments' key."
-            
-            payload = {
-                "model": MODEL_NAME,
-                "prompt": json.dumps(min_ents) + f"\n\nCRITICAL: Output ONLY valid JSON. {req_keys} End immediately after closing bracket.",
-                "system": sys_prompt,
-                "stream": False,
-                "keep_alive": "1h", 
-                "options": {
-                    "temperature": 0.0, 
-                    "num_predict": tokens_limit,
-                    "num_ctx": 4096,
-                    "stop": ["<|im_end|>", "<|endoftext|>"] 
+
+            # Phase I: text transform (dictionary vocabulary) or JSON min_ents.
+            if TEXT_MODE:
+                world_text = _build_text_world(ents, match_state, velocities)
+                blue_names = ", ".join(sorted(k for k in ents if k.startswith("blue")))
+                user_prompt = (world_text + f"\n\nCommand: {blue_names}\n\n" +
+                               (TEXT_EXPLAIN_INSTRUCTION if is_explain else TEXT_OUTPUT_HEADER))
+                tokens_limit = 600 if is_explain else 200
+            else:
+                min_ents = {k: {"x": round(v["x"], 1), "y": round(v["y"], 1)} for k, v in ents.items()}
+                
+                # B3 experiment: optionally include match_state in the LLM payload
+                if os.getenv("R2K_INCLUDE_MATCH_STATE", "0") == "1":
+                    if match_state:
+                        min_ents["match_state"] = {
+                            "status": match_state.get("status", "playing"),
+                            "restart_team": match_state.get("restart_team", ""),
+                        }
+                
+                tokens_limit = 600 if is_explain else 150
+                req_keys = "Include 'analysis', 'oracle', and 'assignments' keys." if is_explain else "Output ONLY the 'assignments' key."
+                
+                payload = {
+                    "model": MODEL_NAME,
+                    "prompt": json.dumps(min_ents) + f"\n\nCRITICAL: Output ONLY valid JSON. {req_keys} End immediately after closing bracket.",
+                    "system": sys_prompt,
+                    "stream": False,
+                    "keep_alive": "1h", 
+                    "options": {
+                        "temperature": 0.0, 
+                        "num_predict": tokens_limit,
+                        "num_ctx": 4096,
+                        "stop": ["<|im_end|>", "<|endoftext|>"] 
+                    }
                 }
-            }
+            
+            if TEXT_MODE:
+                payload = {
+                    "model": MODEL_NAME,
+                    "prompt": user_prompt,
+                    "system": sys_prompt,
+                    "stream": False,
+                    "keep_alive": "1h", 
+                    "options": {
+                        "temperature": 0.0, 
+                        "num_predict": tokens_limit,
+                        "num_ctx": 4096,
+                        "stop": ["<|im_end|>", "<|endoftext|>"] 
+                    }
+                }
             
             payload["stream"] = False
             
@@ -370,18 +596,26 @@ def main():
                     "total_duration": resp_data.get("total_duration", 0),
                 }
                 raw_response = resp_data.get("response", "")
-                data, err = fast_parse(raw_response)
+                if TEXT_MODE:
+                    # Phase I: text output — regex bot lines, JSON fallback
+                    data, err = text_parse(raw_response)
+                    if data is None:
+                        data, json_err = fast_parse(raw_response)
+                        if data is not None:
+                            err = 10 + json_err  # JSON fallback after failed text parse
+                else:
+                    data, err = fast_parse(raw_response)
                 
                 if data:
                     data["latency_ms"] = lat
                     data["model_name"] = MODEL_NAME
                     with open(STRATEGY_PATH + ".tmp", 'w') as f: json.dump(data, f)
                     os.replace(STRATEGY_PATH + ".tmp", STRATEGY_PATH)
-                    log_llm_call(min_ents, sys_prompt, raw_response, 0, lat, tokens_limit, is_explain, timings)
+                    log_llm_call(world_text if TEXT_MODE else min_ents, sys_prompt, raw_response, 0, lat, tokens_limit, is_explain, timings)
                 else:
                     err_preview = raw_response[:150] if raw_response else "EMPTY RESPONSE"
                     print(f"❌ [Parse Error] KI-Antwort zerstört! Rohdaten: {err_preview}", flush=True)
-                    log_llm_call(min_ents, sys_prompt, raw_response, err, lat, tokens_limit, is_explain, timings)
+                    log_llm_call(world_text if TEXT_MODE else min_ents, sys_prompt, raw_response, err, lat, tokens_limit, is_explain, timings)
             else:
                 print(f"❌ [HTTP Error] Ollama meldet Code: {resp.status_code}", flush=True)
             

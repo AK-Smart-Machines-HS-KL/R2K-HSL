@@ -223,7 +223,7 @@ bash tools/run_baseline.sh baseline_qwen25_3b
 
 **Completion note:** 56 probes run (A–G series + PS_* structure study + VERIFY_*). Delivered: `core/docs/c3_vocabulary_dictionary.md` (usable/borderline/reject entries), `c3_testcase_review.md` (P0–P3 fixes), `c3_scenario_generation_playbook.md` (patterns P1–P10 + anti-patterns A1–A5, validation protocol §10). Key findings: **coordinate rule** (every positional/negational verb carries explicit X,Y — probe-verified E/F/G series), **no derived role labels** (C2_striker_rule: dynamic role definitions rejected by 3B), referee mechanics stay referee-owned. Parallel baseline: 27 runs qwen2.5:3b measured (see §8).
 
-### Phase L: Fragment migration — NEXT (text-only)
+### Phase L: Fragment migration — DONE (text-only, committed d115503)
 
 **Goal:** Rewrite all model-facing prompt fragments in dictionary vocabulary (`core/docs/c3_vocabulary_dictionary.md`). Pure content migration — no structural experiments here (that is Phase F).
 
@@ -239,11 +239,11 @@ bash tools/run_baseline.sh baseline_qwen25_3b
 - Vocabulary restricted to dictionary-usable entries; no striker/passer/supporter
 - **No ROS2K meta-knowledge in model-facing text** (AGENTS.md rule): never mention JSON schema, PID, tmpfs, phantom kick, etc.
 
-**Verification:** `tools/dump_prompt.py` token diff before/after · 3B spot-probes (playbook §10.4 V_A format) · pytest fast suite.
+**Verification (DONE):** `tools/dump_prompt.py` token diff before/after (+5 chars across 21 files, ~591 tokens 3vs3 prompt) · 3B spot-probes LVERIFY_1/2 (closest-bot, midfield, GOAL LINE COVER fired, in-bounds) · pytest fast suite (92 passed).
 
 **Deliverable:** 22 dictionary-compliant fragment files.
 
-### Phase I: Transform builder — NEXT (text-only)
+### Phase I: Transform builder — DONE (text-only, committed 2026-08-01)
 
 **Goal:** Replace the JSON `min_ents` world encoding in `r2k_evaluator.py` with a condensed text transform in dictionary vocabulary (~250 tok cap).
 
@@ -254,9 +254,34 @@ bash tools/run_baseline.sh baseline_qwen25_3b
 - `num_predict` no-explain 150→~200 (text output is longer than JSON)
 - Explain mode keeps `ANALYSIS:`/`ORACLE:`/bot-line sections, `num_predict` 600
 
-**I3 battery:** ~20 situations — verify transform renders sensibly, fits token budget, latency impact vs JSON encoding.
+**I3 battery (20 situations, qwen2.5:3b):** verify transform renders sensibly, fits token budget, latency impact vs JSON encoding.
+
+**Results (final run, 2026-08-01):**
+
+| Metric | JSON | TEXT |
+|---|---|---|
+| Parse OK | 20/20 | 20/20 |
+| Full coverage (one line per bot) | 18/20 | 20/20 |
+| Latency p50 | 928 ms | 443 ms (−52%) |
+| User-prompt tokens | ~48 | ~90 |
+
+**Key fixes found during the battery (3 iterations):**
+1. **Example-copy bug:** with literal example coords in the format spec (`move to (2.2, 0.3)`), the model echoed them verbatim regardless of the world. Fix: `X, Y` placeholders + "Do NOT copy example coordinates" law.
+2. **Coverage bug:** model emitted only 1 line (or repeated the same bot). Fix: explicit "ONE LINE PER BOT — never use the same bot twice" law + "Command: blue_1, blue_2, blue_3" enumeration line in the user payload.
+3. **Restart singularity:** game-phase fragments describe only the restart bot; model dropped the other bots. Fix: "Output one line for every other blue bot too" appended to all 4 game-phase fragments.
+4. **`hold position` verb added** (dictionary-usable): 4th valid output line, parsed to `{"action": "Hold"}`, bridge skips movement (new `action == 'hold'` branch).
 
 **Deliverable:** transform implementation + battery results.
+
+**Implementation (env-gated `R2K_TEXT_MODE=1`):**
+- `r2k_evaluator.py`: `TEXT_MODE`, `TEXT_OUTPUT_HEADER`, `TEXT_EXPLAIN_INSTRUCTION`, `_build_text_world()`, `_clean_text_samples()`, `text_parse()` (regex → assignments, code 0/1/None; JSON fallback via `fast_parse`), content-hash on transformed text, `num_predict` 200/600, `world_text` in trace
+- `strategy/fragments/rules_core_text.txt` (NEW): text-mode rules with VALID OUTPUT LINES + STRICT LAWS (same 4 laws + DO NOT COPY EXAMPLES + ONE LINE PER BOT)
+- `strategy/fragments/rules_{goal_kick,corner_kick_in,ball_out,kickoff}.txt`: ONE LINE PER BOT append
+- `ollama_sandbox_bridge.py`: `action == 'hold'` → skip movement
+- `tests/test_text_mode.py` (NEW, 21 tests)
+- `tools/i3_battery.py` (NEW): JSON-vs-text dual probe battery → `results/i3_battery_report.md` + raw JSONL
+
+**Note (KV-cache variance):** per AGENTS.md 2026-08-01, temperature 0.0 is not bit-exact across cache states; single-run battery numbers are directional, not exact. Text latency advantage (short output) is robust.
 
 ### Phase K: Behavior battery — NEXT (text-only, the decision phase)
 
@@ -567,8 +592,8 @@ Phase 4 (pilot, GAZEBO, qwen2.5:3b) ← requires Phase K5 + F + 2 + 3 (+ optiona
 | Phase | Probes | Mode | Est. time | Gazebo? |
 |---|---|---|---|---|
 | Phase 1 (vocab) | 56 | mixed | ~30 min | No (parallel Gazebo baseline ran ~71min in background) |
-| Phase L (fragment migration) | ~5 spot-checks | no-explain | ~15 min (edits) | No |
-| Phase I (transform battery) | ~20 | no-explain | ~1 min | No |
+| Phase L (fragment migration) | ~5 spot-checks | no-explain | ~15 min (edits) | No (DONE, d115503) |
+| Phase I (transform battery) | ~20 | no-explain | ~1 min | No (DONE, 2026-08-01) |
 | Phase K (behavior battery) | ~120 (60 situations × 2 cells) + K3 gaps | no-explain | ~5 min | No |
 | Phase F3 (structure sweep) | 1200 | mixed | ~20 min | No |
 | Phase F4 (content sweep) | 1500 | mixed | ~20 min | No |

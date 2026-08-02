@@ -1,2 +1,4 @@
 STATUS: goal_kick. The ball is at your goal area (X=-3.5, Y=1.0 or Y=-1.0). Approach from behind, kick the ball upfield toward the opponent goal (X=4.5).
 After the kick, return to normal play.
+
+ONE LINE PER BOT: Output one line for every other blue bot too (goalie, defense, attack as normal).

@@ -1465,3 +1465,32 @@ Output the three target positions.
 blue_1: (-3.6, 0.3), blue_2: (2.0, -2.0), blue_3: (2.2, 0.0)
 
 ---
+
+### LVERIFY_1
+- **system:** You are a soccer analyst. Blue team has 3 bots, red team has 1. Output ONLY raw JSON with keys analysis, oracle, assignments. Rules: closest bot moves to ball and kicks toward opponent goal (X=4.5); one bot covers goal line (X=-4.0) and follows the balls Y position; one bot holds midfield (X=-2.0). Never output X outside [-4.5, 4.5] or Y outside [-3.0, 3.0].
+- **prompt:** {"soccer_ball": {"x": 2.0, "y": 1.5}, "blue_1": {"x": 1.5, "y": 1.0}, "blue_2": {"x": -3.0, "y": 0.0}, "blue_3": {"x": 0.0, "y": -2.0}, "red_1": {"x": 3.0, "y": 1.0}}
+- **latency:** 4841 ms
+- **response:**
+
+{"analysis": "Blue team bot 1 should move closer to the ball as it is closest to the ball and can cover more ground towards the goal.", "oracle": "Blue team: Blue_2 covers midfield (X=-2.0), Blue_1 moves toward ball, Blue_3 stays still.", "assignments": {"blue_1": {"x": 2.5, "y": 1.25}, "blue_2": {"x": -2.0, "y": 1.5}, "blue_3": {"x": 0.0, "y": -2.0}}}
+
+---
+
+### LVERIFY_2
+- **system:** You are a soccer analyst. Blue team has 3 bots, red team has 1. Output ONLY raw JSON with keys analysis, oracle, assignments. Rules: closest bot moves to ball and kicks toward opponent goal (X=4.5); one bot covers goal line (X=-4.0) and follows the balls Y position; one bot holds midfield (X=-2.0). Never output X outside [-4.5, 4.5] or Y outside [-3.0, 3.0].
+- **prompt:** {"soccer_ball": {"x": -3.0, "y": -2.2}, "blue_1": {"x": 2.0, "y": 0.0}, "blue_2": {"x": -4.0, "y": 1.0}, "blue_3": {"x": 0.0, "y": -2.0}, "red_1": {"x": -2.5, "y": -2.0}}
+- **latency:** 1191 ms
+- **response:**
+
+{
+    "analysis": "Blue team's midfield bot is positioned optimally at (-2.0, Y) and should maintain its position while the other two bots close in on the ball. The red team bot should stay near the goal line to intercept any counterattacks.",
+    "oracle": "Red bot will cover the left side of the goal area and blue bots will prioritize closing towards the ball and directing it toward the opponent's goal.",
+    "assignments": {
+        "blue_1": {"x": 2.0, "y": -3.5},
+        "blue_2": {"x": -4.0, "y": -2.8},
+        "blue_3": {"x": 0.0, "y": -2.5},
+        "red_1": {"x": -2.5, "y": -2.0}
+    }
+}
+
+---
