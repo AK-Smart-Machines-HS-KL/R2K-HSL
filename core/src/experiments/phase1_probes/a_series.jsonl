@@ -1,0 +1,14 @@
+{"series": "A1", "prompt": "List all soccer-related words you know. Group them into verbs (actions like kick, pass), nouns (things like goal, midfield), and adjectives (descriptions like offside, attacking). Be comprehensive."}
+{"series": "A2_formation", "prompt": "What does the tactical term \"formation\" mean in soccer? Give one short example of a formation used in a 3 vs 3 small-sided game."}
+{"series": "A2_wing_play", "prompt": "What does the tactical term \"wing play\" mean in soccer? When is it effective?"}
+{"series": "A2_zone_defense", "prompt": "What does \"zone defense\" mean in soccer? How does it differ from man-to-man marking?"}
+{"series": "A2_marking", "prompt": "What does \"marking\" mean in soccer? Give a short instruction sentence a coach would say to a player about marking."}
+{"series": "A2_press", "prompt": "What does \"pressing\" mean in soccer? Give a short instruction a coach would give about pressing the ball carrier."}
+{"series": "A2_high_line", "prompt": "What does a \"high defensive line\" mean in soccer? What is the risk and the reward?"}
+{"series": "A2_counter_attack", "prompt": "What is a \"counter-attack\" in soccer? Describe it in 2 sentences."}
+{"series": "A2_defensive_shadowing", "prompt": "What does \"defensive shadowing\" mean in soccer? Give a short coaching instruction about it."}
+{"series": "A2_passing_lane", "prompt": "What is a \"passing lane\" in soccer? How do you block one? Give a short coaching instruction."}
+{"series": "A2_clearing", "prompt": "What does \"clearing the ball\" mean in soccer? When should a defender clear the ball?"}
+{"series": "A3_roles", "prompt": "Explain in one sentence each what these soccer roles mean: striker, attacker, midfielder, defender, goalie, sweeper, playmaker, supporter."}
+{"series": "A3_striker_def", "prompt": "In a 3 vs 3 soccer game, what should the striker (the player closest to the ball) do?"}
+{"series": "A3_goalie_task", "prompt": "In a 3 vs 3 soccer game, what should the goalie do when the ball is far away from the goal? What when the ball is close?"}

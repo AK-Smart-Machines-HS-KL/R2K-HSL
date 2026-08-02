@@ -1,11 +1,12 @@
 {
-  "scene_type": "2vs2",
-  "label": "default",
+  "scenario_name": "2vs2_default",
+  "mode": "2vs2",
+  "tactical_situation": "Red has possession and is attacking — blue_1 and blue_2 are clustered and out of shape",
   "entities": {
-    "soccer_ball": {"x": 0.0, "y": 0.0},
-    "blue_1": {"x": -2.0, "y": 1.0},
-    "blue_2": {"x": -2.0, "y": -1.0},
-    "red_1": {"x": 2.0, "y": 1.0},
-    "red_2": {"x": 2.0, "y": -1.0}
+    "soccer_ball": {"x": -0.5, "y": 0.5},
+    "blue_1": {"x": -1.8, "y": 0.2},
+    "blue_2": {"x": -1.5, "y": -0.2},
+    "red_1": {"x": -0.4, "y": 0.6},
+    "red_2": {"x": 1.0, "y": 1.0}
   }
 }

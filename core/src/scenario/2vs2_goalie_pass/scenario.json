@@ -1,0 +1,12 @@
+{
+  "scenario_name": "2vs2_goalie_pass",
+  "mode": "2vs2",
+  "tactical_situation": "Goalie has the ball in front of it in the goal area — must become active and pass out to blue_2, who re-kicks immediately toward the uncovered red goal",
+  "entities": {
+    "soccer_ball": {"x": -2.94, "y": 0.19},
+    "blue_1": {"x": -3.4, "y": 0.0},
+    "blue_2": {"x": -1.0, "y": 1.0},
+    "red_1": {"x": -1.2, "y": -0.8},
+    "red_2": {"x": 0.3, "y": 0.4}
+  }
+}

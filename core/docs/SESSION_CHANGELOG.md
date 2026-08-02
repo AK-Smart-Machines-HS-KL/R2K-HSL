@@ -3219,3 +3219,820 @@ for scen in ['attack_center','attack_wing','contain_delay','def_transition','def
   detects large effects. Seeding investigation needed.
 - `batch_evaluator.py` KPI collection still broken (deprecated, carried
   from 2026-07-13)
+
+## 2026-07-31 — Infrastructure cleanup, single commit, baseline results
+
+**Goal:** Reduce infrastructure complexity, commit clean state, summarize
+baseline results for C3 evaluation.
+
+### Cleanup performed
+
+**Evaluator (`r2k_evaluator.py`):**
+- Removed C1 state enrichment (velocity/yaw/score injection, ~20 lines)
+- Removed C4 temporal context (3-snapshot history, ~8 lines)
+- Removed C1/C9 isolation guard (~5 lines)
+- Removed `format: "json"` Ollama grammar constraint entirely (~4 lines)
+- Hardwired future world model prediction: `PREDICT_HORIZON_S = 0.746`
+  (always on, no env var, no Docker passthrough needed)
+- Kept: content-hash fix (status in hash), `import math`, prediction block
+- Net: ~35 lines removed, 3 `os.getenv` calls removed
+
+**Bridge (`ollama_sandbox_bridge.py`):**
+- Reverted goalie weights to hardcoded 0.7/0.3 (removed 2 `os.getenv` calls)
+
+**Tracker (`tracker_node.py`):**
+- Removed yaw extraction (reverted to position-only x, y)
+- Colcon rebuilt in Docker container (clean build, 5 packages, 2.35s)
+
+**Visualizer (`r2k_visualizer.py`):**
+- Removed predicted-position overlay (dotted circles, ~40 lines)
+- Kept: b-key fix, --nav deprecation, --live flag, arrow seek, log name
+
+**Launch script (`launch_r2k.sh`):**
+- Removed 5 C-series env var `-e` passthroughs (ENRICH, HISTORY, PREDICT ×2, GOALIE ×2)
+- U22 and U24 are now identical: no Docker-specific env vars for C-series
+
+**Total:** 11 env vars removed, ~90 lines of code removed
+
+### Commit
+
+Single commit: `e3d01b0` on `feature/v6.3-replay-and-optimization`
+- 21 files changed, 1441 insertions, 632 deletions
+- Includes: evaluator, bridge, tracker, visualizer, launch script, 9 kpi_targets.json, 4 KB power files, spec, AGENTS.md, cheatpage, session changelog
+
+### Baseline results (n=17, 306 runs, 9 scenarios)
+
+**C1 (enrichment only):**
+- Win rate: 17/153 = 11.1% (W/D/L: 17/67/69)
+- Goals: 57:158 (0.37/match scored, 1.03 conceded)
+- OOB avg: 9.4%
+- Best scenario: attack_center (3W/7D/7L = 17.6%), high_line (3W/8D/6L = 17.6%)
+
+**C1+C9 (enrichment + prediction):**
+- Win rate: 18/153 = 11.8% (W/D/L: 18/64/71)
+- Goals: 55:142 (0.36/match scored, 0.93 conceded)
+- OOB avg: 11.2%
+- Best scenario: attack_center (6W/6D/5L = 35.3%)
+
+**Key finding:** C9 prediction does NOT improve win rate at n=17
+(11.1% vs 11.8%, Δ=+0.7pp, n.s.). C9 helps on attack_center (+17.6pp)
+but hurts on high_line (-17.6pp) and pressing_trap (-17.6pp). Effects
+cancel in aggregate.
+
+**C1's earlier 40% win rate (n=5) was small-sample noise.** At n=17,
+C1's true win rate is 11.1% — close to the raw baseline. The 3B model
+with any combination of enrichment/prediction wins ~11% of matches.
+
+### What C3 needs to beat
+
+- **Win rate: >11.8%** (C1+C9 baseline)
+- **Goals conceded: <0.93/match** (C1+C9 baseline)
+- **OOB: <9.4%** (C1 baseline; C3's deterministic mapper should eliminate OOB)
+- **Win rate on attack_center: >35.3%** (C1+C9 best scenario)
+
+### Next session
+
+1. Design C3 architecture (LLM for intent + rule-based mapper for waypoints)
+2. Implement C3 mapper (~50 lines Python)
+3. Run C3 experiments against baselines (n=17, 9 scenarios, ~12h)
+4. Gazebo deterministic seeding investigation
+
+### Blockers
+
+- Gazebo physics variance (CV=90-129% on goals/shots/OOB) — n=17 only
+  detects large effects. Seeding investigation needed.
+- `batch_evaluator.py` KPI collection still broken (deprecated, carried
+  from 2026-07-13)
+
+## 2026-07-31 (continued) — C3 Phase 0: Literature research, phase plan rework (Phases F + W, text-only)
+
+**Goal:** Conduct Phase 0 literature research for the C3 inter-lingua
+approach. Correct the initial analysis based on user feedback (no
+rule-based mapper, controlled vocabulary not JSON API, composite score
+as diagnostic, world models long-term). Re-plan with two new phases
+(Phase F: few-shot paradigm rework, Phase W: watchdog & closed-loop
+feedback) — both text-only (no Gazebo, synthetic world data, LLM output
+analysis). Write the plan document.
+
+**Done:**
+
+### Literature surveyed (Phase 0)
+
+- **LLCoach** (Brienza 2024, arxiv 2406.18285): RoboCup SPL + multi-role
+  LLM generating soccer plans. Closest domain analog. Validates LLM-coach
+  architecture for RoboCup. Key difference: they use large LLM at
+  play-level granularity; we use 3B at tick-level (~750ms).
+- **SayCan** (Ahn 2022, arxiv 2204.01691): NL action labels + affordance
+  function. Validates controlled-vocabulary-in-NL form. The "affordance"
+  = feasibility check is separate from the LLM.
+- **RoboMatrix** (Mao 2024, arxiv 2412.00171): Skill-centric 3-layer
+  hierarchy. +50% over monolithic. Validates decomposition > monolithic
+  for small models.
+- **BTGenBot-2** (Izzo 2026, arxiv 2602.01870): 1B model generates BTs
+  from NL + action primitive list. 90% zero-shot, beats GPT-5. **Most
+  actionable:** small models work when (a) vocab is small and
+  pre-specified, (b) primitive list given as input.
+- **EmboTeam** (Zeng 2026, arxiv 2601.11063): LLM→PDDL→planner→BT.
+  12%→55%. The classical planner is a *verifier* — catches LLM errors.
+  We don't have one (no rule-based mapper) → watchdog (Phase W) addresses
+  this.
+- **SCOPE** (Hindsbo 2026, arxiv 2606.02951): Qwen3 SLMs for NL tool
+  routing. "Once SLM is capable enough, perception becomes the
+  bottleneck" → connects to "world models not overkill long-term."
+- **HALO** (Hou 2025, arxiv 2505.13516): Hierarchical multi-agent prompt
+  design. Adaptive Prompt Refinement = our dynamic prompt injection.
+  Role separation can be within one prompt, not multiple models.
+- **Correlation matrix rank self-verifier** (Liu 2025, arxiv 2510.24299):
+  LLM checks own output via internal activations. 75% accuracy. Relevant
+  to watchdog Option A (but needs direct transformers access, not Ollama
+  REST).
+- **LLMs gaming verifiers** (Helff 2026, arxiv 2604.15149): Imperfect
+  verifiers admit false positives. Warning for watchdog Option B
+  (mitigated: monitor checks world consistency, not output quality).
+- **Orchestration gap** (Galanti 2026, arxiv 2607.21725): Separating
+  reasoning from execution = 4× improvement. The watchdog IS the
+  orchestrator — outcome tracking + failure recovery.
+- From handover: ECoT, Two-Calls-Beat-Five-Agents, C9 (all re-read with
+  corrected framing).
+
+### GitHub search
+
+- 0 results for "robot instruction + controlled vocabulary + intermediate
+  representation" and "LLM robot soccer instruction natural language."
+  This intersection is too niche for public repos. Our work fills the gap.
+
+### Corrected framing (from user feedback)
+
+| Initial assumption | Corrected |
+|---|---|
+| Rule-based mapper in bridge | No new mapper. LLM outputs instruction sentences directly. |
+| JSON skill API | Controlled vocabulary: verb+noun+adjective NL sequences |
+| Composite = wrong metric | Composite = diagnostic (what to improve, not whether won) |
+| World models = overkill | Not overkill long-term. Phase 5.1 stays on roadmap. |
+| Gazebo runs for F/W | No Gazebo. Text-only LLM analysis with synthetic world data. |
+
+### Two new phases designed
+
+**Phase F: Few-shot paradigm rework** (text-only, after Phase 1)
+- F1: Build `tools/llm_probe.py` + ~100 synthetic world-states (from
+  existing trace data + hand-crafted edge cases)
+- F2: Define 9 text-analysis metrics (parse_success, vocab_compliance,
+  rule_following, analysis_quality, oracle_quality, contradiction_score,
+  role_coverage, continue_accuracy, latency)
+- F3: Structure sweep (F0=baseline separate, F1=rules-inline, F2=no-
+  global-text extreme, F3=axioms-only-global) — ~1200 probes, ~21.5 min
+- F4: Content sweep (sample count 1/3/6, roles 0/3/5, rule density,
+  analysis/oracle presence) — ~1500 probes, ~20 min
+- F5: Qualitative deep-dive on top 2–3 configs
+- **No Gazebo.** LLM text output analyzed directly. ~80× faster iteration.
+
+**Phase W: Watchdog & closed-loop feedback** (text-only, parallel to
+Phase 2–3)
+- W1: Synthetic divergence scenarios (no-div, ball-div, bot-div, score-
+  div, status-div, noise)
+- W2: Test Option A — re-prompt 3B on divergence (~1190ms per re-prompt,
+  ~2 min for 50 scenarios)
+- W3: Test Option B — second model (1.5B) as monitor (~400ms per check,
+  ~40 sec for 50 scenarios × 2 models)
+- W4: Compare and decide (accuracy, latency, simplicity, GPU contention)
+- **No Gazebo.** Synthetic world data + LLM output analysis.
+
+### Model switch: qwen2.5-coder:3b → qwen2.5:3b
+
+Investigated Qwen2.5-Coder training data via technical report (arxiv
+2409.12186). The training corpus is 70% source code, 20% text-code
+grounding, 10% math. Soccer vocabulary is not in-distribution for a
+code-specific model. Switched to Qwen2.5-3B-Instruct (general-purpose)
+which has broader web/book/multilingual text exposure.
+
+Consequences:
+- C-series Gazebo baselines (11.8% WR) invalidated — new baseline
+  with qwen2.5:3b runs parallel to Phase 1
+- Architecture continuity preserved (same Qwen2.5 arch, evaluator/
+  bridge/trace/logging all work identically)
+- Llama-3.2-3B added as regression test (Phase 4b) to test inter-lingua
+  generalizability across model families. Also candidate for Phase 5
+  edge deployment (Jetson AGX/Orin for K1 onboard).
+
+### Latency budget (corrected for qwen2.5:3b)
+
+| Mode | num_predict | Est. p50 | Impact on F/W |
+|---|---|---|---|
+| `--no-explain` | 150 | ~700ms | F0 baseline, no-analysis configs |
+| `--explain` | 600 | ~1100ms | F1–F3 interwoven, watchdog re-prompt |
+
+Estimates from Coder model (same architecture). Verify on first probe.
+
+Total text-only phases (1 + F + W + 4b): ~3100 probes, ~76 min. Compare:
+one 27-run Gazebo baseline = ~45 min + container restart overhead.
+
+### Phase plan written
+
+`core/docs/c3_phase0_literature_and_plan.md` (~530 lines):
+- §0: Corrected framing (incl. model switch)
+- §1: Literature table (11 papers + handover papers)
+- §1.1: Model switch analysis (Qwen2.5-Coder training data → qwen2.5:3b)
+- §2: 9 key takeaways (incl. model choice + Llama 3.2 regression)
+- §3: Latency budget (corrected for qwen2.5:3b)
+- §4: Text-only iteration loop
+- §5: Phase plan (Phases 0–5 + F + W + 4b, all text-only except Phase 4–5)
+- §6: Phase dependency graph (with parallel baseline + Llama regression)
+- §7: Time budget summary
+- §8: Baselines to beat (old invalidated + new TBD)
+- §9: Gaps our work fills (novelty, incl. cross-model validation)
+- §10: Files to read (with arxiv references)
+
+**Files touched:**
+- `core/docs/c3_phase0_literature_and_plan.md` (NEW — ~530 lines, updated with model switch)
+- `core/docs/SESSION_CHANGELOG.md` (this entry + model switch update)
+
+**New files (untracked):**
+- `core/docs/c3_phase0_literature_and_plan.md`
+
+**Files deleted:**
+- (none)
+
+**Not yet done:**
+- Phase 1 (vocabulary probing) — interactive, next session
+- `tools/llm_probe.py` — to be built in Phase F1
+- `tests/synthetic_worldstates/` — to be built in Phase F1
+- `tests/synthetic_divergence/` — to be built in Phase W1
+- Interwoven sample fragments (`samples_interwoven_3vs3.txt` etc.) — to
+  be authored in Phase F3
+- User must `ollama pull qwen2.5:3b` before Phase 1
+- New Gazebo baseline (27 runs, qwen2.5:3b) must run parallel to Phase 1
+- Nothing committed
+
+**Next:**
+- User: `ollama pull qwen2.5:3b`
+- User: launch `bash tools/run_baseline.sh baseline_qwen25_3b` in
+  background (27 runs, ~45min)
+- Phase 1: Interactive vocabulary probing with qwen2.5:3b via Ollama API.
+  Discover soccer verb+noun+adjective sequences the model already knows.
+  Output: controlled vocabulary + few-shot template sketches.
+- Then Phase F1: build `llm_probe.py` + synthetic world-state dataset.
+- Then Phase F3: structure sweep (~20 min, no Gazebo).
+
+**Blockers:**
+- Ollama must be reachable on GPU. User must `ollama pull qwen2.5:3b`
+  and verify GPU load before Phase 1.
+- `batch_evaluator.py` KPI collection still broken (deprecated, carried
+  from 2026-07-13 — orthogonal to C3 text-only phases)
+
+## 2026-07-31 (final) — Model switch, baseline run, Phase 0 plan updates
+
+**Goal:** Switch from qwen2.5-coder:3b to qwen2.5:3b (general-purpose),
+run a new 27-run Gazebo baseline, and update the Phase 0 plan with real
+measured data.
+
+**Done:**
+
+### Model switch: qwen2.5-coder:3b → qwen2.5:3b
+
+Investigated Qwen2.5-Coder training data via technical report (arxiv
+2409.12186). The corpus is 70% source code, 20% text-code grounding,
+10% math. Soccer vocabulary is not in-distribution for a code-specific
+model. Switched to Qwen2.5-3B-Instruct (general-purpose) which has
+broader web/book/multilingual text exposure.
+
+- `launch_r2k.sh:12`: default model changed from `qwen2.5-coder:3b`
+  to `qwen2.5:3b`. Help text at line 40 updated.
+- `tools/run_baseline.sh`: added `MODEL` variable (2nd CLI arg, default
+  `qwen2.5:3b`). `launch_r2k.sh` call now passes `--model "$MODEL"`.
+  Usage comment updated.
+- `bash -n` syntax check passes on both files.
+
+### Ollama bind-address fix (recurring)
+
+- Ollama was started manually (not via systemd), bound to `127.0.0.1`
+  instead of `0.0.0.0`. Container-reachability guard in `launch_r2k.sh`
+  caught it: "Ollama ist vom Docker-Container aus nicht erreichbar!"
+- Fix: killed all ollama processes, restarted with
+  `OLLAMA_HOST=0.0.0.0:11434 OLLAMA_ORIGINS=* OLLAMA_FLASH_ATTENTION=1
+  OLLAMA_KV_CACHE_TYPE=q8_0 OLLAMA_MODELS=/home/r-zwei-kickers/.ollama/models
+  OLLAMA_KEEP_ALIVE=-1 nohup ollama serve`
+- Verified: `ss -tlnp` shows `*:11434` (all interfaces). Container
+  can reach `172.17.0.1:11434/api/tags`.
+- This is the 4th time this bug recurred (2026-07-20, 07-23, 07-27,
+  07-31). The systemd override exists but only works if ollama is
+  started via systemd. Manual starts need the env var.
+
+### New baseline: 27 runs with qwen2.5:3b (COMPLETE)
+
+`bash tools/run_baseline.sh baseline_qwen25_3b qwen2.5:3b`
+
+All 27/27 runs produced KPIs (4279s = 71min). Summary saved to
+`results/baseline_qwen25_3b_summary.md`.
+
+| Scenario | Goals B:R | Composite | OOB% | Cluster% | Goalie Idle% | Possession% | Latency p50 |
+|---|---|---|---|---|---|---|---|
+| attack_center | 2:1 | 0.34 | 7.7% | 7.4% | 78.1% | 49.3% | 751ms |
+| attack_wing | 3:1 | 0.39 | 10.6% | 30.1% | 73.9% | 53.4% | 743ms |
+| contain_delay | 2:3 | 0.32 | 16.7% | 20.3% | 77.4% | 32.9% | 742ms |
+| def_transition | 2:5 | 0.34 | 13.7% | 13.2% | 77.3% | 53.0% | 745ms |
+| defensive_crisis | 0:3 | 0.25 | 4.5% | 12.2% | 93.9% | 26.3% | 740ms |
+| fast_counter | 0:1 | 0.33 | 13.2% | 43.7% | 91.6% | 63.8% | 741ms |
+| high_line | 2:4 | 0.27 | 26.2% | 22.1% | 89.8% | 36.2% | 744ms |
+| long_shot | 0:1 | 0.31 | 23.4% | 49.6% | 83.5% | 49.1% | 743ms |
+| pressing_trap | 0:2 | 0.33 | 2.9% | 37.5% | 89.7% | 55.5% | 744ms |
+
+**Aggregate:** 11 goals scored, 21 conceded. Avg composite 0.32.
+Avg latency p50: 744ms.
+
+**vs old C-series baseline (qwen2.5-coder:3b):**
+- Old C1+C9: 55 goals scored, 142 conceded across 153 runs (0.36/match
+  scored, 0.93 conceded). Win rate 11.8%.
+- New qwen2.5:3b: 11 goals scored, 21 conceded across 27 runs (0.41/match
+  scored, 0.78 conceded).
+- Goal-scoring rate slightly improved (0.41 vs 0.36/match). Concession
+  rate improved (0.78 vs 0.93/match). The general model is marginally
+  better at soccer than the coder model — confirms the training-data
+  hypothesis.
+- Latency: 744ms (new) vs 746ms (old C1) — essentially identical.
+
+### Phase 0 plan updated with real data
+
+`core/docs/c3_phase0_literature_and_plan.md` (~590 lines):
+- §3: Latency budget updated — p50=761ms (measured, was estimate)
+- §8: Baselines to beat — replaced TBD with measured 27-run table.
+  New C3 targets: goals conceded <0.78/match, OOB <7.7%, best scenario
+  composite >0.39, latency ≤761ms.
+
+**Files touched:**
+- `core/launch_r2k.sh` (default model: qwen2.5-coder:3b → qwen2.5:3b)
+- `core/src/tools/run_baseline.sh` (added MODEL variable + --model arg)
+- `core/docs/c3_phase0_literature_and_plan.md` (§3 latency, §8 baselines)
+- `core/docs/SESSION_CHANGELOG.md` (this entry)
+
+**New files (untracked):**
+- `core/src/results/kpis_baseline_qwen25_3b_*.json` (27 KPI files)
+- `core/src/results/baseline_qwen25_3b_*.log` (27 run logs)
+- `core/src/results/baseline_qwen25_3b_summary.md`
+- `core/src/results/baselines_qwen25_3b.log` (runner log)
+
+**Files deleted:**
+- (none)
+
+**Not yet done:**
+- Phase 1 (vocabulary probing) — interactive, next session
+- `tools/llm_probe.py` — to be built in Phase F1
+- Interwoven sample fragments — to be authored in Phase F3
+- Nothing committed
+
+**Next:**
+- Phase 1: Interactive vocabulary probing with qwen2.5:3b via Ollama API.
+  Discover soccer verb+noun+adjective sequences. Output: controlled
+  vocabulary + few-shot template sketches.
+- Then Phase F1: build `llm_probe.py` + synthetic world-state dataset.
+- Then Phase F3: structure sweep (~20 min, no Gazebo).
+
+**Blockers:**
+- None — Ollama on GPU (3128MiB VRAM), qwen2.5:3b warm, baseline complete.
+- `batch_evaluator.py` KPI collection still broken (deprecated, carried
+  from 2026-07-13 — orthogonal to C3 text-only phases)
+
+## 2026-08-01 — C3 Phase 1: vocabulary probing (44 probes), test case review, dictionary
+
+**Goal:** Execute Phase 1 (vocabulary probing with qwen2.5:3b), produce the
+controlled-vocabulary dictionary, and deliver the auxiliary test-case review
+(TC-01..09 + 2vs2) with recommended adjustments.
+
+**Done:**
+
+### Phase 1 probing tool (`tools/vocab_probe.py`, NEW — 117 lines)
+- Thin Ollama wrapper: `--prompt`, `--series`, `--system`, `--batch <jsonl>`.
+  temperature 0.0, num_predict 600, keep_alive 1h, stream false.
+- Appends every probe (series, prompt, latency, full response) to
+  `results/vocab_probe_log.md` — evidence-based, no memory dependence.
+- Batch files in `experiments/phase1_probes/`: `a_series.jsonl` (14 probes),
+  `b_series.jsonl` (18), `c_series.jsonl` (12). Total 44 probes.
+
+### Probe battery (all 44 run, logged)
+- **A-series (free elicitation):** A1 word-list categorization; A2 tactical
+  terms (formation, wing play, zone defense, marking, press, high line,
+  counter-attack, defensive shadowing, passing lane, clearing); A3 roles
+  (8 roles, striker task, goalie task).
+- **B-series (instruction formation):** 6 real `world_trace` frames
+  extracted from the qwen2.5:3b baseline runs (7-31) → single-bot
+  instructions; 3 frames with all-3-bot coverage; 10 template-verb probes
+  (move/receive/support/clear/mark/hold/press/cover/chase).
+- **C-series (comprehension):** contradiction test (ball at center),
+  6 acceptance-criteria phrases from `c3_revisited.txt`, 5 referee-situation
+  probes (ball-out, goal-kick, corner, kickoff, foul).
+- Latency: conversational probes mean ≈550ms (range 196–1009ms); warm
+  trivial prompt ~110–140ms. Spec §3's 761ms is the full-pipeline figure —
+  unchanged.
+
+### Dictionary (`core/docs/c3_vocabulary_dictionary.md`, NEW)
+- Verbs: **usable** — move to X,Y, receive pass, support run, hold
+  position, mark X, clear the ball, cover the goal line, pass/shoot/cross.
+  Borderline — press the ball (human "use your hands" twist), chase the
+  ball (lacks speed/angle detail).
+- Nouns/zones: formation, goal/goal line, center, wing/flank/sideline,
+  passing lane all usable. "penalty area" borderline (our field has a goal
+  area, not a box).
+- Roles: goalie/attacker/defender usable (goalie two-mode description
+  matches our blending: far → positioning, close → intercept).
+- **CRITICAL FINDING (C2_striker_rule):** the dynamic-role definition
+  "the striker is the bot closest to the ball" is **rejected** by
+  qwen2.5:3b — it hedges ("could be considered... but not necessarily")
+  and falls back to static human-soccer semantics. This is the exact
+  "contradictive argumentation" pattern the inter-lingua must remove,
+  and it originates in the role concept itself. **Phase 2 must prefer
+  situation-triggered position verbs over derived role labels.**
+- Acceptance phrases: 5 of 6 usable as-is (center-control, wing play,
+  cross timing, zone-defend, shadowing). Only the dynamic-striker phrase
+  fails.
+- Referee/set-piece concepts: **weak** — ball-out partial (direction right,
+  mechanics wrong), attacker-over-goal-line interpreted as a goal, kickoff
+  wrong, corner placement wrong, foul partial. Decision: all restart/foul
+  mechanics stay referee-owned (via `match_state`); LLM only needs passive
+  restart-awareness.
+- Contradiction baseline: direct unambiguous question → contradiction-free
+  answer. The 73% contradiction failure is prompt-context, not model
+  incapability.
+
+### Test case review (`core/docs/c3_testcase_review.md`, NEW — aux deliverable)
+Reviewed all 10 `analysis.md` files + `scenario.json` positions against the
+current architecture:
+
+**P0 (fix now, architecture facts):**
+- **TC-05 pressing_trap:** no blue bot near own goal in `scenario.json`
+  (blue_1 0.3/0.3, blue_2 -1.0/0.8, blue_3 -2.0/-0.5) but oracle says
+  "play back to the goalie" — impossible instruction.
+- **TC-09 high_line:** "pressing red offside" — **no offside rule exists**
+  in `referee_node.py`; goalie identity undefined (no bot starts in goal);
+  "sweeper goalie" conflicts with goalie blending override.
+- **TC-08 def_transition + 2vs2:** reference dropped `role_diversity` KPI.
+- **2vs2_default:** goalie at X=-4.0 but no bot starts there; still v5
+  schema (`scene_type`/`label`).
+
+**P1 (wording):** stale roles everywhere (striker/supporter in TC-01,
+TC-04, TC-06, 2vs2); TC-01 goalie X=-4.2 actual; TC-03 kick-direction
+(role-aware kick aims at opponent goal, "clear to sideline" not
+executable); TC-06 shot range X>0.5 trivial (ball starts at 3.15),
+goal mouth ±0.9 not ±1.5.
+
+**P2 (dictionary-grounded):** remove dynamic role definitions everywhere;
+verify TC-07 zone-defend/shadowing phrases (both USABLE per dictionary).
+
+**P3:** TC IDs in headers; full rework; TC-10 kick_in creation.
+
+**Files touched:**
+- `core/src/tools/vocab_probe.py` (NEW — Phase 1 probe tool)
+- `core/src/experiments/phase1_probes/a_series.jsonl` (NEW)
+- `core/src/experiments/phase1_probes/b_series.jsonl` (NEW)
+- `core/src/experiments/phase1_probes/c_series.jsonl` (NEW)
+- `core/src/results/vocab_probe_log.md` (NEW — 44 probe records)
+- `core/docs/c3_vocabulary_dictionary.md` (NEW)
+- `core/docs/c3_testcase_review.md` (NEW)
+- `core/docs/SESSION_CHANGELOG.md` (this entry)
+
+**Files deleted:**
+- (none)
+
+**Not yet done:**
+- P0/P1 test-case fixes (TC-05 goalie gap, TC-09 offside, TC-08/2vs2
+  role_diversity, stale roles) — applied only in the review doc, NOT yet
+  to `scenario/*/analysis.md` files.
+- Phase 2 (rework `analysis.md` with dictionary vocabulary) — next.
+- New probes for borderline entries: "own half / opponent half",
+  "kick-in", "mark vs cover", corner placement.
+- `llm_probe.py` (Phase F1) — not built.
+- Nothing committed — all work uncommitted on
+  `feature/v6.3-replay-and-optimization` (branch from session_entry.sh
+  output; previously `feature/ros2k_behavior_optimization` body of work
+  was committed in e3d01b0).
+
+**Next:**
+- Apply P0/P1 fixes to `scenario/*/analysis.md` (architecture facts —
+  no probing needed), then run Phase 2 with the dictionary: rework the
+  10 description files in Qwen's vocabulary (position verbs, no dynamic
+  roles), translate referee rules per `referee_node.py`.
+- Run the ~5 new borderline probes first to complete dictionary §8.
+
+**Blockers:**
+- None for text-only phases. Ollama on GPU, qwen2.5:3b warm.
+- `batch_evaluator.py` KPI collection still broken (deprecated, carried
+  from 2026-07-13 — orthogonal to C3 text-only phases).
+- `session_entry.sh` generated the stub with a minor error (`[: 0
+  0: integer expression expected`) and only prints to stdout — entry
+  appended manually.
+
+## 2026-08-01 (continued) — D-series probes, P0/P1 test-case fixes applied
+
+**Goal:** Complete the borderline probe battery (D-series), then apply the
+P0/P1 fixes from `c3_testcase_review.md` to the scenario `analysis.md` files.
+
+**Done:**
+
+### D-series probes (6 new, total 50 probes in Phase 1)
+- `experiments/phase1_probes/d_series.jsonl` (NEW): D1 own half, D2 kick-in,
+  D3 mark vs cover, D4 corner placement, D5 goal area, D6 clear near goal.
+  All run, logged to `results/vocab_probe_log.md`.
+- **Verdicts (merged into dictionary §1/§2/§4/§8):**
+  - D1 "own half": usable only with explicit bound ("X from -4.5 to 0");
+    "opponent half" broken (model said "+4.5 to 9" — treats field as 0..9
+    range) → rephrase as "the red side of the center line".
+  - D2 kick-in placement: placement logic **correct** ("touchline at
+    Y=3.0" matches referee warp); terminology wrong ("direct free-kick")
+    → referee-owned.
+  - D3 mark vs cover: both understood AND distinct → both Usable.
+    "cover a zone" added as new verb entry.
+  - D4 corner placement: **hallucinated** ("corner flags at (0,-3) and
+    (9,-3)"; actual ±4.5/±3.0) → referee-owned.
+  - D5 goal area: **hallucinated** ("X=-4.5 to -6.5" — off the field) →
+    Reject; concrete coordinates only.
+  - D6 clear: defender "position yourself between the ball and the
+    goalmouth" correct; goalie "dive left" impossible for bots → "between
+    ball and goal" phrasing usable, "dive" never.
+- Dictionary §8 updated: new-probes item → DONE with results.
+
+### P0/P1 fixes applied (scenario `analysis.md` + `scenario.json`)
+- **TC-01 attack_center:** striker→attacker, supporter→defender, goalie
+  X=-4.0→-4.2 (actual scenario.json position).
+- **TC-03 defensive_crisis:** "clear toward the sidelines" → "kick the
+  ball upfield" (role-aware kick aims at opponent goal — sideline clear
+  not executable); goalie action specified explicitly (hold goal line,
+  track ball in Y).
+- **TC-04 fast_counter:** striker→attacker, supporter→defender.
+- **TC-05 pressing_trap:** oracle rewritten — "play back to the goalie"
+  → "play back to the deepest blue bot" (no bot near own goal at
+  kickoff; user chose text-only fix, scenario.json unchanged).
+- **TC-06 long_shot:** supporter→attacker (rebound follow-up on the
+  attacker); shot range X>0.5/|Y|<1.5 → ball X>2.0/|Y|<1.0 (aligned to
+  goal mouth ±0.9, discriminating at this scenario's starting state).
+- **TC-08 def_transition:** role_diversity reference removed → replaced
+  with "`shots_on_goal` and `restart_recovery_time_s` are the KPIs to
+  watch".
+- **TC-09 high_line:** offside removed (no offside rule in
+  `referee_node.py`); red_2-behind-line risk stated in fact; sweeper
+  contradiction resolved — cover bot (blue_1) drops back, note that
+  goalie blending pulls it to the line when ball is near.
+- **2vs2_default:** "one goalie (X=-4.0)" → "one bot falls back to
+  goalie position (X≈-4.0)"; striker→attacker; role_diversity reference
+  removed. **scenario.json migrated v5 → v6 schema** (`scenario_name`/
+  `mode`/`tactical_situation`; user approved).
+- **3vs3_default:** same stale-role fix as TC-01 (legacy clone of TC-01
+  positions; X=-4.0→-4.2, striker/supporter→attacker/defender).
+- Verification: 92 fast tests pass, no stale role/KPI references remain
+  in `scenario/` (grep clean).
+
+**Files touched:**
+- `core/src/experiments/phase1_probes/d_series.jsonl` (NEW)
+- `core/src/results/vocab_probe_log.md` (6 more probe records, total 50)
+- `core/docs/c3_vocabulary_dictionary.md` (§1 cover-a-zone verb, §2 own
+  half, §4 D2/D4/D5/D6 rows, §8 DONE)
+- `core/src/scenario/3vs3_attack_center/analysis.md` (roles, X=-4.2)
+- `core/src/scenario/3vs3_default/analysis.md` (roles, X=-4.2)
+- `core/src/scenario/3vs3_defensive_crisis/analysis.md` (upfield clear,
+  goalie action)
+- `core/src/scenario/3vs3_fast_counter/analysis.md` (roles)
+- `core/src/scenario/3vs3_pressing_trap/analysis.md` (oracle rewrite)
+- `core/src/scenario/3vs3_long_shot/analysis.md` (roles, shot range)
+- `core/src/scenario/3vs3_def_transition/analysis.md` (KPI reference)
+- `core/src/scenario/3vs3_high_line/analysis.md` (offside, sweeper)
+- `core/src/scenario/2vs2_default/analysis.md` (goalie fallback text)
+- `core/src/scenario/2vs2_default/scenario.json` (v6 schema migration)
+- `core/docs/c3_testcase_review.md` (APPLIED note added)
+- `core/docs/SESSION_CHANGELOG.md` (this entry)
+
+**Files deleted:**
+- (none)
+
+**Not yet done:**
+- P2 (full dictionary rework of all 10 files — position verbs, no dynamic
+  roles) — Phase 2, next.
+- P3: TC IDs in headers; TC-10 kick_in creation (Phase 5).
+- TC-05/2vs2 open questions resolved: text-only fixes chosen, scenario
+  positions unchanged.
+- `llm_probe.py` (Phase F1) — not built.
+- Nothing committed — all work uncommitted.
+
+**Next:**
+- Phase 2: rework the 10 `analysis.md` files in dictionary vocabulary
+  (situation-triggered position verbs, no role-derived instructions,
+  universal-knowledge phrases moved to a knowledge module per review
+  cross-cutting item 2).
+
+**Blockers:**
+- None for text-only phases. Ollama on GPU, qwen2.5:3b warm.
+- `batch_evaluator.py` KPI collection still broken (deprecated, carried
+  from 2026-07-13 — orthogonal to C3 text-only phases).
+
+## 2026-08-01 (continued) — TC-02..05 walkthrough, Expert/Oracle semantics fixed, coordinate rule probed, scenario-generation playbook
+
+**Goal:** Walk all test scenarios with human-in-the-loop feedback, fix the
+Expert/Oracle section semantics, empirically verify that oracle text requires
+explicit coordinates, and hand over the session decisions + human soccer
+knowledge into a reusable scenario-generation playbook.
+
+**Done:**
+
+### TC walkthrough (human feedback → translated → verified)
+
+- **TC-02 attack_wing:** Expert first (angle too narrow, ball between blue_1
+  and goal, red_2 far off will block, red_3 out of reach, blue_2 too far back
+  for a backcourt pass); Oracle (blue_1 moves around ball, passes if blocked;
+  blue_2 must actively take receiver position before the pass; blue_3 deep
+  cover).
+- **TC-03 defensive_crisis:** Expert (red_1 ON the ball, blue_1 only bot
+  positioned to react directly, blue_2 anticipates, blue_3 lane blocked by
+  red_2); Oracle (blue_1 intercepts, blue_2 cuts the dribble lane, blue_3 to
+  left lane for pass/rebound).
+- **TC-04 fast_counter:** Expert (free time to maneuver, blue_2 too far back,
+  red_2/red_3 ignorable); Oracle with coordinates (blue_2 → -1.5,-2.5 left
+  wing, blue_1 → -1.8,-0.4 kicking position, blue_3 stays back -4.0,0.0).
+- **TC-05 pressing_trap:** Expert (red press, blue_3 too far from goal area);
+  Oracle (blue_1 keeps ball/passes, blue_2 → 0.0,0.8 center line backup,
+  blue_3 stays back).
+
+### Section semantics fixed (user correction)
+
+- **Oracle = strategy = things recommended to do.**
+- **Expert = analyse the game state** (facts, geometry, reachability, NO
+  imperatives).
+- **Expert FIRST, Oracle second** — fixed order across all 10 files
+  (re-sorted 9 files on 2026-08-01, attack_center/attack_wing already done).
+
+### Coordinate rule — empirically verified (probes E/F/G)
+
+- **E1/E2 (attack_center style, fast_counter state):** oracle WITHOUT
+  coordinates → model placed blue_2 on the ball, blue_1 at the goal line
+  (degenerate). With coordinates → all three copied correctly.
+- **F1/F2 (pressing_trap, short description):** "stays back as deep backup"
+  → model moved blue_3 FORWARD (negation inverted). With coordinates → correct.
+- **G1/G2/G3 (expert/oracle balance):** G1==G2 (expert adds nothing when
+  oracle has coords); G3 (expert only) → model *reasons* (moved blue_3 to goal
+  area on its own) but fuzzy targets. → hybrid is the quality ceiling.
+- **Rule:** every positional/negational verb carries explicit X,Y. The 3B
+  model guesses wrong without coordinates.
+- Batteries saved: `experiments/phase1_probes/{e,f,g}_series.jsonl`; all
+  logged to `results/vocab_probe_log.md` (Phase 1 total now 56 probes:
+  A14+B18+C12+D6+E2+F2+G3).
+
+### Scenario-generation playbook (`core/docs/c3_scenario_generation_playbook.md` — NEW)
+
+Model-agnostic handover doc (works as human spec AND as LLM prompt context):
+- §2 field ground truth, §3 package structure (v6 schema), §4 section
+  semantics with probe evidence, §5 **10 distilled soccer reasoning patterns**
+  (P1 reachability/free-time, P2 out-of-reach=ignorable, P3 shooting angle,
+  P4 numbers advantage, P5 anticipate the block, P6 pass-into-space, P7
+  rebound readiness, P8 counter-attack cover, P9 lane/dribble denial, P10
+  press escape — each with source TC), §6 vocabulary constraints, §7
+  referee-owned concepts, §8 forbidden content, §9 anti-patterns table (A1-A5),
+  §10 validation protocol (world↔diagram cmp, coordinate grep, cross-TC
+  consistency, 3B probe with exact query format), §11 worked exemplars
+  (4 validated TCs verbatim + placeholders for remaining 6), §12 extension
+  notes (free-form, adding exemplars, future gen_scenario.py).
+
+**Files touched:**
+- `core/src/scenario/3vs3_attack_wing/analysis.md` (rewritten, Expert first)
+- `core/src/scenario/3vs3_defensive_crisis/analysis.md` (rewritten)
+- `core/src/scenario/3vs3_fast_counter/analysis.md` (rewritten + coords)
+- `core/src/scenario/3vs3_pressing_trap/analysis.md` (rewritten + coords)
+- `core/src/scenario/*/analysis.md` (9 files re-sorted Expert-first)
+- `core/docs/c3_scenario_generation_playbook.md` (NEW)
+- `core/docs/SESSION_CHANGELOG.md` (this entry)
+
+**New files (untracked):**
+- `core/docs/c3_scenario_generation_playbook.md`
+- `core/src/experiments/phase1_probes/e_series.jsonl`
+- `core/src/experiments/phase1_probes/f_series.jsonl`
+- `core/src/experiments/phase1_probes/g_series.jsonl`
+
+**Files deleted:**
+- (none)
+
+**Not yet done:**
+- TC walkthrough: remaining TCs (TC-02 draft needs final coords + probe;
+  TC-06 long_shot, TC-07 contain_delay, TC-08 def_transition, TC-09
+  high_line, 2vs2_default). Append each to playbook §11 after validation.
+- Playbook §5 patterns reference only TC-01..05; later TCs may add patterns.
+- Generator tool `tools/gen_scenario.py` NOT built (deferred — user chose
+  doc-only deliverable).
+- "Shortening the prompt" experiment deferred (user flagged as later sidestep).
+- 2vs2_default v6 schema migration done (2026-08-01 earlier session) —
+  but its analysis.md walkthrough still pending.
+- Nothing committed — all work uncommitted.
+
+**Next:**
+1. Continue TC walkthrough (TC-06 long_shot) with user feedback → translate
+   → validate → append to playbook §11.
+2. After all 10 TCs validated: re-baseline TC-01 kpi_targets.json for the new
+   pro-blue setup (Phase 2.5d).
+
+**Blockers:**
+- None for text-only phases. Ollama on GPU, qwen2.5:3b warm.
+- `batch_evaluator.py` KPI collection still broken (deprecated, carried
+  from 2026-07-13 — orthogonal to C3 text-only phases).
+
+## 2026-08-01 (continued) — 2vs2_default rework + prompt-structure study (V_A/V_B/V_C, 33+4 probes)
+
+**Goal:** Rework 2vs2_default per user feedback (red active, blue_1/blue_2
+clustered), run a prompt-structure study (Oracle-only vs full-Expert vs
+condensed-ESSENCE) across all 11 scenarios, coin deviations OUR FAULT vs
+QWEN'S FAULT, apply Oracle fixes, and rewrite the study report for readability.
+
+**Done:**
+
+### 2vs2_default rework
+- `scenario/2vs2_default/scenario.json`: red active — red_1 (-0.4, 0.6) on the
+  ball with free pass to red_2 (1.0, 1.0); blue_1 (-1.8, 0.2) / blue_2 (-1.5, -0.2)
+  clustered (0.5 m apart); ball (-0.5, 0.5). `field_diagram.png` regenerated.
+- `analysis.md` completed (Expert + Oracle). New two-man goal-mouth bracket
+  pattern (short-post + long-post guard) added to `8_C3_SOCCER_KNOWLEDGE.md`
+  as P-D6a.
+
+### Prompt-structure study (33 probes)
+- `experiments/prompt_structure/gen_battery.py` (NEW): reads
+  `scenario/<name>/scenario.json` (world line: ball → blue_N → red_N) +
+  `analysis.md` (Expert/Oracle sections) → `v{A,B,C}.jsonl` (11 probes each).
+  V_A = Oracle only; V_B = full Expert + Oracle; V_C = 1–2 sentence hand-written
+  ESSENCE + Oracle. System prompt template adapts bot count (two/three lines).
+- All 33 run via `vocab_probe.py --batch` (series `PS_*`), logged to
+  `results/vocab_probe_log.md` (lines 640–1385).
+- **Result matrix:** V_A = V_C = 9.0/11 (F/P/D 8/2/1 each) > V_B = 8.0/11
+  (7/2/2). The full-expert variant is the WORST, not an improvement — expert
+  text anchors Qwen to listed positions and leaks forward bias (goalie_pass:
+  blue_2 marked on ball, unmarked red_1 free on goal). Condensed essence is
+  free (no cost vs Oracle-only).
+- **Fault coin (8 deviations):** 5× OUR FAULT (+3 minor), 1× QWEN'S FAULT
+  (high_line V_A b1 1.75 vs 2.0 — harmless 0.25 m rounding). Zero
+  model-incapability cases. 2 scenarios clean (contain_delay, fast_counter).
+- **Key mechanism discovered — output-slot anchoring:** def_transition Oracle
+  already led with blue_3, yet V_A failed (tackle went to goalie). Qwen assigns
+  the aggressive action to the FIRST output line (blue_1), regardless of who
+  the Oracle names first. Fix = list actions in OUTPUT ORDER b1→b2→b3, not
+  role-lead order. Verified: V_B/C fixed it because expert text named blue_1
+  as goalie.
+- **Worst cases:** attack_wing (V_C b3 OOB (-6.0, 0.1) — Oracle gave b3 no
+  target; V_B b1 below ball = zero shooting angle); defensive_crisis (V_B b1
+  freezes on goal line (-4.0, 0.55), fails to intercept).
+
+### §6 Oracle fixes applied + verified (VERIFY_* probes, 4/4 exact)
+- `3vs3_attack_center`: Oracle "moves to the ball at (2.2, 0.3)" (b2 now exact).
+- `3vs3_attack_wing`: explicit targets — b1 (3.4, 2.0), b2 (2.5, 2.5), b3 (-4.0, 0.0).
+- `3vs3_defensive_crisis`: b1 intercept (-3.1, 0.45), b2 (-2.7, 0.3), b3 (-1.5, -0.6).
+- `3vs3_def_transition`: output-order action list with anchors — b1 (-3.6, 0.3),
+  b2 (2.0, -2.0), b3 (2.2, 0.0).
+- Regenerated vA/vB/vC.jsonl (14:48); `verify_fixed.jsonl` (NEW, 4 probes,
+  series `VERIFY_*`) re-probed in V_A format — all targets exact. Report §7
+  verification table.
+- All 92 fast tests pass.
+
+### Report rewritten for readability (`results/prompt_structure_report.md`)
+- Per-scenario sections: embedded `field_diagram.png` (all 11 exist), world
+  state, TC reference verbatim (Expert + Oracle), Qwen output table
+  (V_A/V_B/V_C + VERIFY row), discrepancies BOLD, fault coined with soccer
+  pattern reference (P3/P4/P6/P8/P-D6a).
+- §4 deviation double-check table (8 rows), §5 rankings, §6 recommendations
+  (V_A as standard, V_C conditional, V_B dropped), §7 verification.
+- Residual OUR FAULT minor: attack_center b3 still outputs (1.5, -1.4) for
+  "moves slightly forward" — vague cue needs a coordinate.
+
+**Files touched:**
+- `core/src/scenario/2vs2_default/scenario.json` (rework), `field_diagram.png`
+  (regenerated), `analysis.md` (completed)
+- `core/src/ros2k_knowledge/8_C3_SOCCER_KNOWLEDGE.md` (P-D6a)
+- `core/src/experiments/prompt_structure/gen_battery.py` (NEW)
+- `core/src/experiments/prompt_structure/vA.jsonl` / `vB.jsonl` / `vC.jsonl`
+  (regenerated 14:48)
+- `core/src/experiments/prompt_structure/verify_fixed.jsonl` (NEW)
+- `core/src/results/vocab_probe_log.md` (33 PS_* + 4 VERIFY_* records)
+- `core/src/results/prompt_structure_report.md` (NEW, rewritten readability pass)
+- `core/src/scenario/3vs3_attack_center/analysis.md` (Oracle fix)
+- `core/src/scenario/3vs3_attack_wing/analysis.md` (Oracle fix)
+- `core/src/scenario/3vs3_defensive_crisis/analysis.md` (Oracle fix)
+- `core/src/scenario/3vs3_def_transition/analysis.md` (Oracle fix)
+- `core/docs/SESSION_CHANGELOG.md` (this entry)
+
+**New files (untracked):**
+- `core/src/experiments/prompt_structure/` (gen_battery.py, vA/vB/vC.jsonl, verify_fixed.jsonl)
+- `core/src/results/prompt_structure_report.md`
+
+**Files deleted:**
+- (none)
+
+**Not yet done:**
+- attack_center b3 "slightly forward" cue needs a coordinate (residual OUR
+  FAULT minor).
+- Playbook §11 exemplars not yet appended (only §5 P-D6a knowledge-side done);
+  playbook §10.4 V_A confirmed as reliable validation gate.
+- TC-01 kpi_targets re-baseline still pending (Phase 2.5d).
+- "remind me of 3" open item: `rules_core.txt` dynamic-goalie/static-role
+  contradiction (dictionary C2_striker_rule finding) — not yet addressed.
+- Nothing committed — all work uncommitted on
+  `feature/v6.3-replay-and-optimization`.
+
+**Next:**
+1. New session: read this changelog, then fix attack_center b3 coordinate
+   (1-line Oracle edit + VERIFY re-probe).
+2. Append validated TCs to playbook §11 exemplars (4 fixed TCs ready verbatim).
+3. Address "remind me of 3" (rules_core.txt contradiction) per dictionary.
+4. Re-baseline TC-01 kpi_targets (needs Gazebo/Ollama, Phase 2.5d).
+
+**Blockers:**
+- None for text-only phases. Ollama on GPU, qwen2.5:3b warm.
+- `batch_evaluator.py` KPI collection still broken (deprecated, carried
+  from 2026-07-13 — orthogonal to C3 text-only phases).

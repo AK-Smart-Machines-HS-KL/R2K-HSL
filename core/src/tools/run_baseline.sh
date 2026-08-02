@@ -1,8 +1,9 @@
 #!/bin/bash
 # Phase 2e/2.5d: 27-run baseline (9 scenarios × 3 runs × 120s)
-# Usage: bash tools/run_baseline.sh [prefix]
+# Usage: bash tools/run_baseline.sh [prefix] [model]
 #   prefix: filename prefix for KPI outputs (default: "baseline")
 #           use "baseline_v63" for the Phase 2.5 v6.3 re-baseline
+#   model:  Ollama model name (default: "qwen2.5:3b")
 # Output: results/kpis_<prefix>_*.json + results/<prefix>_summary.md
 #
 # Prerequisites:
@@ -12,6 +13,7 @@
 set +e  # don't exit on error — launch_r2k.sh may return non-zero on watchdog kill
 
 PREFIX="${1:-baseline}"
+MODEL="${2:-qwen2.5:3b}"
 cd "$(dirname "$0")/.."  # cd to core/src/
 SRC_DIR="$(pwd)"          # absolute path to core/src/
 CORE_DIR="$(cd .. && pwd)"  # core/ (where launch_r2k.sh lives)
@@ -89,7 +91,8 @@ for scenario in $SCENARIOS; do
         ./launch_r2k.sh --headless --duration $DURATION \
             --scenario "$scenario" \
             --strategy strat_aggro \
-            --relay only_sim_bots --no-explain > "$LOG_FILE" 2>&1
+            --relay only_sim_bots --no-explain \
+            --model "$MODEL" > "$LOG_FILE" 2>&1
         cd "$SRC_DIR"  # back to core/src/ (absolute path)
 
         RUN_ID=$(grep -oP 'Run ID: \K\S+' "$LOG_FILE" 2>/dev/null || echo "")

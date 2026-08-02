@@ -9,7 +9,7 @@ export PYTHONWARNINGS="ignore"
 
 SCENARIO="2vs2_default"
 STRATEGY="strat_aggro"
-MODEL="qwen2.5-coder:3b"
+MODEL="qwen2.5:3b"
 EXPLAIN_FLAG="--no-explain"
 RELAY="only_sim_bots"
 HEADLESS=false
@@ -37,7 +37,7 @@ while [[ "$#" -gt 0 ]]; do
             echo "=========================================================="
             echo "  --scenario <name>     (default: 2vs2_default)"
             echo "  --strategy <name>     (default: strat_aggro)"
-            echo "  --model <name>        (default: qwen2.5-coder:3b)"
+            echo "  --model <name>        (default: qwen2.5:3b)"
             echo "  --relay <name>        (Available: only_sim_bots, hardware_mirror)"
             echo "  --explain             (Enable AI reasoning output)"
             echo "  --no-explain          (Disable AI reasoning)"

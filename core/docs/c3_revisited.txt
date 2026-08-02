@@ -1,0 +1,174 @@
+** Background of this project **
+Information dimensions: the curse of modalities
+- spatial (static, dynamic): world model
+- (written) natural language: knowlege (eg rules of the game, samples for expert and oracle)
+- physics: noise, jitter
+- time
+- actions: eg move, kick, stand: enduring or short
+
+Reasoning problems
+- frame problem: the domain is non-deterministic, heuristic reasoning is necessary
+- partially explorable: team reds reactions and refeere decions are not 100%  predictable in some world states
+
+So information must be  transformed or transduced or discretized to enhance the small LLMs comprehension and reasoning
+- provide a canonical language
+- use runtime algorithms to engineer incoming information
+
+
+
+** New ROS2K subproject (was: C3): inter-lingua approach **
+Target: in the end we must win a match 3vs3 booster k1 in a real (physical) enviroment with varying natural conditions (light,
+carpet). The final AI architecture is unclear yet, ie., whether we will deploy an LLM, a VLA or a (Le Cunn) World Model - in either case, it must run and perform on booster K1 ressources
+(https://www.generationrobots.com/de/404324-humanoider-roboter-booster-k1.html).
+
+Improving simulator matches is a means, not the goal. Active, selected
+KPIs must subsume to this rule. Winning is the most import KPI.
+In this new ROS2K sub-project, we modify the recommend, planned C3
+approach. we stop at a reasonable performance level. we anticipate to
+take insights and data over for future projects with whatever
+architectur
+
+New Approach in the sense of :
+* ros2k must optimize the following chain of data and control, from (a) to (d) *
+
+(a) sensing: getting a reliable world model (w/o prediction, w/o yaw, past frame data etc).)
+
+(b) analysis: understanding soccer game world state incl. apropriate data (see chain (a)), rules (see auto referee) and limitations (spatial like field dimensions, physical conditions like max speed, deceleration of ball )
+
+(c) expert (oracle): suggesting a winning strategy, which spans from seconds to minutes, is based upon experience, using role assignments for structured and tactical scripts (eg striker is a dynamic role, goali may be static, depending on rules)
+
+(d) team-captain (the forthcomming c3 module): mapping strategy to physical actions (eg move, kick). may require a redesign of the ROS2K bridge, but will always be based on ROS2 communication and tools.
+
+we need to define and optimize the communication between the layers, and provide information (data in context).
+
+Keys:
+- develop a brief, expressive, semantically rich intermediate language, that will be
+  understoof by 3B model, team-captain, and human user.
+
+- remove contradictive, or wishy-washy argumentation (output in (b),(c)), as seen in the 3B model.
+  Samples:
+  "the ball is near opponents goal, but also near own goal",
+  "prioritze defending while also attacking"
+  "looking for an opportunity to attack"
+
+- reduce latency within Ollama (if do-able): let 3B model become aware, whether analysis or
+  strategy did'n change since last call, and then let the team captain
+  simply follow the current stratey (ie set of actions). In this case, 3B model output is a short
+  token like "continue". this goes beyond hashing the world mode (to reduce delay)
+
+- monitor how to integrate the advantages of C1 (goal) and C9 ? why do they interfere?
+
+Out-of-Scope
+
+
+Considerations: 
+(a) is going to be harder in the real world; so setting gazebo to "deterministic" gives us nothing in the end
+(b) -> (c) foundation is 3B LLM pre-trained model knowledge +  system prompt + active scenario (eg 3vs3) + few-shot-samples + auto ref rules . 
+(c) -> (d): is based upon  active strategy and referee decision
+
+Inbetween (a) -> (b) 
+- you (glm 5.2) and me (human) evaluate and correct the 10 ros2k test cases and transform their textual descriptions
+  (see  /home/r-zwei-kickers/R2K-HSL/core/src/scenario/*/analysis.md)
+- thereby taking care of consistent, condensed wordings (soccer tech speech) (same concept as  power files in ros2k knowledge)
+- removing explanatory statements from testcase (which belong in a new module call "soccer universal knowledge")
+- we tentatively formulate system prompts (c3 style) for expert and oracle (strategic)
+
+- later: we will revise /home/r-zwei-kickers/R2K-HSL/core/src/strategy/fragments/* rules and samples
+
+Acceptance Criteria:
+- soccer tech speech is brief (it is input to 3B model), specialized wordings 
+- soccer tech speech is suited to trigger patterns in 3B model eg
+  "even formation => whoever controls the center controls the game.
+  "striker => #the bot closest to the ball"
+  "wing play => stretches the defense and creates gaps in the centre"
+  "cross reception => Crossing requires timing the Move targets."
+  "zone-defend => don't chase the ball, block passing lanes"
+  "defensive shadowing => position bots between ball and own goal" 
+
+b -> c:
+- qwen (3b) is asked for tasks b) and c) for the 10 test data sets. if  the 3B model outputs differ semantically,
+  we try to adjust the prompt, and repeat. Time consuming gazebo runs not necessery
+
+- net outcome: you (GLM 5,2) create  a new ros2k knowledge base  md ("soccer knowledge") which contains all lessons learned.
+  after that, you (GLM) is capable to evaluate the 3B models output qualitatively directly (no more human in the loop, no gazebo runs
+
+c -> d:
+
+- we developed an intermediate language, maybe a subset of the soccer tech speech, to express strategic intent briefly and clearly
+understandable
+Acceptance Criteria:
+
+
+
+correct (vector, predictions, history frames) -> 
+
+
+
+phase 0
+- do extensive literatur research on the projects topics
+- recommend methods and plan refinements
+
+phase 1
+- get an understanding of concepts and words, quwen is capable of. method: interactive experimentd
+- create and provide a dictionary (nouns, adjectives, verbs) to be used in all next phases
+
+phase 2
+- rework testcase descriptions (core/src/scenario/*/analysis.md) according to the new dictionary.
+  method: pair programm GLM and human
+- validate qwen comprehends the refined descriptions  in general, normal play, 3vs3
+  methods: textual (ask questions), situational (present game state, check answers)
+  
+phase 3
+- validate qwen comprehends the refined descriptions in details, game states, edge situations, referee decisions
+    methods: textual (ask questions), situational (present game state, check answers)
+
+next phases:
+- to be develop when phase 2 proves feasability
+
+
+three open questions demand re-planning, suspend the Immediate next steps. starting with a)
+a) latency: consider changing the prompt cycle from generate an universal system prompt, must be sufficient for the complete game, ramp up ollama, then iterate new-world-state -> update the system prompt partially with new coordinates -> query Olama for the new target coordinates , hoping or assuming ollama does clever caching (eg kv values) automatical. change into sim. what we are doing in this session: start with a lenghty context (session log, ros2 knowledge bases etc in our case, soccer knowledge bases in case of qwen), and then instruct qwen, that a dialog starts and continues, in which it should answer the same question (game analysis, generate suggestion) over and over for new data (update world model) coming in sequentually.
+Feasible? take your time for the answert. do a research on ollama manuals, best-practices, technical papers
+
+
+==========================0
+what is "compact JSON vs pretty JSON"
+constant text is cached. so why not boot load qwen with a (condensed verion) of the 8_C3_SOCCER_KNOWLEDGE and/or several few-shot examples? size limits on kv-cache?
+ollam prompt
+b) reformulate/reduce text sections with new language
+c) worldstate gets transformed in expert-text style
+d) output is not json, but condensed oracle text, x/y coords replaced by textual descritions, we may change OLLAMA_KV_CACHE_TYPE to q4 (no math required) -> performance change
+===========================
+<think>
+Ball is moving toward upper boundary (45, 92) at speed v=2.1.
+To prevent out-of-bounds, Robot_1 must intercept before Y=100.
+Robot_2 moves into position to receive a pass at (50, 70).
+</think>
+
+Target Trajectories:
+Robot_1: Move to (45, 90) -> Action: Intercept
+Robot_2: Move to (50, 70) -> Action: Position
+Target_Kick: (50, 70)
+
+world_state = """
+Field: [0, 100] x [0, 100]
+Objects:
+- Ball: (50, 92)
+- Robot_1: (45, 80)
+- Robot_2: (10, 20)
+Rules: Do not cross bounds [0, 100].
+Task: Intercept ball with Robot_1 before it exits Y=100.
+"""
+
+response = ollama.chat(
+    model='qwen2.5-coder:3b',
+    messages=[
+        {
+            'role': 'system', 
+            'content': 'You are a 2D physical engine planner. Input is text state. Output valid JSON target coordinates inside [0, 100].'
+        },
+        {'role': 'user', 'content': world_state}
+    ],
+    options={'temperature': 0},  # Low latency, deterministic outputs
+    format='json'
+)
