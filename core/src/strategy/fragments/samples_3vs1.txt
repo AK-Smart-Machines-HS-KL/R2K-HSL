@@ -1,7 +1,7 @@
 --- EXAMPLE 1: TRIANGULAR PASSING ---
 INPUT: {"soccer_ball": {"x": 0.0, "y": 0.0}, "blue_1": {"x": -0.5, "y": 0.0}, "blue_2": {"x": 2.0, "y": 1.5}, "blue_3": {"x": 2.0, "y": -1.5}, "red_1": {"x": 1.0, "y": 0.0}}
 ASSISTANT: {
-  "analysis": "blue_1 passes to blue_2 to bypass the central defender red_1.",
+  "analysis": "blue_1 kicks from (0.0, 0.0) toward blue_2 at (2.5, 1.5), bypassing red_1 at (1.0, 0.0). blue_3 holds the left lane at (0.0, -2.0).",
   "oracle": "The defense is stretched by the wide positions of blue_2 and blue_3.",
   "assignments": {
     "blue_1": {"role": "attacker", "action": "Kick"},
@@ -13,8 +13,8 @@ ASSISTANT: {
 --- EXAMPLE 2: ANTI-CLUSTERING OVERRIDE ---
 INPUT: {"soccer_ball": {"x": 3.0, "y": 0.0}, "blue_1": {"x": 2.8, "y": 0.1}, "blue_2": {"x": 2.9, "y": -0.1}, "blue_3": {"x": -4.0, "y": 0.0}}
 ASSISTANT: {
-  "analysis": "blue_1 and blue_2 are colliding. blue_1 kicks. blue_2 must retreat to midfield immediately.",
-  "oracle": "Removing blue_2 from the ball area ensures a clean kick for blue_1.",
+  "analysis": "blue_1 and blue_2 are clustered at the ball (3.0, 0.0). blue_1 kicks. blue_2 moves to midfield (0.0, 0.0). blue_3 holds the goal line (-4.5, 0.0).",
+  "oracle": "Clean kick; spacing restored.",
   "assignments": {
     "blue_1": {"role": "attacker", "action": "Kick"},
     "blue_2": {"role": "defender", "action": "Move", "x": 0.0, "y": 0.0},
@@ -25,8 +25,8 @@ ASSISTANT: {
 --- EXAMPLE 3: FIELD EDGE COORDINATION ---
 INPUT: {"soccer_ball": {"x": 0.0, "y": 2.9}, "blue_1": {"x": -1.0, "y": 2.5}, "blue_2": {"x": 1.0, "y": 2.5}, "blue_3": {"x": -4.0, "y": 0.0}}
 ASSISTANT: {
-  "analysis": "Ball on the top edge. blue_1 pushes the ball forward while blue_2 keeps distance to avoid a pile-up.",
-  "oracle": "Safe movement along the Y=2.9 boundary.",
+  "analysis": "Ball at the top edge (0.0, 2.9). blue_1 moves to (1.0, 2.9) to push the ball forward. blue_2 keeps distance at (1.0, 1.0). blue_3 holds the goal line (-4.5, 0.0).",
+  "oracle": "Safe movement along the boundary.",
   "assignments": {
     "blue_1": {"role": "attacker", "action": "Move", "x": 1.0, "y": 2.9},
     "blue_2": {"role": "defender", "action": "Move", "x": 1.0, "y": 1.0},

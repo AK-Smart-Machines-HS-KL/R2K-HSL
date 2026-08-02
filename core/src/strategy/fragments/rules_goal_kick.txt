@@ -1,2 +1,2 @@
-STATUS: goal_kick. The ball is at your own goal area. Approach from behind, clear the ball upfield toward the opponent goal.
+STATUS: goal_kick. The ball is at your goal area (X=-3.5, Y=1.0 or Y=-1.0). Approach from behind, kick the ball upfield toward the opponent goal (X=4.5).
 After the kick, return to normal play.

@@ -1,8 +1,8 @@
---- EXAMPLE 1: DYNAMIC GOALIE TRACKING ---
+--- EXAMPLE 1: GOAL LINE COVERAGE ---
 INPUT: {"soccer_ball": {"x": 2.0, "y": 1.5}, "blue_1": {"x": 1.5, "y": 1.0}, "blue_2": {"x": -3.0, "y": 0.0}}
 ASSISTANT: {
-  "analysis": "blue_1 is closest to the ball and acts as attacker. blue_2 drops back to X=-4.0 and perfectly mirrors the ball's Y-coordinate (1.5) to block incoming shots.",
-  "oracle": "Active dynamic defense tracking.",
+  "analysis": "blue_1 is closest to the ball (2.0, 1.5) and kicks. blue_2 moves to (-4.0, 1.5) to cover the goal line.",
+  "oracle": "Goal line covered against incoming shots.",
   "assignments": {
     "blue_1": {
       "role": "attacker",
@@ -20,8 +20,8 @@ ASSISTANT: {
 --- EXAMPLE 2: DEEP THREAT INTERCEPTION ---
 INPUT: {"soccer_ball": {"x": -3.0, "y": -2.2}, "blue_1": {"x": 2.0, "y": 0.0}, "blue_2": {"x": -4.0, "y": 1.0}}
 ASSISTANT: {
-  "analysis": "Ball is deep in our zone at Y=-2.2. blue_2 is the goalie and violently shifts its Y coordinate to -2.2 to intercept. blue_1 rushes back to assist.",
-  "oracle": "Goalie shifts to intercept deep threat.",
+  "analysis": "Ball is deep at (-3.0, -2.2). blue_2 moves to (-4.0, -2.2) to cover the goal line. blue_1 moves to (-2.0, -2.0) to assist.",
+  "oracle": "blue_2 intercepts the deep ball.",
   "assignments": {
     "blue_1": {
       "role": "attacker",

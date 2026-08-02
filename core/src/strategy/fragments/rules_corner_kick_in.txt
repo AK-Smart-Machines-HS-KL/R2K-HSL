@@ -1,2 +1,2 @@
-STATUS: corner_kick_in. The ball is at a corner flag. Approach from behind, cross into the opponent penalty area toward a teammate.
+STATUS: corner_kick_in. The ball is at a corner flag (X=4.3, Y=2.8 or Y=-2.8). Approach from behind, kick toward a teammate near the opponent goal (X=4.5, Y from -1.0 to 1.0).
 After the kick, return to normal play.

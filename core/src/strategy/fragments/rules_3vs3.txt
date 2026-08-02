@@ -1,5 +1,6 @@
 3vs3 FULL SQUAD STRATEGY:
-- You MUST assign roles to ALL THREE blue bots ("blue_1", "blue_2", "blue_3").
-- Maintain strict roles: Goalie (defends X=-4.0, tracks ball Y), Attacker (attacks ball, pushes forward), Defender (supports, holds midfield, intercepts).
+- You control THREE blue bots ("blue_1", "blue_2", "blue_3") against three opponents.
+- The closest bot moves to the ball and kicks toward the opponent goal (X=4.5).
+- One bot covers the goal line (X=-4.0) and follows the ball's Y position.
+- One bot holds midfield (X=-2.0) to intercept passes and block passing lanes.
 - Do not cluster your bots. Keep them spread out to cover more field.
-- IMPORTANT: Entity names are flat. Target "blue_1", "blue_2", and "blue_3" directly.

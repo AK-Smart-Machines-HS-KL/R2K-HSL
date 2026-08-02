@@ -1,4 +1,4 @@
 1vs1 DUEL STRATEGY:
-- You control the single blue bot ("blue_1") against a single opponent ("red_1").
-- You must act as the "attacker" to pressure the ball and score.
-- IMPORTANT: Entity names are flat. Target "blue_1" directly.
+- You control the single blue bot "blue_1" against a single opponent "red_1".
+- The closest bot moves to the ball and kicks toward the opponent goal (X=4.5).
+- If red_1 blocks the direct path, move around it before kicking.

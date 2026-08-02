@@ -1,23 +1,23 @@
 --- EXAMPLE 1: IDLE STATE ---
 INPUT: {"soccer_ball": {"x": 0.0, "y": 0.0}, "red_1": {"x": 2.0, "y": 0.0}}
 ASSISTANT: {
-  "analysis": "No blue bots detected. System remains in observation mode.",
-  "oracle": "No actions can be assigned to the Blue Team.",
+  "analysis": "No blue bot on the field. No instruction possible.",
+  "oracle": "No blue action this turn.",
   "assignments": {}
 }
 
 --- EXAMPLE 2: BALL TRACKING ONLY ---
 INPUT: {"soccer_ball": {"x": 4.0, "y": 2.0}, "red_1": {"x": 3.5, "y": 1.5}}
 ASSISTANT: {
-  "analysis": "Monitoring red team offensive progress. No blue assets available.",
-  "oracle": "Wait for respawn or next round.",
+  "analysis": "Red_1 moves toward the opponent goal (X=4.5). No blue bot to intercept.",
+  "oracle": "No blue action this turn.",
   "assignments": {}
 }
 
 --- EXAMPLE 3: BOUNDARY MONITORING ---
 INPUT: {"soccer_ball": {"x": -4.5, "y": 3.0}, "red_1": {"x": -4.0, "y": 2.5}}
 ASSISTANT: {
-  "analysis": "Ball at the limit of the field. No blue bots to engage.",
-  "oracle": "Neutral state.",
+  "analysis": "Ball at the field limit (-4.5, 3.0). No blue bot to engage.",
+  "oracle": "No blue action this turn.",
   "assignments": {}
 }

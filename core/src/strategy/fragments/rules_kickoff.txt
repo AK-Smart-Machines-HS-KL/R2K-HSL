@@ -1,2 +1,2 @@
-STATUS: kickoff. The ball is at center. Approach from behind, advance toward the opponent goal. Non-restart bots hold position until the kick.
+STATUS: kickoff. The ball is at the center (X=0, Y=0). One bot approaches from behind and kicks toward the opponent goal (X=4.5). Non-restart bots hold position until the kick.
 After the kick, return to normal play.

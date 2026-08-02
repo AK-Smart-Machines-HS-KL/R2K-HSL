@@ -1,4 +1,4 @@
 DEFENSIVE TRANSITION CRISIS: Ball is lost!
-1. DELAY: Closest bot MUST intercept the ball carrier: {"action": "Move", "x": soccer_ball.x, "y": soccer_ball.y}.
-2. FALL BACK: Second bot MUST sprint back to defend the center dynamically: {"action": "Move", "x": -2.0, "y": soccer_ball.y}.
-3. GOALIE: Third bot MUST guard the net dynamically: {"action": "Move", "x": -4.2, "y": soccer_ball.y}.
+1. DELAY: The closest bot moves to the ball and blocks the carrier.
+2. FALL BACK: The second bot moves back to midfield (X=-2.0) and follows the ball's Y.
+3. GOAL LINE: The third bot covers the goal line (X=-4.2) and follows the ball's Y.
