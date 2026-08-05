@@ -5,6 +5,8 @@ log/
 core/src/ros2_ws/build/
 core/src/ros2_ws/install/
 core/src/ros2_ws/log/
+core/src/uros_ws/
+core/src/venv/
 
 # Python cache
 __pycache__/
