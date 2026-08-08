@@ -1,0 +1,7 @@
+{
+  "scenario_name": "emp_regression-anti_pass_027",
+  "tag": "regression-anti",
+  "umschalt_type": "pass",
+  "cluster_size": 1,
+  "note": "Auto-generated from umschaltmoment extraction, reduced by clustering"
+}

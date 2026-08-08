@@ -2,8 +2,8 @@
 title: "ROS2K Architecture Mentor - System FAQ (V6.3)"
 type: DOCUMENTATION
 tags: [faq, onboarding, gem-capabilities, q-and-a, ros2, relay, booster-k1, watchdog, hybrid-os, qwen, v6, v6.1, v6.2, v6.3, momentum, reward, trace-logging, set-piece, headless, kpi, analyze-trace, dump-prompt, goalie-idle, closed-loop, test-non-functional, composite-score, pytest, regression-suite, kpi-targets, skip-slow, dynamic-prompt-injection, content-hash-skip, role-condensation, replay-system, attack-kpis]
-last_modified: 2026-07-29
-version: v6.3
+last_modified: 2026-08-05
+version: v6.4
 ---
 # ROS2K Architecture Mentor: FAQ & Capabilities
 
@@ -447,3 +447,23 @@ Siehe [[7_03_CHEATPAGE_Tools_and_Utils]] §6.5 für Details.
 **Warum ist das safe?** `temperature: 0.0` ist deterministisch. Identische Positionen → identische Strategie. Es gibt keinen Grund, denselben Input zweimal an Ollama zu senden.
 
 > [!warning] [2026-08-01] **Präzisierung:** `temperature: 0.0` ist über KV-Cache-Zustände hinweg NICHT bitt-exakt deterministisch (gemessen, Cache-Layout-A/B-Studie): byte-identischer Prompt + Optionen ergab unterschiedliche Token-Streams (Pretty- vs. Compact-JSON, 118 vs. 91 Tokens), abhängig von der Cache-Historie (frisches Prefill vs. gecachtes Präfix) — die Richtung drehte sich zwischen Testläufen sogar um. Reproduziert mit `OLLAMA_KV_CACHE_TYPE=q8_0` UND Default-f16 (llama.cpp-Cache-Reuse-Numerik, nicht KV-Quantisierung). Die **Semantik** bleibt stabil → der Content-Hash-Skip bleibt sicher. Aber: Latenz-A/B-Vergleiche müssen den Cache-Zustand kontrollieren (erst mit anderem World stören, dann beide Seiten vergleichen). `prompt_eval_count` ist KEIN Cache-Indikator (konstant trotz Hits) — `prompt_eval_duration` ist es (identische Calls: 68.9ms → 5.0ms → 3.8ms).
+
+---
+
+## Q25: Warum clusteren die Blue-Bots? (V6.4)
+
+**A:** Das LLM produziert **korrekte, nicht-clusternde Targets** (blue_1 → -4.0, blue_2 → Ball, blue_3 → -2.7). Aber blue_1 bleibt physisch bei X=-2.6 "stecken" (PD-Controller zu schwach für 1.8m Rückkehr) und blue_3 wird nach -2.7 geschickt — genau wo blue_1 steckt. Sie clustern bei X≈-2.6, weil das LLM nicht weiß, dass blue_1 sein Ziel nicht erreicht.
+
+**Fix:** Relative Positionierung statt fester Zonen. blue_3 geht nicht mehr nach "X=-2.0 to -3.0", sondern "maximiere Abstand von blue_1 und blue_2". Unabhängig davon, wo blue_1 steckt, geht blue_3 woanders hin. cluster_all fiel von 47% → 0-1%.
+
+## Q26: Was ist der TeamCaptain? (V6.4, v7)
+
+**A:** Ein geplanter CPU-only ROS2-Node (v7) zwischen Evaluator und Bridge. Er nimmt die LLM-Endpunkte und produziert optimierte Ausführungspläne (Waypoints, Geschwindigkeit, Ankunftswinkel). Auch: Multi-Bot-Koordination (keine Kollisionen), Watchdog (Odometrie-Vergleich → Failsafe), Augmented World Model (freie Wege, Sweet Spots → reicheres LLM-Input), Kick-Abort (Ball-Bewegungsänderung → K1 stoppt Chase). Siehe ADR-A07. Downward-kompatibel: Bridge fällt auf `current_strategy.json` zurück, wenn TeamCaptain inaktiv.
+
+## Q27: Wie kalibriere ich Bots? (V6.4)
+
+**A:** Zwei Wege: (1) `--demo` Flag in `launch_r2k.sh` lädt einen Demo-Prompt — Mensch tippt "blue_2 move to (1.0, 0.5)", LLM reformatiert zu Inter-Lingua, gleiche Pipeline wie Match-Modus. (2) `tools/calibrate_bot.py` (standalone, kein LLM) — JSON-Waypoints → cmd_vel/RPC direkt. Dual-Use: Workshop-Demos + Kalibrierung. JSON-Fallback funktioniert, wenn Ollama down ist.
+
+## Q28: Der K1 folgt dem Ball endlos beim Kick — warum? (V6.4)
+
+**A:** Die K1-Kick-Skills `kShoot` (api_id 2024) und `kVisualKick` (2038) sind **autonom** — der K1 übernimmt und jagt den Ball bis zur Kick-Distanz. Wenn der Ball wegrollt (selbst gekickt, Gegner, Ablenker), folgt der K1 endlos. Das ist ein Showstopper für echte Spiele. **Lösung (v7):** K1-Kamera erkennt Ball-Geschwindigkeits-/Richtungsänderung → ROS2-Topic → TeamCaptain/Bridge sendet `kChangeMode` (2000) → K1 stoppt Chase. Kein Threshold, keine Hysterese — "Ball bewegt → Abbruch".

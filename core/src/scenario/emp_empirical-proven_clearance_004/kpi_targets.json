@@ -1,0 +1,7 @@
+{
+  "scenario_name": "emp_empirical-proven_clearance_004",
+  "tag": "empirical-proven",
+  "umschalt_type": "clearance",
+  "cluster_size": 3,
+  "note": "Auto-generated from umschaltmoment extraction, reduced by clustering"
+}

@@ -1,0 +1,7 @@
+{
+  "scenario_name": "emp_empirical-proven_cluster_005",
+  "tag": "empirical-proven",
+  "umschalt_type": "cluster",
+  "cluster_size": 1,
+  "note": "Auto-generated from umschaltmoment extraction, reduced by clustering"
+}

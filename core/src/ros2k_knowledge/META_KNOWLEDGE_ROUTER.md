@@ -3,8 +3,8 @@ id: META_ROUTER
 title: "Semantic Glossary & Routing Matrix (Inverted Index)"
 type: KNOWLEDGE_BASE_POWER_FILE
 tags: [router, glossary, index, rag, meta, flat-json, phantom-kick, setup_r2k, active_relay, watchdog, hybrid-os, uros_ws, xid-31, mermaid, v6, v6.1, v6.2, v6.3, foul, ball-out, kick-in, momentum, reward-node, batch-evaluator, aggression, set-piece, goal-kick, corner-kick-in, kickoff, own-half-warp, blitting, referee-rulebook, trace-logging, llm-trace, world-trace, r2k-run-id, analyze-trace, kpi, prompt-disentanglement, dump-prompt, strat-artifact, goalie-idle, red-p1-p5, blocking-avoidance, headless-gzserver, docker-env-passthrough, test-non-functional, composite-score, pytest, regression-suite, kpi-targets, skip-slow, dynamic-prompt-injection, content-hash-skip, role-condensation, replay-system, attack-kpis, shots-on-goal, pass-completion, restart-recovery, r2k-explain, match-annotate, replay-trace, c3, inter-lingua, controlled-vocabulary, expert-oracle, coordinate-rule, scenario-generation, analysis-md, c3-playbook, c3-dictionary, c3-testcase-review, vocab-probe, soccer-knowledge, universal-knowledge]
-last_modified: 2026-08-01
-version: v6.3
+last_modified: 2026-08-05
+version: v6.4
 ---
 # Semantic Glossary & Routing Matrix
 
@@ -110,6 +110,11 @@ If the user query involves [SYMPTOM / KEYWORD], explicitly retrieve and referenc
 | **[C3]** Inter-lingua, controlled vocabulary, position verbs, derived role labels (striker/passer/supporter), C2_striker_rule, role semantics contradiction, qwen2.5:3b, soccer reasoning patterns P1-P10, anti-patterns A1-A5, referee-owned restarts (kick-in, corner, goal-kick, foul), field ground truth (9×6, goal ±0.9, goal area ±3.5/±1.0), vocab probe, `vocab_probe.py`, `vocab_probe_log.md`, phase1_probes, dictionary vocabulary, D-series borderline verdicts | **'7_C3_INTER_LINGUA.md'** |
 | **[C3]** Expert vs Oracle semantics, `analysis.md` section order (Expert first, Oracle second), coordinate rule, E/F/G series probe evidence, scenario package structure (`scenario.json`/`field_diagram.png`/`analysis.md`/`kpi_targets.json`), scenario generation playbook, `c3_scenario_generation_playbook.md`, `c3_vocabulary_dictionary.md`, `c3_testcase_review.md`, TC walkthrough, validation protocol, `gen_field_diagrams.py`, `3vs3_attack_center`, `3vs3_attack_wing`, `3vs3_defensive_crisis`, `3vs3_fast_counter`, `3vs3_pressing_trap` | **'7_C3_INTER_LINGUA.md'** + **'core/docs/c3_scenario_generation_playbook.md'** |
 | **[C3]** Universal soccer knowledge, coaching heuristics, control the center, spacing, shooting angle, pass into space, rebound readiness, wing play, numbers advantage, zone defend, lane/dribble denial, deep cover, press escape, cover gap obligation, free time, out-of-reach ignorable, scenario generation for large LLMs, Expert/Oracle authoring | **'8_C3_SOCCER_KNOWLEDGE.md'** |
+| **[V6.4]** Clustering root cause, relative positioning, `R2K_GOALIE_BLEND=0`, anti-collision, kick direction override, PD gain boost, score function refined (cluster penalty, lane openness), per-bot kick capability matrix, K1 kick chase, meta-knowledge axiom, demo/calibration mode | **'8_C3_SOCCER_KNOWLEDGE.md' §6** + **'1_CORE_ARCHITECTURE_AND_SYNC.md' §V6.4** |
+| **[V6.4]** TeamCaptain, watchdog, augmented world model, path executor, ADR-A07, CPU-only ROS2 node, optimized_path.json, downward compatible, K1 kick abort, ball motion change | **'1_CORE_ARCHITECTURE_AND_SYNC.md' §V6.4** + **'core/docs/adr/ADR-A07-team-captain-architecture.md'** |
+| **[V6.4]** K1 kick pitfalls, kShoot autonomous chase, kVisualKick, kChangeMode abort, kRotateHead (api_id 2004), kReplayTrajectory (2028), Yahboom pan-tilt cam, Yahboom metal push kick, trailer non-holonomic, hardware capability matrix | **'4_EDGE_HARDWARE_SIM2REAL.md' §V6.4** |
+| **[V6.4]** Empirical scenarios, umschaltmomente, 74 to 33 reduction, 8s regression test, analysis.md format, Oracle ground truth, score chart, `header_k3.txt`, `rules_foul_penalty.txt` | **'6_DATA_SCHEMAS_AND_LIFECYCLE.md' §V6.4** + **'8_C3_SOCCER_KNOWLEDGE.md' §6** |
+| **[V6.4]** `start_ollama.sh`, `ORIGINAL_DIR`, path bug after `cd src`, `/tmp/r2k_ollama.log`, `prompt_utils.py`, `header_k3.txt` fragment | **'1_CORE_ARCHITECTURE_AND_SYNC.md' §V6.4** |
 
 ## 3. Mermaid Rendering Constraints
 > **CRITICAL DIRECTIVE FOR LLMs:** To prevent fatal parsing errors in our documentation renderer, all Mermaid `graph TD` diagrams MUST strictly adhere to the following syntax limitations. DO NOT use advanced brackets.

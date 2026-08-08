@@ -36,8 +36,8 @@ CORNER_X, CORNER_Y = 4.3, 2.8
 
 
 def draw_field(ax):
-    ax.set_xlim(FIELD_X_MIN - 1.0, FIELD_X_MAX + 1.0)
-    ax.set_ylim(FIELD_Y_MIN - 1.0, FIELD_Y_MAX + 1.0)
+    ax.set_xlim(FIELD_X_MIN - 0.5, FIELD_X_MAX + 0.5)
+    ax.set_ylim(FIELD_Y_MIN - 0.5, FIELD_Y_MAX + 0.5)
     ax.set_aspect('equal')
     ax.set_facecolor('#2d5a1e')
 
@@ -78,25 +78,35 @@ def draw_field(ax):
 
 
 def draw_entities(ax, entities):
+    # Draw bots first, then ball on top (ball has higher zorder so it's
+    # visible even when overlapping a bot at the same position)
+    ball_pos = None
     for name, pos in entities.items():
         x, y = pos.get('x', 0), pos.get('y', 0)
 
         if 'ball' in name.lower():
-            ax.plot(x, y, 'wo', markersize=10, zorder=5, markeredgecolor='k', markeredgewidth=1)
-            ax.annotate('ball', (x, y), textcoords="offset points", xytext=(8, 8),
-                        fontsize=7, color='white', zorder=6)
+            ball_pos = (x, y)
         elif 'blue' in name:
-            ax.plot(x, y, 'o', color='#3498db', markersize=12, zorder=5,
+            ax.plot(x, y, 'o', color='#3498db', markersize=14, zorder=5,
                     markeredgecolor='white', markeredgewidth=1.5)
             ax.annotate(name, (x, y), textcoords="offset points", xytext=(0, -15),
                         fontsize=7, color='white', ha='center', zorder=6,
                         fontweight='bold')
         elif 'red' in name:
-            ax.plot(x, y, 'o', color='#e74c3c', markersize=12, zorder=5,
+            ax.plot(x, y, 'o', color='#e74c3c', markersize=14, zorder=5,
                     markeredgecolor='white', markeredgewidth=1.5)
             ax.annotate(name, (x, y), textcoords="offset points", xytext=(0, -15),
                         fontsize=7, color='white', ha='center', zorder=6,
                         fontweight='bold')
+
+    # Draw ball last with higher zorder — larger and more visible
+    if ball_pos is not None:
+        x, y = ball_pos
+        ax.plot(x, y, 'o', color='white', markersize=11, zorder=7,
+                markeredgecolor='black', markeredgewidth=1.5, alpha=0.9)
+        ax.annotate('ball', (x, y), textcoords="offset points", xytext=(10, 10),
+                    fontsize=7, color='white', fontweight='bold', zorder=8,
+                    bbox=dict(boxstyle='round,pad=0.15', fc='black', ec='none', alpha=0.6))
 
 
 def generate_diagram(scenario_json_path, output_path):

@@ -1,0 +1,35 @@
+{
+  "scenario_name": "emp_regression-anti_pass_025",
+  "mode": "3vs3",
+  "tactical_situation": "Umschalt: pass (regression-anti)",
+  "entities": {
+    "soccer_ball": {
+      "x": -4.4,
+      "y": 0.627
+    },
+    "blue_1": {
+      "x": -4.27,
+      "y": 0.399
+    },
+    "blue_2": {
+      "x": -4.4,
+      "y": 1.32
+    },
+    "blue_3": {
+      "x": -1.848,
+      "y": 0.988
+    },
+    "red_1": {
+      "x": 0.44,
+      "y": -1.392
+    },
+    "red_2": {
+      "x": 4.183,
+      "y": 0.4
+    },
+    "red_3": {
+      "x": -4.397,
+      "y": 1.042
+    }
+  }
+}

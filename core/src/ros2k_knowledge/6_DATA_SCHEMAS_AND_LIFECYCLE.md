@@ -3,8 +3,8 @@ id: 6_DATA_LIFECYCLE
 title: "Section 6: Data Schemas & System Lifecycle (V6.2)"
 type: KNOWLEDGE_BASE_POWER_FILE
 tags: [json, schema, rpc, bash, lifecycle, orchestration, setup_r2k, flat-json, relay-profiles, watchdog, cli-ergonomics, active_relay, bashrc-immunity, v6, v6.1, v6.2, tactical-score, tactical-reward, match-state, eval-results, batch-evaluator, momentum, set-piece, goal-kick, corner-kick-in, own-half-warp, trace-logging, llm-trace, world-trace, r2k-run-id, analyze-trace, kpi, test-non-functional, composite-score, pytest, regression-suite, kpi-targets, skip-slow]
-last_modified: 2026-07-22
-version: v6.2
+last_modified: 2026-08-05
+version: v6.4
 ---
 # Section 6: Data Schemas & System Lifecycle (V5)
 
@@ -579,3 +579,64 @@ Blue scores rarely (5 goals total vs 18 conceded across 27 runs).
 new attack KPIs because they were generated before the `t_wall` bugfix in
 `compute_attack_kpis()`. The code fix is committed; the JSONs need a re-run to reflect
 correct values. The table above contains the post-fix numbers from the commit message.
+
+## V6.4 Addendum — Score Function Refinement and Empirical Scenarios
+
+### Score function refined (Phase R)
+
+`score_node.py` extended with two new metrics (non-breaking, appended to
+existing code):
+
+1. **Cluster penalty:** -2 if any two blue bots within 0.5m, -1 if within
+   1.0m. Computed via pairwise distance between all blue bot positions.
+2. **Lane openness:** -3 if no blue bot is between the ball and the own goal
+   (ball in own half, X < 0). Checks if any blue bot is on the ball-to-goal
+   line within 1.5m Y proximity.
+
+Score range still [-10, +10]. Verified:
+- **A1 (partial ordering):** winning matches avg_score=-0.44, losing=-1.38,
+  delta=0.94. A1 holds.
+- **A2 (slope):** blue goals avg momentum before=+0.076 (78% positive),
+  red goals avg momentum=-0.045 (66% negative). A2 holds.
+
+### Empirical scenarios (Phase R.3-R.4)
+
+74 umschaltmomente extracted from 467 matches with goals. Backward-scan
+algorithm: goal scored → find kick → find umschaltmoment → find LLM call.
+
+**Types:** ball_won (50), restart (10), cluster (8), pass (3), clearance (3)
+**Tags:** empirical-proven (31, blue scored), regression-anti (43, red scored)
+
+**Reduction:** 74 → 33 representative scenarios by 3.0m clustering threshold
+(all entities within 3m = "similar"). Centroid selection (closest to mean
+position). All 5 umschalt types preserved in both tags.
+
+**Empirical scenario format:**
+1. Source (original match, umschalt type, tag, cluster size)
+2. Expert (Analysis) — GLM-written tactical analysis
+3. Oracle (Strategy) — GLM-written recommended actions + strategy explanation
+4. Output to bridge — bridge-format commands (move to / kick / hold)
+5. Qwen's decision at t_umschalt — raw LLM response from historical trace
+6. Regression metrics — score before/after, delta, red behavior, match result
+7. Score chart — bar chart (x-axis [-10, +10])
+8. Test specification — duration 8s, expected outcome, pass criterion
+
+### Analysis.md format (v6.4, all 17 hand-crafted + 33 empirical)
+
+Standard format for all scenario packages:
+1. **Image** — field diagram with yellow dotted arrows showing Oracle positions
+   (ground truth, NOT Qwen output)
+2. **Expert (Analysis)** — tactical facts (possession, distances, threats)
+3. **Oracle (Strategy)** — strategy line ("to achieve X") + per-bot commands
+   using: "cover the goal line at (X,Y)" / "move to (X,Y)" / "kick" /
+   "hold position"
+4. **Output to bridge** — same commands but "cover the goal line at" → "move to"
+   (what the bridge actually receives)
+5. **Score delta** — bar chart, x-axis [-10, +10], consistent layout
+
+Key rules:
+- Oracle positions must be reachable within 1-2 LLM latency periods (~0.7-1.4s)
+- Blue_1 position depends on scenario (not always on goal line)
+- All bots accounted for (no missing/overlaid bots)
+- No meta-knowledge in Oracle (no "bridge executes", "cmd_vel", "RPC")
+- Yellow vectors show Oracle (ground truth), not Qwen's output

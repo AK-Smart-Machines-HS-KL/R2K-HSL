@@ -1,0 +1,35 @@
+{
+  "scenario_name": "emp_regression-anti_cluster_023",
+  "mode": "3vs3",
+  "tactical_situation": "Umschalt: cluster (regression-anti)",
+  "entities": {
+    "soccer_ball": {
+      "x": -4.437,
+      "y": -0.7
+    },
+    "blue_1": {
+      "x": -4.262,
+      "y": -0.315
+    },
+    "blue_2": {
+      "x": -3.694,
+      "y": -0.664
+    },
+    "blue_3": {
+      "x": -3.827,
+      "y": -0.269
+    },
+    "red_1": {
+      "x": 0.43,
+      "y": 1.597
+    },
+    "red_2": {
+      "x": -3.917,
+      "y": -0.999
+    },
+    "red_3": {
+      "x": 4.319,
+      "y": -0.28
+    }
+  }
+}

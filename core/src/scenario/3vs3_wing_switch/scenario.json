@@ -1,0 +1,35 @@
+{
+  "scenario_name": "3vs3_wing_switch",
+  "mode": "3vs3",
+  "tactical_situation": "Blue attack stalled on the left wing \u2014 red overloaded the left side; blue must switch play to the open right wing",
+  "entities": {
+    "soccer_ball": {
+      "x": 1.5,
+      "y": 2.2
+    },
+    "blue_1": {
+      "x": -4.0,
+      "y": 0.0
+    },
+    "blue_2": {
+      "x": -0.5,
+      "y": 2.0
+    },
+    "blue_3": {
+      "x": 0.0,
+      "y": 0.0
+    },
+    "red_1": {
+      "x": 2.5,
+      "y": 2.0
+    },
+    "red_2": {
+      "x": 2.0,
+      "y": 1.5
+    },
+    "red_3": {
+      "x": 3.5,
+      "y": 0.0
+    }
+  }
+}

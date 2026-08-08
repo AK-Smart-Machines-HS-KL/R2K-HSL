@@ -150,6 +150,10 @@ opencode session via `.opencode/opencode.json → instructions`.
   LLM (fragments, transforms, scenario text) contains ONLY soccer/referee knowledge
   in dictionary vocabulary. Never mention ROS2K internals (JSON schema, PID, tmpfs,
   phantom kick, file paths, etc.). Every positional/negational verb carries explicit X,Y.
+- **No hard-wired thresholds in code:** Distances, velocities, angles, timeouts must be
+  named module constants at file top (e.g. `PRESSING_GAIN = 0.5`, not `if dist < 0.3:`).
+  Prefer continuous/proportional functions over step thresholds where avoidable.
+  Enables tuning without code archaeology and documents intent.
 
 ## Mermaid in docs
 

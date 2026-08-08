@@ -1,0 +1,35 @@
+{
+  "scenario_name": "emp_empirical-proven_clearance_004",
+  "mode": "3vs3",
+  "tactical_situation": "Umschalt: clearance (empirical-proven)",
+  "entities": {
+    "soccer_ball": {
+      "x": 4.439,
+      "y": -0.63
+    },
+    "blue_1": {
+      "x": -3.03,
+      "y": -0.097
+    },
+    "blue_2": {
+      "x": 3.691,
+      "y": -0.093
+    },
+    "blue_3": {
+      "x": 1.676,
+      "y": 0.015
+    },
+    "red_1": {
+      "x": 4.239,
+      "y": -0.102
+    },
+    "red_2": {
+      "x": 0.469,
+      "y": 1.389
+    },
+    "red_3": {
+      "x": 3.649,
+      "y": -0.499
+    }
+  }
+}

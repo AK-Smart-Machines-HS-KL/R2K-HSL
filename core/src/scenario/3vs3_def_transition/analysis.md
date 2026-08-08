@@ -1,21 +1,29 @@
-# 3vs3_def_transition — Analysis
+# 3vs3_def_transition
 
-## Expert (technical)
+![field diagram](field_diagram.png)
 
-Blue just lost the ball in red's half and must recover. The ball is at
-(2.2, 0.0) with blue_3 at (2.2, 0.2) 0.2 m from it and red_1 at
-(2.4, 0.0) 0.28 m — a 50/50 contest. Blue_3 is close enough to tackle
-aggressively; this is a legitimate recovery tackle, not a press.
-Red_2 at (0.0, 0.3) and red_3 at (-0.9, 0.9) are behind the ball in
-blue's half, out of reach — they can be ignored for the tackle
-decision. Blue_2 at (0.5, -0.3) has free space on the right wing
-(Y toward -3.0). Blue_1 at (-3.6, 0.3) is well-placed as the goalie.
+## Expert (Analysis)
 
-## Oracle (strategic)
+Ball at (2.2, 0.0) in red's half. red_1 (2.4, 0.0) has the ball — 0.2m away. blue_2 (-0.5, -0.3) is 2.7m away, blue_3 (-1.0, 0.2) is 3.2m. Both blue bots are caught upfield. blue_1 (-3.6, 0.3) is the goalie, 5.8m from play. Defensive transition — blue must sprint back.
 
-Blue_1, the goalie at (-3.6, 0.3), stays at (-3.6, 0.3). Blue_2 keeps
-distance — it does not cluster with the tackle — and moves to the free
-right-wing space at (X≈2.0, Y≈-2.0), waiting there for the ball to come
-free and giving blue_3 an outlet when the press arrives. Blue_3, closest to
-the ball (0.2 m away at (2.2, 0.2)), tackles aggressively for the ball at
-(2.2, 0.0). Keep all blue bots inside the field boundaries.
+## Oracle (Strategy)
+
+blue lost possession — red_1 has the ball. blue_2 and blue_3 must drop back behind the ball to cover the goal. blue_1 holds the goal line. Transition from attack to defense.
+
+```
+blue_1 cover the goal line at (-4.0, 0.0)
+blue_2 move to (-2.0, -0.3)
+blue_3 move to (-1.5, 0.2)
+```
+
+## Output to bridge
+
+```
+blue_1 move to (-4.0, 0.0)
+blue_2 move to (-2.0, -0.3)
+blue_3 move to (-1.5, 0.2)
+```
+
+## Score delta
+
+![score chart](score_chart.png)

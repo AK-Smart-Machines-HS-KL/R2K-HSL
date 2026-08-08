@@ -1,0 +1,7 @@
+{
+  "scenario_name": "emp_regression-anti_ball_won_014",
+  "tag": "regression-anti",
+  "umschalt_type": "ball_won",
+  "cluster_size": 2,
+  "note": "Auto-generated from umschaltmoment extraction, reduced by clustering"
+}

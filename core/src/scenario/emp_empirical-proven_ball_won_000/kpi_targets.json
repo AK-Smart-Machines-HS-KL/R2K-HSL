@@ -1,0 +1,7 @@
+{
+  "scenario_name": "emp_empirical-proven_ball_won_000",
+  "tag": "empirical-proven",
+  "umschalt_type": "ball_won",
+  "cluster_size": 12,
+  "note": "Auto-generated from umschaltmoment extraction, reduced by clustering"
+}

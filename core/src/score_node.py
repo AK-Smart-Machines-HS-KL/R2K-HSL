@@ -1,86 +1,187 @@
 import rclpy
 import json
+import os
+import math
+import time
 from rclpy.node import Node
 from std_msgs.msg import String
 from collections import deque
+
+# === Named module constants (no hard-coded thresholds in code body) ===
+BALL_POSITION_GAIN = 1.5
+POSSESSION_BONUS = 2.0
+POSSESSION_DIST = 1.0
+CLUSTER_PENALTY_SEVERE = 2.0
+CLUSTER_PENALTY_MILD = 1.0
+CLUSTER_DIST_SEVERE = 0.5
+CLUSTER_DIST_MILD = 1.0
+LANE_OPEN_PENALTY = 3.0
+LANE_BLOCKER_BONUS = 1.0
+LANE_BLOCKER_BANDWIDTH = 1.5
+SCORE_MIN = -10.0
+SCORE_MAX = 10.0
+MOMENTUM_WINDOW_SIZE = 300
+MOMENTUM_MIN_SAMPLES = 10
+MOMENTUM_SCALE_FACTOR = 10.0
+
+# === New continuous reward gains (no thresholds, proportional) ===
+PRESSING_GAIN = 1.0
+MARKING_GAIN = 0.5
+
+RESET_FLAG = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                          'shared_state', 'reset_flag.json')
+
 
 class ScoreNode(Node):
     def __init__(self):
         super().__init__('score_node')
         self.sub_pos = self.create_subscription(String, '/world_positions', self.pos_callback, 10)
         self.pub = self.create_publisher(String, '/tactical_score', 10)
-        
+
         self.total_score_sum = 0.0
         self.score_samples_count = 0
-        
-        self.momentum_window = deque(maxlen=300)
-        self.MOMENTUM_MIN_SAMPLES = 10
-        self.MOMENTUM_SCALE_FACTOR = 10.0
-        
-        self.get_logger().info("🧮 Scorer V6 Online: Momentum tracking enabled")
+
+        self.momentum_window = deque(maxlen=MOMENTUM_WINDOW_SIZE)
+
+        # === Continuous reward state (reset on warp) ===
+        self._prev_pressing_dist = None
+        self._prev_marking_dist = None
+
+        self.get_logger().info("Scorer V7 Online: pressing + marking rewards, momentum tracking")
 
     def _calculate_momentum(self):
         n = len(self.momentum_window)
-        if n < self.MOMENTUM_MIN_SAMPLES:
+        if n < MOMENTUM_MIN_SAMPLES:
             return 0.0, "stable"
-        
+
         sum_x = sum(range(n))
         sum_y = sum(score for _, score in self.momentum_window)
         sum_xy = sum(i * score for i, (_, score) in enumerate(self.momentum_window))
         sum_x2 = sum(i * i for i in range(n))
-        
+
         denominator = n * sum_x2 - sum_x * sum_x
         if abs(denominator) < 1e-9:
             return 0.0, "stable"
-        
+
         slope = (n * sum_xy - sum_x * sum_y) / denominator
-        momentum = max(-10.0, min(10.0, slope * self.MOMENTUM_SCALE_FACTOR))
-        
+        momentum = max(SCORE_MIN, min(SCORE_MAX, slope * MOMENTUM_SCALE_FACTOR))
+
         if momentum > 2.0: trend = "ascending"
         elif momentum > 0.5: trend = "improving"
         elif momentum > -0.5: trend = "stable"
         elif momentum > -2.0: trend = "declining"
         else: trend = "collapsing"
-        
+
         return round(momentum, 2), trend
+
+    def _check_reset(self):
+        """Check for warp-and-resume reset flag. Clears all stateful metrics."""
+        if os.path.exists(RESET_FLAG):
+            self._prev_pressing_dist = None
+            self._prev_marking_dist = None
+            self.total_score_sum = 0.0
+            self.score_samples_count = 0
+            self.momentum_window.clear()
+            try:
+                os.remove(RESET_FLAG)
+            except OSError:
+                pass
+            self.get_logger().info("Reset flag detected — clearing pressing/marking/momentum state")
 
     def pos_callback(self, msg):
         try:
+            self._check_reset()
+
             data = json.loads(msg.data)
             ents = data.get('entities', {})
             ball = ents.get('soccer_ball')
-            
+
             score = 0.0
             fact = "Neutral Game"
             poss = "Contested"
 
             if ball:
                 # 1. Basis-Score durch Ball-Position (X-Achse: -4.5 bis +4.5)
-                score += ball['x'] * 1.5 
-                
+                score += ball['x'] * BALL_POSITION_GAIN
+
                 # 2. Distanz-Check: Wer ist näher am Ball?
                 dist_blue = min([((b['x']-ball['x'])**2 + (b['y']-ball['y'])**2)**0.5 for k, b in ents.items() if 'blue' in k], default=99)
                 dist_red = min([((b['x']-ball['x'])**2 + (b['y']-ball['y'])**2)**0.5 for k, b in ents.items() if 'red' in k], default=99)
 
-                if dist_blue < dist_red and dist_blue < 1.0:
+                if dist_blue < dist_red and dist_blue < POSSESSION_DIST:
                     poss = "Blue Team"
-                    score += 2.0
+                    score += POSSESSION_BONUS
                     fact = "Blue attacking" if ball['x'] > 0 else "Blue defending"
-                elif dist_red < dist_blue and dist_red < 1.0:
+                elif dist_red < dist_blue and dist_red < POSSESSION_DIST:
                     poss = "Red Team"
-                    score -= 2.0
+                    score -= POSSESSION_BONUS
                     fact = "Red attacking" if ball['x'] < 0 else "Red defending"
-            
-            # Score auf max -10 bis +10 kappen
-            score = max(min(score, 10.0), -10.0)
 
-            # --- NEU: DURCHSCHNITT (Running Average) BERECHNEN ---
+                # === Phase R: additional metrics (appended, non-breaking) ===
+                try:
+                    # Cluster penalty: blue bots too close
+                    _blue = [(b['x'], b['y']) for k, b in ents.items() if 'blue' in k]
+                    if len(_blue) >= 2:
+                        _min_d = 999.0
+                        for _i in range(len(_blue)):
+                            for _j in range(_i+1, len(_blue)):
+                                _d = math.hypot(_blue[_i][0]-_blue[_j][0], _blue[_i][1]-_blue[_j][1])
+                                if _d < _min_d: _min_d = _d
+                        if _min_d < CLUSTER_DIST_SEVERE: score -= CLUSTER_PENALTY_SEVERE
+                        elif _min_d < CLUSTER_DIST_MILD: score -= CLUSTER_PENALTY_MILD
+
+                    # Lane openness: no blue bot between ball and own goal
+                    if ball['x'] < 0:
+                        _blockers = 0
+                        for _k, _b in ents.items():
+                            if 'blue' not in _k: continue
+                            if _b['x'] < ball['x'] and _b['x'] > -4.5:
+                                _ratio = (ball['x'] + 4.5)
+                                if _ratio > 0.01:
+                                    _expected_y = ball['y'] * (_b['x'] + 4.5) / _ratio
+                                    if abs(_b['y'] - _expected_y) < LANE_BLOCKER_BANDWIDTH:
+                                        _blockers += 1
+                        if _blockers == 0: score -= LANE_OPEN_PENALTY
+                        elif _blockers >= 2: score += LANE_BLOCKER_BONUS
+                except Exception:
+                    pass  # never let the new metrics break the existing score
+
+                # === V7: Continuous pressing reward (symmetric) ===
+                # Reward proportional to REDUCED distance between nearest blue and ball.
+                # Symmetric: closing → positive, opening → negative (same gain).
+                if self._prev_pressing_dist is not None:
+                    pressing_delta = self._prev_pressing_dist - dist_blue
+                    score += pressing_delta * PRESSING_GAIN
+                self._prev_pressing_dist = dist_blue
+
+                # === V7: Continuous marking reward (conditional + symmetric) ===
+                # Only active when red is closer to ball than blue (red has possession potential).
+                # No threshold — comparison determines "possession potential."
+                # Reward proportional to reduced distance between nearest blue and nearest red.
+                if dist_red < dist_blue:
+                    _blue_ents = {k: v for k, v in ents.items() if 'blue' in k}
+                    _red_ents = {k: v for k, v in ents.items() if 'red' in k}
+                    _nearest_blue_red = min([
+                        math.hypot(b['x']-r['x'], b['y']-r['y'])
+                        for b in _blue_ents.values()
+                        for r in _red_ents.values()
+                    ], default=99)
+                    if self._prev_marking_dist is not None:
+                        marking_delta = self._prev_marking_dist - _nearest_blue_red
+                        score += marking_delta * MARKING_GAIN
+                    self._prev_marking_dist = _nearest_blue_red
+                else:
+                    self._prev_marking_dist = None  # reset when condition no longer met
+
+            # Score auf max -10 bis +10 kappen
+            score = max(min(score, SCORE_MAX), SCORE_MIN)
+
+            # --- Running Average ---
             self.score_samples_count += 1
             self.total_score_sum += score
             avg_score = self.total_score_sum / self.score_samples_count
-            
-            # --- NEU: MOMENTUM BERECHNEN ---
-            import time
+
+            # --- Momentum ---
             timestamp = time.time()
             self.momentum_window.append((timestamp, score))
             momentum_30s, momentum_trend = self._calculate_momentum()

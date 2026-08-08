@@ -1,0 +1,35 @@
+{
+  "scenario_name": "emp_empirical-proven_ball_won_002",
+  "mode": "3vs3",
+  "tactical_situation": "Umschalt: ball_won (empirical-proven)",
+  "entities": {
+    "soccer_ball": {
+      "x": 3.866,
+      "y": 0.043
+    },
+    "blue_1": {
+      "x": -3.089,
+      "y": -0.019
+    },
+    "blue_2": {
+      "x": 3.477,
+      "y": -0.051
+    },
+    "blue_3": {
+      "x": -1.531,
+      "y": 0.64
+    },
+    "red_1": {
+      "x": 0.435,
+      "y": -1.599
+    },
+    "red_2": {
+      "x": 3.654,
+      "y": 0.402
+    },
+    "red_3": {
+      "x": 2.262,
+      "y": 0.64
+    }
+  }
+}

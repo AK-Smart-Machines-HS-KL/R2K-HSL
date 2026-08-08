@@ -1,0 +1,7 @@
+{
+  "scenario_name": "emp_regression-anti_restart_032",
+  "tag": "regression-anti",
+  "umschalt_type": "restart",
+  "cluster_size": 1,
+  "note": "Auto-generated from umschaltmoment extraction, reduced by clustering"
+}

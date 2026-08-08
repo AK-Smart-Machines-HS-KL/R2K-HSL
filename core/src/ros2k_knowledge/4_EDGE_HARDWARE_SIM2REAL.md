@@ -3,8 +3,8 @@ id: 4_EDGE
 title: "Section 4: Edge Hardware Integration (Sim2Real) (V6.2)"
 type: KNOWLEDGE_BASE_POWER_FILE
 tags: [esp32, booster-k1, sim2real, qos, rpc, micro-ros, set_entity_state, hardware-relay, api-2000, bot1-namespace, dead-reckoning, gazebo-pause-detection, heartbeat, nmcli, foot-slip, uros_ws, watchdog]
-last_modified: 2026-07-25
-version: v6.2
+last_modified: 2026-08-05
+version: v6.4
 ---
 # Section 4: Edge Hardware Integration (Sim2Real)
 
@@ -124,3 +124,92 @@ def monitor_heartbeat(self):
         self.get_logger().warn("Simulation PAUSED. Freezing physical hardware!")
         self.publish_emergency_stops()
 ~~~
+
+## V6.4 Addendum — Hardware Capability Matrix and K1 Kick Pitfalls
+
+### Per-bot capability matrix
+
+The relay JSON is many-to-many: a single relay can map blue_1=virtual,
+blue_2=yahboom, blue_3=k1. RoboCup rules forbid mixed teams in tournaments,
+but ROS2K testing/demos use mixed hardware.
+
+| Capability | K1 (biped) | Yahboom (cam variant) | Yahboom (standard) | Trailer | Gazebo (sim) |
+|---|---|---|---|---|---|
+| Kick | Yes (kShoot 2024, autonomous chase) | Yes (metal push, untested, short range) | Yes (metal push, untested) | No | Yes (phantom kick) |
+| Move sideways | Yes | No (diff-drive) | No (diff-drive) | No | Yes |
+| Rotate in place | Yes | Yes | Yes | No (fixed axle) | Yes |
+| Head rotate | Yes (kRotateHead 2004) | Yes (pan-tilt servo, lousy) | No | No | Yes (if modeled) |
+| Trajectory replay | Yes (kReplayTrajectory 2028) | No | No | No | No |
+| Odometry | Yes (IMU + encoders) | Yes (wheel-spin, drifts) | Yes (wheel-spin, drifts) | Yes (wheel-spin, drifts) | Yes (ground truth) |
+| Fall risk | HIGH | No | No | No | No |
+| Servo heating | HIGH | No | No | No | No |
+| Visual ball tracking | Yes (camera on head) | Unreliable (pan-tilt, lousy) | No | No | Yes (if modeled) |
+| Arrival angle control | Yes (can rotate at end) | Yes | Yes | No | Yes |
+
+### K1 kick pitfalls (critical for real matches)
+
+The K1's kick skills are **autonomous** — the K1 takes over and chases the
+ball until kick distance is reached:
+
+- `kShoot` (api_id 2024): autonomous shot toward goal
+- `kVisualKick` (api_id 2038): autonomous kick using visual tracking
+
+**Problem:** if the ball moves away (kicked by self, kicked by opponent, or
+deflected), the K1 follows indefinitely. The bot is stuck in a chase loop
+and cannot receive new assignments. This is a game-stopper.
+
+**Solution (v7):** any bot's camera (K1 head cam primarily — Yahboom cam is
+unreliable) detects ball velocity/direction change. Published as a ROS2 topic
+(`/ball/motion_change`). TeamCaptain (or bridge) receives this and sends
+`kChangeMode` (api_id 2000) to abort the autonomous kick skill. The bot is
+then free for the next LLM assignment. No thresholds, no hysteresis —
+"ball velocity changed → abort chase."
+
+### K1 head rotation (api_id 2004)
+
+The K1 SDK provides `kRotateHead` (api_id 2004) with parameters:
+- `pitch` (float): head pitch angle
+- `yaw` (float): head yaw angle (±180°)
+
+This is independent from body locomotion (api_id 2001). The bridge can
+publish head rotation commands without affecting cmd_vel / RPC 2001.
+Failsafe: api_id 2000 (kChangeMode) resets head to forward position.
+
+### K1 trajectory replay (api_id 2027/2028)
+
+- `kRecordTrajectory` (2027): enables/disables recording of the K1's motion
+  to a file on the K1's filesystem
+- `kReplayTrajectory` (2028): replays a recorded trajectory from a file path
+  (string parameter: `traj_file_path`)
+
+The trajectory file format is K1-internal (likely joint angles, not Cartesian
+waypoints). Cannot easily author trajectory files at runtime from (X, Y)
+end-points. Pre-recording with kRecordTrajectory is the practical approach.
+Future use: pre-record standard motions (walk-to-goal, walk-to-corner) and
+replay by name. See ADR-A07 (TeamCaptain) for integration plan.
+
+### Yahboom variants
+
+- **Standard:** fixed camera, no pan-tilt, differential drive (cmd_vel)
+- **Cam variant:** pan-tilt camera on top of front (servo-based, lousy
+  quality — cannot rely upon for critical tracking). Can rotate head
+  independently from body via servo control. Same diff-drive locomotion.
+- **Kick:** both types can push the ball with the metal front bumper.
+  Untested in real matches. Expected short range (~0.5m). No autonomous
+  chase — the Yahboom just drives forward into the ball.
+
+### Trailer motion model
+
+Non-holonomic (car-like): cannot strafe, cannot rotate in place. All paths
+are arc-based (drive + turn simultaneously, like a car). The path executor
+(v7, TeamCaptain) needs a different interpolation for trailers vs holonomic
+bots (K1, sim). No kick, no camera, no head rotation.
+
+### Bridge changes (v6.4)
+
+- `R2K_GOALIE_BLEND=0` (default): disables angle-block mode. Goalie stays
+  at X=-4.0 with damped Y. LLM controls when goalie advances.
+- Anti-collision: non-kicker bot pushed 1m away from kicker when within 0.5m
+- Kick direction override: blue_1 (goalie) always kicks toward +X
+- PD gain boost: lin_x = 1.2 (was 0.8) when distance > 1.0m
+- `GOALIE_DEADBAND_PCT`: 0.022 → 0.015 (tighter Y tracking)

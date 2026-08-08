@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import rclpy
 import json
+import os
 import random
 import time
 import math
@@ -9,6 +10,9 @@ from std_msgs.msg import String
 from geometry_msgs.msg import Twist
 from gazebo_msgs.srv import SetEntityState
 from collections import deque
+
+RESET_FLAG = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                          'shared_state', 'reset_flag.json')
 
 class RefereeNode(Node):
     def __init__(self):
@@ -82,10 +86,37 @@ class RefereeNode(Node):
         # Position history for velocity calculation
         self.position_history = deque(maxlen=10)
         
-        self.get_logger().info("⚖️  Referee V6 Online: Goals + Fouls + Ball-out detection")
+        self.get_logger().info("Referee V7 Online: Goals + Fouls + Ball-out + warp-reset")
+
+    def _check_reset(self):
+        """Check for warp-and-resume reset flag. Clears all match state."""
+        if os.path.exists(RESET_FLAG):
+            self.score_blue = 0
+            self.score_red = 0
+            self.ball_was_in_goal = False
+            self.status = "playing"
+            self.frozen_bots.clear()
+            self.restart_start_time = None
+            self.ball_out_event = None
+            self.restart_team = None
+            self.restart_pos = None
+            self.last_toucher = None
+            self.foul_event = None
+            self.foul_cooldown.clear()
+            self.blocking_timers.clear()
+            self.position_history.clear()
+            self.kickoff_positions_loaded = False  # force re-store on next frame
+            self.ball_out_frames = 0
+            self.last_toucher_frames.clear()
+            try:
+                os.remove(RESET_FLAG)
+            except OSError:
+                pass
+            self.get_logger().info("Reset flag detected — clearing all match state")
     
     def pos_callback(self, msg):
         try:
+            self._check_reset()
             data = json.loads(msg.data)
             entities = data.get('entities', {})
             ball = entities.get('soccer_ball')
