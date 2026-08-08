@@ -24,9 +24,14 @@ MOMENTUM_WINDOW_SIZE = 300
 MOMENTUM_MIN_SAMPLES = 10
 MOMENTUM_SCALE_FACTOR = 10.0
 
-# === New continuous reward gains (no thresholds, proportional) ===
+# === Continuous proximity reward constants (no thresholds, proportional) ===
+# Reward is stateless: based on current distance, not delta.
+# max(0, REFERENCE_DIST - dist) * GAIN gives a continuous bonus that
+# scales with how close the nearest blue is to the ball / nearest red.
 PRESSING_GAIN = 1.0
+PRESSING_REFERENCE_DIST = 3.0   # max distance at which pressing is rewarded
 MARKING_GAIN = 0.5
+MARKING_REFERENCE_DIST = 3.0   # max distance at which marking is rewarded
 
 RESET_FLAG = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                           'shared_state', 'reset_flag.json')
@@ -43,11 +48,7 @@ class ScoreNode(Node):
 
         self.momentum_window = deque(maxlen=MOMENTUM_WINDOW_SIZE)
 
-        # === Continuous reward state (reset on warp) ===
-        self._prev_pressing_dist = None
-        self._prev_marking_dist = None
-
-        self.get_logger().info("Scorer V7 Online: pressing + marking rewards, momentum tracking")
+        self.get_logger().info("Scorer V7 Online: continuous proximity pressing + marking, momentum tracking")
 
     def _calculate_momentum(self):
         n = len(self.momentum_window)
@@ -77,8 +78,6 @@ class ScoreNode(Node):
     def _check_reset(self):
         """Check for warp-and-resume reset flag. Clears all stateful metrics."""
         if os.path.exists(RESET_FLAG):
-            self._prev_pressing_dist = None
-            self._prev_marking_dist = None
             self.total_score_sum = 0.0
             self.score_samples_count = 0
             self.momentum_window.clear()
@@ -86,7 +85,7 @@ class ScoreNode(Node):
                 os.remove(RESET_FLAG)
             except OSError:
                 pass
-            self.get_logger().info("Reset flag detected — clearing pressing/marking/momentum state")
+            self.get_logger().info("Reset flag detected — clearing momentum state")
 
     def pos_callback(self, msg):
         try:
@@ -146,18 +145,17 @@ class ScoreNode(Node):
                 except Exception:
                     pass  # never let the new metrics break the existing score
 
-                # === V7: Continuous pressing reward (symmetric) ===
-                # Reward proportional to REDUCED distance between nearest blue and ball.
-                # Symmetric: closing → positive, opening → negative (same gain).
-                if self._prev_pressing_dist is not None:
-                    pressing_delta = self._prev_pressing_dist - dist_blue
-                    score += pressing_delta * PRESSING_GAIN
-                self._prev_pressing_dist = dist_blue
+                # === V7: Continuous pressing reward (proximity-based, stateless) ===
+                # Reward proportional to how CLOSE the nearest blue is to the ball.
+                # No threshold: max(0, REFERENCE - dist) * GAIN
+                # At dist=0: +3.0, dist=1.5: +1.5, dist=3.0: 0, dist>3.0: 0
+                pressing_reward = max(0, PRESSING_REFERENCE_DIST - dist_blue) * PRESSING_GAIN
+                score += pressing_reward
 
-                # === V7: Continuous marking reward (conditional + symmetric) ===
+                # === V7: Continuous marking reward (conditional + proximity-based) ===
                 # Only active when red is closer to ball than blue (red has possession potential).
                 # No threshold — comparison determines "possession potential."
-                # Reward proportional to reduced distance between nearest blue and nearest red.
+                # Reward proportional to how CLOSE the nearest blue is to the nearest red.
                 if dist_red < dist_blue:
                     _blue_ents = {k: v for k, v in ents.items() if 'blue' in k}
                     _red_ents = {k: v for k, v in ents.items() if 'red' in k}
@@ -166,12 +164,8 @@ class ScoreNode(Node):
                         for b in _blue_ents.values()
                         for r in _red_ents.values()
                     ], default=99)
-                    if self._prev_marking_dist is not None:
-                        marking_delta = self._prev_marking_dist - _nearest_blue_red
-                        score += marking_delta * MARKING_GAIN
-                    self._prev_marking_dist = _nearest_blue_red
-                else:
-                    self._prev_marking_dist = None  # reset when condition no longer met
+                    marking_reward = max(0, MARKING_REFERENCE_DIST - _nearest_blue_red) * MARKING_GAIN
+                    score += marking_reward
 
             # Score auf max -10 bis +10 kappen
             score = max(min(score, SCORE_MAX), SCORE_MIN)

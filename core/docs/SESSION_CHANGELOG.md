@@ -3,6 +3,46 @@
 > For full history (2026-07-13 to 2026-08-02), see `SESSION_CHANGELOG_archive.md`.
 > Compressed on 2026-08-05. Key findings are in the power files and `LESSONS_LEARNED.md`.
 
+## 2026-08-08 — Score formula option D: continuous proximity rewards
+
+**Goal:** Fix root cause of score chart regression: per-frame pressing reward (+0.036) too small to counter possession flip (-2.0). Replace with continuous proximity reward (option D).
+
+**Done:**
+- score_node.py: replaced per-frame velocity-based pressing/marking rewards with continuous proximity rewards. Stateless — no `_prev_*` tracking needed.
+  - Pressing: `max(0, PRESSING_REFERENCE_DIST - dist_blue) * PRESSING_GAIN` — rewards being CLOSE to ball, not closing distance
+  - Marking: `max(0, MARKING_REFERENCE_DIST - nearest_blue_red) * MARKING_GAIN` — only when red closer to ball (possession potential)
+  - Named constants: `PRESSING_REFERENCE_DIST=3.0`, `MARKING_REFERENCE_DIST=3.0`
+- Ran 118 Gazebo matches (85 hand-crafted × 4s + 33 empirical × 8s), 0 failures, fresh traces with option D.
+- Regenerated all 50 score charts + 50 field diagrams.
+- Re-probed all 50: 500 probes, hard-pass 92% (98% 3vs3), clustering 96.6%, latency p50 289ms. No regression.
+- 147 fast tests pass.
+- Score trajectory improvement verified:
+  - 3vs3_attack_center: t=4s mean 1.30 → 3.13 (+1.83)
+  - 3vs3_def_transition: t=4s mean -0.50 → 2.19 (+2.69)
+  - 3vs3_high_line: t=4s mean -9.50 → -6.46 (+3.04)
+  - 3vs3_attack_wing: t=4s mean 0.55 → 0.79 (+0.24)
+
+**Files touched:**
+- `src/score_node.py` — option D: continuous proximity pressing + marking (stateless)
+- 50 `score_chart.png` (regenerated with option D data)
+- 50 `field_diagram.png` (regenerated)
+- `results/probe_p3_v7d_{raw,report}.{jsonl,md}` (500 probes)
+
+**Files deleted:** None
+
+**Not yet done:**
+- Empirical score chart visual bugs (goal marker position, NO GOAL label) — still present, deferred to human reviewer
+- Phase W (watchdog divergence scenarios) — next
+- Phase 4 (live Gazebo demos) — after Phase W
+- Phase 4b (Llama-3.2-3B regression) — model pulled, ready
+- Phase 5 (final KPI + code freeze) — after Phase 4/4b
+
+**Next:** Phase W — build 6 synthetic divergence scenarios, test Option B (second-model monitor POC), write decision report.
+
+**Blockers:** None. 147 tests pass. Ollama on GPU, qwen2.5:3b + llama3.2:3b warm.
+
+---
+
 ## 2026-08-07 (cont.2) — Path C: score formula V7 + Oracle fix + chart fixes + warp-and-resume
 
 **Goal:** Fix root cause of score regression in hand-crafted scenarios: Oracle sends bots 2m from ball (never challenges), scoring formula doesn't reward pressing/marking. Add warp-and-resume infrastructure. Fix score chart bugs.
