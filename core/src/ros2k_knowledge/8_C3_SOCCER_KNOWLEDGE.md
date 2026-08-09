@@ -411,6 +411,20 @@ prompt (fragments + header) are needed:
   clamped to [-10.0, +10.0]. Positive = Blue advantage, negative = Red
   advantage. Score charts must use this fixed range on the x-axis.
 
+**Kickoff formation (RoboCup standard):**
+- At kickoff (after a goal), ALL bots of BOTH teams must be in their own half:
+  Blue bots at X < 0, Red bots at X > 0.
+- The center circle (radius 1.5m from center) is reserved for the kickoff team.
+  All opponents must be >=1.5m from the ball at (0, 0).
+- The referee warps bots to a **standard formation** on kickoff, NOT to the
+  scenario start positions. Scenario start positions may have bots in the
+  opponent's half (mid-game tactical situations) — these are NOT valid
+  kickoff positions.
+- Standard formation: goalie at (±4.2, 0.0), field bots at (±1.5, ±1.5) for
+  3vs3 or (±1.5, 0.0) for 2vs2.
+- The freeze mechanism (scoring team frozen 5s) enforces the center circle
+  rule — no additional opponent-distance check needed.
+
 These are in addition to the "GOALIE HOLD VS CLOSE" rule already added in
 H1.3. The rules should be tested in Phase M sub-exp 2 (prompt structure
 residual — zero-shot vs current).

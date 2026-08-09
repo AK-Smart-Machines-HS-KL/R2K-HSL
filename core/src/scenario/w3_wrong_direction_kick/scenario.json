@@ -1,0 +1,14 @@
+{
+  "scenario_name": "w3_wrong_direction_kick",
+  "mode": "3vs3",
+  "tactical_situation": "Ball in own half — blue must clear upfield, not toward own goal",
+  "entities": {
+    "soccer_ball": {"x": -2.0, "y": 0.5},
+    "blue_1": {"x": -4.0, "y": 0.0},
+    "blue_2": {"x": -1.8, "y": 0.5},
+    "blue_3": {"x": -1.0, "y": -0.5},
+    "red_1": {"x": -0.5, "y": 0.8},
+    "red_2": {"x": 1.5, "y": 1.0},
+    "red_3": {"x": 3.0, "y": -0.5}
+  }
+}

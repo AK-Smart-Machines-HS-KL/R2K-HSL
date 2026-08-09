@@ -182,16 +182,41 @@ stateDiagram-v2
 | **Duration** | 5.0 s (`SET_PIECE_COUNTDOWN`) |
 | **Score** | Blue +1 if ball crosses X=+4.5; Red +1 if ball crosses X=-4.5 |
 | **Ball** | Reset to center (0, 0), stationary |
-| **Bots** | All bots warped to their kickoff positions (stored at match start) |
+| **Bots** | All bots warped to **standard kickoff formation** (not scenario start positions) |
 | **Freeze** | **Scoring team** frozen for 5.0 s (cannot move) |
 | **Restart team** | Conceding team (opposite of scoring team) |
 | **Kickoff** | Conceding team kicks off — freeze ends on touch or 5s countdown |
-| **Code** | `referee_node.py:136-184` |
+| **Code** | `referee_node.py` `_kickoff_reset()` |
 
 **Visualizer display:**
 - Event: `GOAL: Blue 1 - 0 Red`
 - Event: `KICKOFF: Red` (conceding team)
 - Popup: `KICKOFF Red` (shown for 5s)
+
+> [!note] Kickoff formation rule (RoboCup standard)
+> At kickoff (after a goal), ALL bots of BOTH teams must be in their own half:
+> - Blue bots: X < 0
+> - Red bots: X > 0
+>
+> The center circle (radius 1.5m from center) is reserved for the kickoff team.
+> All opponents must be >=1.5m from the ball at (0, 0).
+>
+> The referee warps bots to a **standard formation** (not the scenario start
+> positions) to enforce this rule. The standard formation is defined by
+> `KICKOFF_FORMATIONS` in `referee_node.py`:
+>
+> | Bot | 3vs3 | 2vs2 |
+> |---|---|---|
+> | blue_1 (goalie) | (-4.2, 0.0) | (-4.2, 0.0) |
+> | blue_2 | (-1.5, 1.5) | (-1.5, 0.0) |
+> | blue_3 | (-1.5, -1.5) | — |
+> | red_1 (goalie) | (4.2, 0.0) | (4.2, 0.0) |
+> | red_2 | (1.5, 1.5) | (1.5, 0.0) |
+> | red_3 | (1.5, -1.5) | — |
+>
+> All positions are >=1.5m from center (blue_2/red_2 at 2.12m in 3vs3, 1.5m in 2vs2).
+> The freeze mechanism (scoring team frozen 5s) is sufficient to enforce
+> the center circle rule — no additional opponent-distance check needed.
 
 > [!note] Kickoff semantics
 > The **scoring** team is frozen, the **conceding** team takes the kickoff.

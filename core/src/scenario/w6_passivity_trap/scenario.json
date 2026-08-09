@@ -1,0 +1,14 @@
+{
+  "scenario_name": "w6_passivity_trap",
+  "mode": "3vs3",
+  "tactical_situation": "Ball in open space at center — blue must challenge, not hold",
+  "entities": {
+    "soccer_ball": {"x": 0.0, "y": 0.0},
+    "blue_1": {"x": -4.0, "y": 0.0},
+    "blue_2": {"x": -2.5, "y": 1.0},
+    "blue_3": {"x": -2.5, "y": -1.0},
+    "red_1": {"x": 2.5, "y": 0.5},
+    "red_2": {"x": 1.5, "y": -1.0},
+    "red_3": {"x": 3.5, "y": 1.5}
+  }
+}
