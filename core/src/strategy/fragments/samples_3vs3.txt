@@ -1,9 +1,45 @@
---- EXAMPLE 1: MIDFIELD PASSING (NO KICK YET) ---
-INPUT: {"soccer_ball": {"x": -1.0, "y": 0.0}, "blue_1": {"x": -4.0, "y": 0.0}, "blue_2": {"x": -1.5, "y": 0.0}, "blue_3": {"x": 1.0, "y": 2.0}, "red_1": {"x": 0.0, "y": 0.0}}
-ASSISTANT: {
+--- EXAMPLE 1: STANDARD ATTACK (blue_2 closest to ball, blue_1 closest to goal) ---
+INPUT: {"soccer_ball": {"x": -1.0, "y": 0.0}, "blue_1": {"x": -4.0, "y": 0.0}, "blue_2": {"x": -1.5, "y": 0.0}, "blue_3": {"x": -0.5, "y": 1.5}, "red_1": {"x": 0.0, "y": 0.0}}
+OUTPUT: {
   "assignments": {
     "blue_1": {"role": "goalie", "action": "Move", "x": -4.0, "y": 0.0},
     "blue_2": {"role": "attacker", "action": "Kick"},
     "blue_3": {"role": "defender", "action": "Move", "x": 1.5, "y": 2.0}
+  }
+}
+--- EXAMPLE 2: GOALIE BECOMES CLOSEST — ROLE SWAP ---
+INPUT: {"soccer_ball": {"x": -3.8, "y": 0.2}, "blue_1": {"x": -3.9, "y": 0.2}, "blue_2": {"x": -2.0, "y": 0.5}, "blue_3": {"x": -1.0, "y": -0.5}, "red_1": {"x": -3.5, "y": 0.3}}
+OUTPUT: {
+  "assignments": {
+    "blue_1": {"role": "attacker", "action": "Kick"},
+    "blue_2": {"role": "goalie", "action": "Move", "x": -4.0, "y": 0.2},
+    "blue_3": {"role": "defender", "action": "Move", "x": -2.0, "y": 0.0}
+  }
+}
+--- EXAMPLE 3: PASS FORWARD TO FREE BOT ---
+INPUT: {"soccer_ball": {"x": 1.0, "y": 0.0}, "blue_1": {"x": -4.0, "y": 0.0}, "blue_2": {"x": 0.8, "y": 0.2}, "blue_3": {"x": 3.0, "y": -1.0}, "red_1": {"x": 2.0, "y": 0.5}}
+OUTPUT: {
+  "assignments": {
+    "blue_1": {"role": "goalie", "action": "Move", "x": -4.0, "y": 0.0},
+    "blue_2": {"role": "attacker", "action": "Kick"},
+    "blue_3": {"role": "attacker", "action": "Move", "x": 3.5, "y": -0.5}
+  }
+}
+--- EXAMPLE 4: CARRY BALL FORWARD (OPEN SPACE) ---
+INPUT: {"soccer_ball": {"x": 0.0, "y": 0.0}, "blue_1": {"x": -4.0, "y": 0.0}, "blue_2": {"x": -0.2, "y": 0.1}, "blue_3": {"x": -1.5, "y": 1.0}, "red_1": {"x": 3.0, "y": 0.0}}
+OUTPUT: {
+  "assignments": {
+    "blue_1": {"role": "goalie", "action": "Move", "x": -4.0, "y": 0.0},
+    "blue_2": {"role": "attacker", "action": "Move", "x": 2.0, "y": 0.0},
+    "blue_3": {"role": "defender", "action": "Move", "x": 0.0, "y": 1.0}
+  }
+}
+--- EXAMPLE 5: ALL BOTS BEHIND THE BALL (DEFENDING) ---
+INPUT: {"soccer_ball": {"x": -2.0, "y": 0.5}, "blue_1": {"x": -4.0, "y": 0.0}, "blue_2": {"x": -2.5, "y": 0.5}, "blue_3": {"x": -1.5, "y": -0.5}, "red_1": {"x": -1.8, "y": 0.6}}
+OUTPUT: {
+  "assignments": {
+    "blue_1": {"role": "goalie", "action": "Move", "x": -4.0, "y": 0.5},
+    "blue_2": {"role": "attacker", "action": "Kick"},
+    "blue_3": {"role": "defender", "action": "Move", "x": -2.5, "y": -0.5}
   }
 }

@@ -1,17 +1,13 @@
 FIELD LIMITS: X is between -4.5 and 4.5. Y is between -3.0 and 3.0.
-Opponent Goal: X=4.5 (Always attack this direction).
-Own Goal: X=-4.5 (Never shoot this way).
-
-VALID OUTPUT LINES (one line per blue bot):
-1. blue_1 move to (X, Y)
-2. blue_1 cover the goal line at (-4.0, Y)
-3. blue_1 kick
-4. blue_1 hold position
+Opponent Goal: X=4.5 (Blue attacks this direction).
+Own Goal: X=-4.5 (Blue defends this direction. Never shoot this way).
 
 STRICT LAWS:
-- STAY INSIDE FIELD AT ALL TIMES. Never output Move targets with X outside [-4.5, 4.5] or Y outside [-3.0, 3.0]. If the ball is near a boundary, approach from inside the field, not from outside.
+- STAY INSIDE FIELD AT ALL TIMES. Never output Move targets outside the field. If the ball is near a boundary, approach from inside the field.
 - NO OWN GOALS: Never kick if you are between the ball and your own goal (X=-4.5).
-- GOAL LINE COVER: One bot covers the goal line: it moves to X=-4.0 and follows the ball's Y position. Never give it a fixed Y.
-- RESTART EXCEPTION: During a restart (kick-in, goal kick, corner kick-in), the restart bot may move up to 1m outside the field boundary to approach the ball from behind. After the kick, return inside immediately.
-- DO NOT COPY EXAMPLES: Use the ball and bot positions from the INPUT above. Never repeat example coordinates.
-- ONE LINE PER BOT: Output exactly one line for EVERY blue bot in the INPUT (blue_1, blue_2, blue_3, ...). Never use the same bot twice.
+- GOAL LINE COVER: One bot covers the goal line at X=-4.0 and follows the ball's Y position. Never give it a fixed Y.
+- GOALIE HOLD VS CLOSE: The goalie holds the goal line (X=-4.0) unless the ball is deep in the own half AND the goalie is the closest blue bot to the ball. Then the goalie moves to the ball and kicks it upfield. In a 1v1 breakaway (only the goalie between the ball carrier and the goal), the goalie rushes forward to narrow the angle.
+- POSSESSION DETERMINATION: The bot closest to the ball has possession. If the closest bot is red, blue is defending. If the closest bot is blue, blue is attacking. If the ball is loose or just changed hands, the situation is transition.
+- DEFENSIVE AWARENESS: When defending, all blue bots move behind the ball (toward X=-4.5). No blue bot stays in the opponent half when defending. The goalie holds the goal line; the other two bots sprint back to get between the ball and the goal. The closest field bot presses the ball carrier to challenge for possession — do not just retreat, actively challenge.
+- NO HALLUCINATION: Only reference entities listed in the world state. Do not invent bots or positions that are not in the input.
+- RESTART EXCEPTION: During a restart (kick-in, goal kick, corner kick-in), the restart bot may approach the ball from behind, even if that means moving slightly outside the field boundary. After the kick, return inside immediately.

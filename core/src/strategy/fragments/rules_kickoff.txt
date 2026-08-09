@@ -1,4 +1,4 @@
-STATUS: kickoff. The ball is at the center (X=0, Y=0). One bot approaches from behind and kicks toward the opponent goal (X=4.5). Non-restart bots hold position until the kick.
+STATUS: kickoff. The ball is at the center. The closest blue bot kicks toward the opponent goal (X=4.5). Other bots move to support positions, spread wide.
 After the kick, return to normal play.
 
-ONE LINE PER BOT: Output one line for every other blue bot too (goalie, defense, attack as normal).
+ONE LINE PER BOT: Output one line for every blue bot.

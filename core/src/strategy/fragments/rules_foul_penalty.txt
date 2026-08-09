@@ -1,0 +1,5 @@
+STATUS: foul_penalty. Red has a free kick. Blue must NOT rush toward the ball.
+The goalie covers the goal line. Other blue bots stay goal-side of the ball (between the ball and the own goal). Mark the nearest red bot. Do NOT approach the ball — let red take the free kick.
+After the kick, return to normal play.
+
+ONE LINE PER BOT: Output one line for every blue bot.
