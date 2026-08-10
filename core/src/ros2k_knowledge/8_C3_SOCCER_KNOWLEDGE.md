@@ -429,6 +429,21 @@ These are in addition to the "GOALIE HOLD VS CLOSE" rule already added in
 H1.3. The rules should be tested in Phase M sub-exp 2 (prompt structure
 residual — zero-shot vs current).
 
+**v7 priorities (from 100-match validation, 2026-08-10):**
+1. Goalie kick (role swap): 0/100 matches — Blue plays 2v3 because goalie
+   never leaves the goal line. TeamCaptain must assign roles dynamically.
+2. Passing: Blue_3 advances forward 63.6% but never receives the ball —
+   kick goes toward opponent goal, not toward teammate. TeamCaptain must
+   position receiver along kick trajectory.
+3. Defensive recovery: high_line scenario — Red scores 14 goals in 10
+   matches. Blue's high defensive line is exploited by Red's pressing.
+4. Match duration: 42% draw rate — consider 180s+ for more decisive matches.
+
+**Key insight:** The 3B model is good at positioning (where should each bot
+go) but bad at coordination (who kicks, who receives, when to swap roles).
+Role assignment and pass targeting must move to the CPU planner (TeamCaptain)
+in v7. The LLM's job is per-bot position output, not team coordination.
+
 ### H1 user-feedback discrepancies (2026-08-03)
 
 When the human soccer expert's feedback was compared to GLM-5.2's, two

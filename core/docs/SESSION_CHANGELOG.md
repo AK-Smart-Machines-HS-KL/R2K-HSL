@@ -3,6 +3,48 @@
 > For full history (2026-07-13 to 2026-08-02), see `SESSION_CHANGELOG_archive.md`.
 > Compressed on 2026-08-05. Key findings are in the power files and `LESSONS_LEARNED.md`.
 
+## 2026-08-10 — Final benchmark + v7 handover
+
+**Goal:** Run final 100-match benchmark comparison (OLD vs NEW), document v7 priorities, prepare handover for U22.
+
+**Done:**
+- 100-match Gazebo validation (10 scenarios × 10 runs × 120s) with NEW prompt
+- 10 × 120s Gazebo with OLD prompt (static roles) for side-by-side comparison
+- Text-probe: Qwen + Llama on both OLD and NEW prompts (5 snapshots total)
+- Final benchmark: docs/v65_final_benchmark.md
+- Committed all critical untracked files (LESSONS_LEARNED, ADRs, scrum tasks, prompt_utils, llm_probe, start_ollama, umschalt_extractor)
+
+**Key findings (100 matches):**
+- Blue win rate: 19% (19W/39R/42D) — Red outperforms Blue
+- Blue_3 forward: 0.3% → 63.6% (defender now supports attack)
+- Pattern diversity: 12 → 106 (9× more unique decisions)
+- Score end: -0.95 → +0.25 (matches end with Blue advantage)
+- Goalie kicks: 0/100 — role-locking persists (3B model limitation)
+- Llama improved: 46% → 72% (dynamic prompt helps Llama too)
+
+**v7 priorities from 100-match analysis:**
+1. Goalie kick (role swap) — 0/100 matches, Blue plays 2v3
+2. Passing — blue_3 advances 63.6% but never receives (kick goes to goal, not teammate)
+3. Defensive recovery — high_line: 14 red goals in 10 matches
+4. Match duration — 42% draw rate, consider 180s+
+
+**Key insight:** 3B model is good at positioning, bad at coordination. Dynamic-roles prompt changed movement (blue_3 forward) but not coordination (goalie kicks, passes). Role assignment must move to CPU planner (TeamCaptain) in v7.
+
+**Files touched:**
+- docs/v65_final_benchmark.md (NEW)
+- docs/v65_benchmark.md (updated)
+- docs/v65_dynamic_roles_baseline.md (NEW)
+- docs/LESSONS_LEARNED.md (updated with v6.5 lessons)
+- docs/SESSION_CHANGELOG.md (this entry)
+- src/ros2k_knowledge/8_C3_SOCCER_KNOWLEDGE.md (v7 priorities added)
+- results/probe_final_llama_dynroles_*
+
+**Next:** U22 native test → code freeze → PR → team review → merge → v7
+
+**Blockers:** None. 5 commits pushed to feature/V63Redesign. Critical untracked files being committed in this session.
+
+---
+
 ## 2026-08-08 — Score formula option D: continuous proximity rewards
 
 **Goal:** Fix root cause of score chart regression: per-frame pressing reward (+0.036) too small to counter possession flip (-2.0). Replace with continuous proximity reward (option D).
