@@ -14,9 +14,16 @@ __pycache__/
 # Editor / IDE
 .obsidian/
 core/.vscode/continue*
+core/.vscode/browse.vc.db
+core/.vscode/c_cpp_properties.json
+core/.vscode/settings.json
 *.inv
 *~
 \#*\#
+
+# Python virtualenv and micro-ROS workspace (build artifacts from install.sh)
+core/src/venv/
+core/src/uros_ws/
 
 # Runtime (regenerated on every boot by launch_r2k.sh / setup_r2k.py)
 core/src/ollama.log

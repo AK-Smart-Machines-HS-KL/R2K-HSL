@@ -1,6 +1,0 @@
-{"series": "D1_own_half", "prompt": "In a 3 vs 3 soccer game on a 9 m by 6 m field, your own goal is at X=-4.5 and the opponent goal is at X=+4.5. Where is 'own half' and where is 'opponent half'? Give a short instruction using these terms."}
-{"series": "D2_kick_in", "prompt": "In a 3 vs 3 soccer game, the ball crossed the sideline (Y=3.0) and the last toucher was a red player. The referee gives a kick-in to blue. Where should the ball be placed? What should the blue team do?"}
-{"series": "D3_mark_vs_cover", "prompt": "In a 3 vs 3 soccer game, what is the difference between 'mark a player' and 'cover a zone'? Give one short instruction for each."}
-{"series": "D4_corner_placement", "prompt": "In a 3 vs 3 soccer game, the ball must be placed at the corner flag for a corner kick. The field is 9 m by 6 m, goals at X=+4.5 and X=-4.5. Where exactly are the corner flag positions? Give one instruction."}
-{"series": "D5_goal_area", "prompt": "In a 3 vs 3 soccer game, there is a goal area in front of each goal. Your own goal is at X=-4.5. Where is your goal area? Where is the opponent's goal area?"}
-{"series": "D6_clear", "prompt": "In a 3 vs 3 soccer game, the ball is 0.5 m in front of your own goal. Give a short instruction to the goalie and one to the nearest defender."}

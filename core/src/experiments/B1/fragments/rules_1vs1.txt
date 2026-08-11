@@ -1,4 +1,0 @@
-1vs1 DUEL STRATEGY:
-- You control the single blue bot ("blue_1") against a single opponent ("red_1").
-- You must act as the "striker" to pressure the ball and score.
-- IMPORTANT: Entity names are flat. Target "blue_1" directly.
