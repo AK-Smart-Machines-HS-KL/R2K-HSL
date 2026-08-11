@@ -1,58 +1,116 @@
 {
   "scenario_name": "3vs3_attack_center",
   "composite_score": {
-    "min": 0.20483333333333334,
+    "min": 0.29,
     "max": 1.0,
-    "note": "higher is better (v6.3 re-baseline)"
+    "note": "higher is better (v6.5 re-baseline (U22, 2026-08-11, 3 samples, qwen2.5:3b))"
+  },
+  "ball_possession_blue_pct": {
+    "min": 27.62,
+    "max": 100.0,
+    "note": "higher is better (v6.5 re-baseline (U22, 2026-08-11, 3 samples, qwen2.5:3b))"
+  },
+  "pass_completion_pct": {
+    "min": 42.5,
+    "max": 100.0,
+    "note": "higher is better (v6.5 re-baseline (U22, 2026-08-11, 3 samples, qwen2.5:3b))"
+  },
+  "shots_on_goal": {
+    "min": 2.5,
+    "max": 35,
+    "note": "higher is better (v6.5 re-baseline (U22, 2026-08-11, 3 samples, qwen2.5:3b))"
+  },
+  "goals_for_blue": {
+    "min": 0.0,
+    "max": 6,
+    "note": "higher is better (v6.5 re-baseline (U22, 2026-08-11, 3 samples, qwen2.5:3b))"
+  },
+  "shots_on_target": {
+    "min": 0.0,
+    "max": 13,
+    "note": "higher is better (v6.5 re-baseline (U22, 2026-08-11, 3 samples, qwen2.5:3b))"
   },
   "oob_pct": {
-    "min": 0.0,
-    "max": 19.55,
-    "note": "lower is better"
-  },
-  "cluster_pct": {
-    "min": 0.0,
-    "max": 77.85,
-    "note": "lower is better"
+    "min": 0,
+    "max": 22.0,
+    "note": "lower is better (v6.5 re-baseline (U22, 2026-08-11, 3 samples, qwen2.5:3b))"
   },
   "goalie_idle_pct": {
-    "min": 0.0,
+    "min": 0,
     "max": 100.0,
-    "note": "lower is better (structural limit ~70%)"
+    "note": "lower is better (v6.5 re-baseline (U22, 2026-08-11, 3 samples, qwen2.5:3b))"
+  },
+  "cluster_pct": {
+    "min": 0,
+    "max": 17.7,
+    "note": "lower is better (v6.5 re-baseline (U22, 2026-08-11, 3 samples, qwen2.5:3b))"
   },
   "latency_p50": {
     "min": 0,
-    "max": 992,
-    "note": "lower is better"
-  },
-  "ball_possession_blue_pct": {
-    "min": 25.28333333333333,
-    "max": 100.0,
-    "note": "higher is better"
-  },
-  "goals_for_blue": {
-    "min": 0,
-    "max": 1,
-    "note": "higher is better"
-  },
-  "shots_on_goal": {
-    "min": 0,
-    "max": 10,
-    "note": "higher is better (v6.3 re-baseline mean=6.7)"
-  },
-  "shots_on_target": {
-    "min": 0,
-    "max": 2,
-    "note": "higher is better (v6.3 re-baseline mean=1.7)"
-  },
-  "pass_completion_pct": {
-    "min": 34.01666666666667,
-    "max": 100.0,
-    "note": "higher is better (v6.3 re-baseline mean=68.0%)"
+    "max": 876.0,
+    "note": "lower is better (v6.5 re-baseline (U22, 2026-08-11, 3 samples, qwen2.5:3b))"
   },
   "restart_recovery_time_s": {
-    "min": 0.0,
-    "max": 25.705,
-    "note": "lower is better (v6.3 re-baseline mean=17.1s)"
+    "min": 0,
+    "max": 32.5,
+    "note": "lower is better (v6.5 re-baseline (U22, 2026-08-11, 3 samples, qwen2.5:3b))"
+  },
+  "v63_baseline_note": "Thresholds before v6.5 re-baseline (see git history)",
+  "v63_thresholds": {
+    "composite_score": {
+      "min": 0.29,
+      "max": 1.0,
+      "note": "higher is better (v6.5 re-baseline (U22, 2026-08-11, 3 samples, qwen2.5:3b))"
+    },
+    "ball_possession_blue_pct": {
+      "min": 27.62,
+      "max": 100.0,
+      "note": "higher is better (v6.5 re-baseline (U22, 2026-08-11, 3 samples, qwen2.5:3b))"
+    },
+    "goals_for_blue": {
+      "min": 0.0,
+      "max": 1.0,
+      "note": "higher is better (v6.5 re-baseline (U22, 2026-08-11, 3 samples, qwen2.5:3b))"
+    },
+    "shots_on_goal": {
+      "min": 2.55,
+      "max": 10.0,
+      "note": "higher is better (v6.5 re-baseline (U22, 2026-08-11, 3 samples, qwen2.5:3b))"
+    },
+    "shots_on_target": {
+      "min": 0.0,
+      "max": 5.0,
+      "note": "higher is better (v6.5 re-baseline (U22, 2026-08-11, 3 samples, qwen2.5:3b))"
+    },
+    "pass_completion_pct": {
+      "min": 42.5,
+      "max": 100.0,
+      "note": "higher is better (v6.5 re-baseline (U22, 2026-08-11, 3 samples, qwen2.5:3b))"
+    },
+    "oob_pct": {
+      "min": 0,
+      "max": 22.0,
+      "note": "lower is better (v6.5 re-baseline (U22, 2026-08-11, 3 samples, qwen2.5:3b))"
+    },
+    "cluster_pct": {
+      "min": 0,
+      "max": 17.7,
+      "note": "lower is better (v6.5 re-baseline (U22, 2026-08-11, 3 samples, qwen2.5:3b))"
+    },
+    "goalie_idle_pct": {
+      "min": 0,
+      "max": 121.7,
+      "note": "lower is better (v6.5 re-baseline (U22, 2026-08-11, 3 samples, qwen2.5:3b))"
+    },
+    "latency_p50": {
+      "min": 0,
+      "max": 876.2,
+      "note": "lower is better (v6.5 re-baseline (U22, 2026-08-11, 3 samples, qwen2.5:3b))"
+    },
+    "restart_recovery_time_s": {
+      "min": 0,
+      "max": 32.5,
+      "note": "lower is better (v6.5 re-baseline (U22, 2026-08-11, 3 samples, qwen2.5:3b))"
+    }
   }
 }

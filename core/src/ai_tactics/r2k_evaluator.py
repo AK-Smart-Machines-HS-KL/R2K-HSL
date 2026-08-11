@@ -141,7 +141,7 @@ def _clean_text_samples(content, explain_active):
         if input_json is None:
             output += content[last_idx:]
             return output
-        a_match = re.search(r'ASSISTANT:\s*', content[after_input:])
+        a_match = re.search(r'(?:ASSISTANT|OUTPUT):\s*', content[after_input:])
         if not a_match:
             output += content[last_idx:]
             return output
@@ -205,7 +205,7 @@ def _clean_json_samples(content, explain_active):
     has no string examples for analysis/oracle, and Qwen 3B fills oracle
     with JSON strategy data instead of text.
     """
-    pattern = r'ASSISTANT:\s*'
+    pattern = r'(?:ASSISTANT|OUTPUT):\s*'
     matches = list(re.finditer(pattern, content))
     if not matches:
         return content

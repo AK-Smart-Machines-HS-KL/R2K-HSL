@@ -2,9 +2,9 @@
 id: 6_DATA_LIFECYCLE
 title: "Section 6: Data Schemas & System Lifecycle (V6.2)"
 type: KNOWLEDGE_BASE_POWER_FILE
-tags: [json, schema, rpc, bash, lifecycle, orchestration, setup_r2k, flat-json, relay-profiles, watchdog, cli-ergonomics, active_relay, bashrc-immunity, v6, v6.1, v6.2, tactical-score, tactical-reward, match-state, eval-results, batch-evaluator, momentum, set-piece, goal-kick, corner-kick-in, own-half-warp, trace-logging, llm-trace, world-trace, r2k-run-id, analyze-trace, kpi, test-non-functional, composite-score, pytest, regression-suite, kpi-targets, skip-slow]
-last_modified: 2026-08-05
-version: v6.4
+tags: [json, schema, rpc, bash, lifecycle, orchestration, setup_r2k, flat-json, relay-profiles, watchdog, cli-ergonomics, active_relay, bashrc-immunity, v6, v6.1, v6.2, v6.3, v6.5, tactical-score, tactical-reward, match-state, eval-results, batch-evaluator, momentum, set-piece, goal-kick, corner-kick-in, own-half-warp, trace-logging, llm-trace, world-trace, r2k-run-id, analyze-trace, kpi, test-non-functional, composite-score, pytest, regression-suite, kpi-targets, skip-slow, output-marker, text-mode, r2k-text-mode, clean-samples]
+last_modified: 2026-08-11
+version: v6.5
 ---
 # Section 6: Data Schemas & System Lifecycle (V5)
 
@@ -534,6 +534,12 @@ This fixes the explain-mode broken by Phase 2.5b (dynamic injection bypassed
 `setup_r2k.py`'s `clean_json_samples()`). The evaluator duplicates
 `clean_json_samples()` (~70 lines) from `setup_r2k.py` to inject default analysis/oracle
 strings into samples at runtime.
+
+**V6.5 UPDATE (2026-08-11):** `_clean_text_samples` and `_clean_json_samples` now
+accept `(?:ASSISTANT|OUTPUT):` marker. v6.5 `samples_3vs3.txt` uses `OUTPUT:` instead
+of `ASSISTANT:`. The old regex silently passed raw `OUTPUT:` blocks unconverted.
+**TEXT_MODE default:** `R2K_TEXT_MODE` defaults to `"0"` (JSON mode) — `launch_r2k.sh`
+never sets it. TEXT_MODE is exercised only by `test_text_mode.py`.
 
 ### Content-Hash Skip (Phase 2.3)
 

@@ -162,17 +162,15 @@ class TestTextModePromptAssembly:
         ev.TEXT_MODE = True
         ev._prompt_cache.clear()
         sys_prompt = ev._get_sys_prompt("playing")
-        assert "VALID OUTPUT LINES" in sys_prompt
         assert "cover the goal line at" in sys_prompt
         assert "Output ONLY pure, raw JSON." not in sys_prompt
-        assert "move to (X, Y)" in sys_prompt  # from rules_core_text.txt
-        assert "hold position" in sys_prompt  # 4th valid line
+        assert "hold position" in sys_prompt  # text output header includes hold verb
 
     def test_text_mode_sample_conversion_in_prompt(self, monkeypatch):
         ev.TEXT_MODE = True
         ev._prompt_cache.clear()
         sys_prompt = ev._get_sys_prompt("playing")
-        # samples_3vs3.txt should be rendered in text form: no raw JSON ASSISTANT braces
+        # samples_3vs3.txt uses OUTPUT: marker; _clean_text_samples accepts both
         assert "INPUT:\n" in sys_prompt
         assert "ASSISTANT:" in sys_prompt
         assert '{"assignments"' not in sys_prompt

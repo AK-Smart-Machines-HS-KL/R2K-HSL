@@ -2,9 +2,9 @@
 id: 3_AI_LOGIC
 title: "Section 3: AI Logic, Failsafes & Edge Cases (V6.3)"
 type: KNOWLEDGE_BASE_POWER_FILE
-tags: [qwen, team-blue, team-red, failsafes, bounding-box, hysteresis, orbital-singularity, setup_r2k, phantom-kick, flat-json, ollama-tuning, kv-cache, user-space, v6, v6.1, v6.2, v6.3, kick-in, prompt-switching, prompt-injection, reward-node, momentum, aggression, prompt-disentanglement, strat-artifact, sample-override, dump-prompt, match-state-injection, goalie-idle, red-p1-p5, blocking-avoidance, freeze-bug, dynamic-prompt-injection, content-hash-skip, role-condensation, replay-system, r2k-explain]
-last_modified: 2026-07-29
-version: v6.3
+tags: [qwen, team-blue, team-red, failsafes, bounding-box, hysteresis, orbital-singularity, setup_r2k, phantom-kick, flat-json, ollama-tuning, kv-cache, user-space, v6, v6.1, v6.2, v6.3, v6.5, kick-in, prompt-switching, prompt-injection, reward-node, momentum, aggression, prompt-disentanglement, strat-artifact, sample-override, dump-prompt, match-state-injection, goalie-idle, red-p1-p5, blocking-avoidance, freeze-bug, dynamic-prompt-injection, content-hash-skip, role-condensation, replay-system, r2k-explain, output-marker, text-mode, r2k-text-mode, samples-3vs3, clean-samples]
+last_modified: 2026-08-11
+version: v6.5
 ---
 # Section 3: AI Logic, Failsafes & Edge Cases
 
@@ -347,6 +347,20 @@ The evaluator reads this env var directly (`os.getenv("R2K_EXPLAIN", "0") == "1"
 replaces `{{EXPLAIN_INSTRUCTION}}` in `header.txt` at runtime. The evaluator duplicates
 `clean_json_samples()` (~70 lines) from `setup_r2k.py` to inject default analysis/oracle
 strings into samples.
+
+**V6.5 UPDATE (2026-08-11):** `_clean_text_samples` and `_clean_json_samples` regex
+updated to accept `(?:ASSISTANT|OUTPUT):` marker. v6.5 `samples_3vs3.txt` uses `OUTPUT:`
+instead of `ASSISTANT:` (all other sample files still use `ASSISTANT:`). The old
+`ASSISTANT:`-only regex silently passed raw `OUTPUT:` blocks unconverted — latent bug
+present during the 100-match U24 benchmark. LLM coped (imitated raw format), but cleaned
+format was not applied. Fix: `r2k_evaluator.py:144,208` now match `(?:ASSISTANT|OUTPUT):`.
+
+**TEXT_MODE default:** `R2K_TEXT_MODE` env var defaults to `"0"` (JSON mode).
+`launch_r2k.sh` never sets `R2K_TEXT_MODE` — all production runs use JSON mode.
+TEXT_MODE is exercised only by the fast test suite (`test_text_mode.py`).
+This is why the `OUTPUT:` marker bug was silent on U24 (JSON mode, LLM coped with
+raw samples) but caught on U22 (fast test suite exercises TEXT_MODE, asserts cleaned
+output).
 
 ### Replay System (Phase 2.3 — IMPLEMENTED)
 
