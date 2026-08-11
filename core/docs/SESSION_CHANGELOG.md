@@ -3,6 +3,92 @@
 > For full history (2026-07-13 to 2026-08-02), see `SESSION_CHANGELOG_archive.md`.
 > Compressed on 2026-08-05. Key findings are in the power files and `LESSONS_LEARNED.md`.
 
+## 2026-08-11 (cont.) — U24 post-fix re-validation (INCOMPLETE — handover to next instance)
+
+**Goal:** Re-run the full v6.5 benchmark on U24 with the `OUTPUT:` marker fix applied (committed by U22 in `84b9c88`). The previous U24 100-match benchmark ran with the bug present — results are stale.
+
+**Context:** U22 session (2026-08-11) found and fixed 2 bugs:
+1. `_clean_text_samples` / `_clean_json_samples` in `r2k_evaluator.py` only matched `ASSISTANT:` but v6.5 `samples_3vs3.txt` uses `OUTPUT:`. Fixed: regex now accepts `(?:ASSISTANT|OUTPUT):`.
+2. `test_text_mode.py` assertions drifted. Fixed.
+
+Both fixes are in commit `84b9c88` on `feature/ros2k_behavior_optimization`. The U24 100-match benchmark (`docs/v65_final_benchmark.md`) ran with the bug — the LLM saw raw `OUTPUT: {...}` blocks instead of cleaned `ASSISTANT: {...}` format. Numbers are not invalid (LLM coped) but reflect a buggy prompt. **Must re-run post-fix.**
+
+**Current state:**
+- Branch: `feature/ros2k_behavior_optimization` (latest: `59fe93b`)
+- U24 is on this branch, up to date with origin
+- All v6.5 work present (dynamic roles, all-continuous score, kickoff rule, 50+6 scenarios, docs)
+- 92 fast tests pass (3 test files excluded: `test_text_mode.py`, `test_i3_sweep.py`, `test_adaptive_horizon.py` — pre-existing issues)
+- `docs/v65_regression_report.md` (U22 session) says explicitly: "The U24 100-match benchmark must be re-run post-fix before citing its numbers as v6.5 validation."
+
+**What the next instance must do (U24 post-fix re-validation):**
+
+1. **Fast suite** — verify the U22 fixes pass on U24:
+   ```bash
+   cd src && python3 -m pytest tests/ --skip-slow -q --ignore=tests/test_text_mode.py --ignore=tests/test_i3_sweep.py --ignore=tests/test_adaptive_horizon.py
+   ```
+   Expected: 92 pass, 11 skip.
+
+2. **Re-baseline collection** — 15 matches (5 scenarios × 3 runs × 120s):
+   ```bash
+   # Use the U22 harness:
+   bash src/tools/rebaseline_collect.sh
+   # Or manually:
+   for s in 3vs3_attack_center 3vs3_default 3vs3_high_line 3vs3_long_shot 3vs3_contain_delay; do
+     for i in 1 2 3; do
+       ./launch_r2k.sh --headless --duration 120 --scenario $s --relay only_sim_bots
+     done
+   done
+   # Extract KPIs:
+   python3 src/tools/analyze_trace.py --run-id <latest_run_id>
+   ```
+
+3. **Re-baseline thresholds** — update `kpi_targets.json` for 5 scenarios from U24 data.
+   Formula: higher-is-better min = min(obs)×0.85, lower-is-better max = max(obs)×1.3.
+
+4. **Slow suite** — 11 tests × ~140s = ~20min:
+   ```bash
+   cd src && python3 -m pytest tests/test_non_functional.py -v -s
+   ```
+
+5. **Full 100-match benchmark** — 10 scenarios × 10 matches × 120s = ~3-4h:
+   ```bash
+   for s in 3vs3_default 3vs3_attack_center 3vs3_attack_wing 3vs3_defensive_crisis \
+            3vs3_def_transition 3vs3_fast_counter 3vs3_high_line 3vs3_overload \
+            3vs3_pressing_trap 3vs3_wing_switch; do
+     for i in $(seq 1 10); do
+       ./launch_r2k.sh --headless --duration 120 --scenario $s --relay only_sim_bots
+     done
+   done
+   ```
+   This replaces the stale pre-fix benchmark in `docs/v65_final_benchmark.md`.
+
+6. **Compare U22 vs U24 post-fix** — verify latency, composite, win/loss, goals consistent within variance.
+
+7. **Update `docs/v65_final_benchmark.md`** with post-fix numbers.
+
+8. **Push + open PR:**
+   ```bash
+   git push origin feature/ros2k_behavior_optimization
+   gh pr create --base main --head feature/ros2k_behavior_optimization \
+     --title "v6.5 — dynamic roles, all-continuous score, 100-match baseline (post-fix)"
+   ```
+
+**Key documents to read first:**
+- `docs/SESSION_CHANGELOG.md` — 2026-08-11 U22 entry (this file, above)
+- `docs/v65_regression_report.md` — U22 regression report with stale-benchmark caveat
+- `docs/LESSONS_LEARNED.md` — v6.5 lessons
+- `docs/v65_final_benchmark.md` — current (stale) benchmark — to be replaced
+
+**v7 priorities (unchanged):**
+1. Goalie kick (role swap) — 0/100 matches, Blue plays 2v3
+2. Passing — blue_3 advances 63.6% but never receives
+3. Defensive recovery — high_line: 14 red goals in 10 matches
+4. Match duration — 42% draw rate, consider 180s+
+
+**Blockers:** None. GPU healthy. All fixes committed. Ready to re-run.
+
+---
+
 ## 2026-08-11 — v6.5 regression test on U22 (COMPLETE)
 
 **Goal:** Run the v6.5 regression test suite natively on U22 to verify the redesign (dynamic roles, option D score formula, qwen2.5:3b general-purpose model) before code freeze and PR.
