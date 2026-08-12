@@ -86,6 +86,111 @@ Both fixes are in commit `84b9c88` on `feature/ros2k_behavior_optimization`. The
 4. Match duration — 42% draw rate, consider 180s+
 
 **Blockers:** None. GPU healthy. All fixes committed. Ready to re-run.
+**Blockers:** None. GPU healthy. All fixes committed. Ready to re-run.
+
+---
+
+## 2026-08-12 — 150-match Qwen benchmark complete + score function correlation analysis (U22)
+
+**Goal:** (1) Complete the 150-match Qwen benchmark interrupted on 2026-08-11. (2) Investigate whether the score function correlates with simulated game outcomes — a question raised during chart review.
+
+**Done:**
+- Fixed `baseline_stubs_raw.json` — appended `]` to close the interrupted JSON array. Validates as 27 records (9 scenarios × 3 runs, partial).
+- **150-match Qwen benchmark COMPLETED** — `bash tools/benchmark.sh --model qwen2.5:3b --runs 10 --tag u22_qwen_150` ran for 330min (5.5h), 15 scenarios × 10 runs × 120s, all completed. Output: `src/results/u22_qwen_150_raw.json` (150 records), 150 match logs (`src/results/u22_qwen_150_*.log`), 150 KPI dirs. Note: the `scenario` field is missing from JSON records (benchmark.sh bug — reconstructable from log filenames). The match logs have run IDs like `u22_qwen_150_3vs3_attack_center_run1.log` → `3vs3_attack_center_strat_aggro_<timestamp>` inside.
+- **Score function correlation analysis** — wrote `/tmp/analyze_score_v2.py` to replicate `score_node.py` logic offline against `world_trace` files. Analyzed 5 scenarios (attack_center, possession_lost, high_line, default, contain_delay), extracted possession flips and goals, computed score delta (2s before → 2s after each event), checked whether delta direction matches expected direction.
+- **Result: score function does NOT correlate with game outcomes.**
+  - **Possession flips: 61/122 (50% correct direction)** — literally coin-flip / random chance. The score function cannot predict whether a possession change benefits Blue or Red.
+  - **Goals: 0/6 (0% correct direction)** — every single goal produces an anti-correlated delta. Blue scores → score drops. Red scores → score rises.
+- **Root cause identified** (verified with score breakdown at goal events in `3vs3_default`):
+  - The score function is **purely stateless and position-based**. `ball['x'] * BALL_POSITION_GAIN` (1.5) is the dominant term, contributing ±6.75 at field edges.
+  - When a goal is scored, the referee resets the ball to center (0,0). Ball position jumps from ±4.5 to 0.0, producing a ±6.75 delta regardless of who scored. Blue scoring → ball goes from +4.5 to 0 → score drops by -6.75. Red scoring → ball goes from -4.5 to 0 → score rises by +6.75. Both anti-correlated.
+  - Possession term (`max(0, 2.0 - dist) * 1.0`) only fires within 2m of the ball — most of the game both teams are >2m away, so this term is zero and ball-position dominates. Flips near the ball produce near-zero deltas lost in noise.
+- **5 fix suggestions drafted** (priority order):
+  1. **Gate score by `match_state.status`** — freeze score during non-`playing` statuses (goal, ball_out, foul_penalty, etc.). Ball is at referee-set position during these phases — its position does not reflect gameplay. Fixes goal anti-correlation.
+  2. **Goal event bonus/penalty** — edge-triggered on `match_state.blue`/`match_state.red` increment: +3 for Blue scoring, -3 for Red scoring. Makes score event-aware at the most important moment. Small stateful addition justified by goals being the primary outcome metric.
+  3. **Scale ball-position gain by possession** — `ball['x'] * 1.5 * (blue_poss_factor - red_poss_factor)` so ball position only helps Blue's score when Blue has possession. When Red has the ball in their own half, ball position should penalize Blue (Red is attacking from a good position).
+  4. **Widen possession reference distance** — increase `POSSESSION_REFERENCE_DIST` from 2.0 to 4-5m so the possession term actually competes with the ball-position gain. Currently zero for most of the game.
+  5. **Use `last_toucher` for possession attribution** — referee tracks `last_toucher` in `match_state`. Use this instead of nearest-bot distance for possession — it's authoritative, not geometric. More accurate than "nearest bot" which flips every frame as bots jostle.
+- **Decision: move score fix + prompting bug fix to U24, return to U22 for full regression.** U24 has identified a prompting bug; both fixes should land together on U24, then U22 runs the full regression suite (fast tests, re-baseline, slow tests, 150-match re-run, 50 chart regeneration, before/after report).
+
+**Files touched:**
+- core/docs/SESSION_CHANGELOG.md (this entry)
+
+**New files (untracked, NOT committed — stay on U22 disk for before/after comparison):**
+- `tools/benchmark.sh` — general-purpose benchmark harness (accepts `--model`, `--runs`, `--scenarios`, `--tag`, `--duration`; runs matches sequentially, collects KPIs via `analyze_trace.py`, outputs consolidated JSON)
+- `src/results/baseline_stubs_raw.json` — 27 partial baseline samples (9 scenarios × 3 runs, from interrupted 2026-08-11 run; `]` appended this session to close the JSON array)
+- `src/results/u22_qwen_150_raw.json` — 150 benchmark records (15 scenarios × 10 runs; `scenario` field missing — reconstructable from 150 log filenames)
+- `src/results/u22_qwen_150_*.log` — 150 match logs (gitignored under `results/` pattern)
+- `src/results/kpis_*` — 150 KPI JSON dirs (gitignored)
+- `src/logs/world_trace_*.jsonl` + `src/logs/llm_trace_*.jsonl` — 150 trace pairs (gitignored)
+- `/tmp/analyze_score_v2.py` — offline score correlation analyzer (throwaway; logic documented in this entry)
+
+**Files deleted:**
+- (none)
+
+**Not yet done:**
+- Score function fix — deferred to U24 (suggestions 1-5 above; U24 session will implement + commit + push)
+- Prompting bug fix — identified on U24, details to be captured in U24 session log
+- Llama 100-match benchmark — NOT STARTED (was Phase R4 in the 2026-08-11 plan; deferred — GPU time consumed by Qwen 150)
+- Text-probe all 15 scenarios — NOT STARTED (was Phase R5; deferred)
+- Analysis + report comparing U22 vs U24, Qwen vs Llama — NOT STARTED (was Phase R6; deferred until after post-fix re-run)
+
+**Next:**
+1. **U24 session:** `git pull` current branch. Fix prompting bug + score function (suggestions 1-5 or subset). Commit + push. Details of prompting bug TBD (deferred to U24 session — ask "whats next" and U24 session log will capture).
+2. **U22 regression (after U24 push):** `git pull` both fixes → fast suite (`pytest --skip-slow`) → re-baseline 5 `kpi_targets.json` (5×3 matches) → slow suite (`test_non_functional.py`) → re-run 150-match Qwen benchmark → regenerate 50 score charts → before/after comparison report.
+
+**Blockers:**
+- The `tools/benchmark.sh` script is untracked — if U22 working tree is cleaned (e.g. `git checkout`), it will be lost. It must be recreated or recovered from this session log before the next U22 regression run.
+- The 150-match pre-fix baseline data (`u22_qwen_150_raw.json`) is untracked — needed for before/after comparison. If lost, the "before" snapshot is gone (reconstructable from 150 logs + KPI dirs, but tedious).
+- The score function analysis script (`/tmp/analyze_score_v2.py`) is in `/tmp` — will be lost on reboot. Logic is documented in this entry; recreate if needed for post-fix verification.
+
+---
+
+## 2026-08-11 (cont.) — 14h benchmark run on U22 (INTERRUPTED — opencode restart)
+
+**Goal:** Run Option E (maximum value) — 150-match Qwen benchmark + 100-match Llama benchmark + text-probe all 15 scenarios + analysis report, using ~14h of U22 GPU time.
+
+**Done:**
+- Phase R0: Pulled `llama3.2:3b` (2.0 GB) on U22. Both `qwen2.5:3b` and `llama3.2:3b` now on disk (sequential, not parallel — one model warm at a time).
+- Phase R1: Wrote `tools/benchmark.sh` — general-purpose benchmark harness (not committed, untracked). Accepts `--model`, `--runs`, `--scenarios`, `--tag`, `--duration`. Runs matches sequentially, collects KPIs via `analyze_trace.py`, outputs consolidated JSON. Supersedes `src/tools/rebaseline_collect.sh`.
+- Phase R2 (PARTIAL — interrupted by opencode timeout at 1h): Ran `bash tools/benchmark.sh --model qwen2.5:3b --runs 3 --tag baseline_stubs --no-warm`. The script ran with `--scenarios 15` (default), so it collected 3 matches per scenario for the first 9 scenarios (27/45 matches total) before the opencode bash timeout (3600s) hit. Collected: `src/results/baseline_stubs_raw.json` (27 samples, 9 scenarios × 3 runs), 28 match logs, 68 KPI dirs.
+
+**What was NOT done (interrupted):**
+- Phase R3 (150-match Qwen benchmark, ~6h) — NOT STARTED.
+- Phase R4 (100-match Llama benchmark, ~4h) — NOT STARTED.
+- Phase R5 (text-probe all 15 scenarios, ~1.5h) — NOT STARTED.
+- Phase R6 (analysis + report, ~2h) — NOT STARTED.
+
+**Files (untracked, not committed):**
+- `tools/benchmark.sh` — general-purpose benchmark harness (replaces `rebaseline_collect.sh`).
+- `src/results/baseline_stubs_raw.json` — 27 partial baseline samples (incomplete JSON — needs trailing `]` fix before parsing).
+- `src/results/baseline_stubs_*.log` — 28 match logs (gitignored).
+- `src/results/kpis_*` — 68 KPI JSON dirs (gitignored).
+
+**Models on U22 disk:**
+- `qwen2.5:3b` (1.9 GB) — general-purpose, warm.
+- `llama3.2:3b` (2.0 GB) — pulled, not yet warmed for benchmark.
+- `qwen2.5-coder:3b` (1.9 GB) — legacy, not used for v6.5.
+- `deepseek-r1:14b`, `llama3.1:8b`, `nomic-embed-text:latest`, `qwen2.5-coder:1.5b-base` — not used.
+
+**GPU state:** RTX 4080 healthy (P2 when active, 2730 MHz, 242 tok/sec after earlier reboot). Currently P8 idle (nothing running). Ollama running (PID 6437).
+
+**Next (for opencode restart on U22):**
+1. **Fix `baseline_stubs_raw.json`** — append `]` to close the JSON array (interrupted before close). Then verify it parses.
+2. **Compute kpi_targets.json for the 5 stub scenarios** (`deep_cross`, `goalie_distribution`, `overload`, `possession_lost`, `wing_switch`) — but only if R2 collected enough data. R2 ran 27 matches across 9 scenarios (the stub scenarios are #11-15 in the list, so they may not have been reached before the timeout). Check which scenarios actually completed.
+3. **Re-run the full 150-match Qwen benchmark** — `bash tools/benchmark.sh --model qwen2.5:3b --runs 10 --tag u22_qwen_150`. This takes ~6h. Run it in the background or with a longer timeout. The script is at `tools/benchmark.sh` (not committed — persist it first or rewrite).
+4. **After Qwen benchmark: switch to Llama** — `bash tools/benchmark.sh --model llama3.2:3b --runs 10 --scenarios 10 --tag u22_llama_100`. Takes ~4h.
+5. **Text-probe** — `python3 tools/llm_probe.py --model qwen2.5:3b --corpus tests/synthetic_worldstates/corpus_scenarios.jsonl --tag u22_qwen_probe` then same with `--model llama3.2:3b`. Takes ~1.5h total.
+6. **Analysis + report** — compare Qwen U22 (150 matches) vs Qwen U24 (100 matches), Llama U22 (100) vs Qwen U22 (100), text-probe hard-pass % for both models.
+
+**Blockers:**
+- The `tools/benchmark.sh` script is untracked — if opencode restarts and the working tree is clean, the script may be lost. **Persist it first** (commit it, or note that it needs to be recreated from the session log description).
+- The 14h run needs to survive opencode restarts — consider running `benchmark.sh` in `nohup` or `screen` so it continues independently of the opencode session.
+
+**Committed earlier this session:**
+- `84b9c88` fix: OUTPUT marker regex + test drift + re-baseline kpi_targets to v6.5 U22
+  - `59fe93b` chore: remove completed research artifacts + throwaway tools + gitignore cleanup
+  - Both pushed to `origin/feature/ros2k_behavior_optimization`.
 
 ---
 
