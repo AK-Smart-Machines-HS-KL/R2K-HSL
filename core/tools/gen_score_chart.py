@@ -112,8 +112,8 @@ def compute_score_deltas(scores, n_periods=16, latency_s=0.5):
             end_idx = len(scores) - 1
         if start_idx >= len(scores):
             break
-        # Cut off at goal event — don't show bars that include the goal frame
-        if goal_frame is not None and end_idx >= goal_frame:
+        # Cut off AFTER goal event — include the goal frame bar, stop after
+        if goal_frame is not None and start_idx >= goal_frame:
             break
         score_before = scores[start_idx]["score"]
         score_after = scores[end_idx]["score"]
@@ -414,8 +414,8 @@ def generate_ensemble_chart(runs, output_path, scenario_name, n_runs=5,
               labelcolor='white', framealpha=0.8)
 
     # Scoring formula at the bottom of the chart
-    formula = ("score = ball_x × 1.5 + possession(±2.0) - cluster(< 0.5m: -2.0, < 1.0m: -1.0) "
-               "- lane_open(-3.0) + blockers(≥2: +1.0), clamped [-10, +10]")
+    formula = ("score = ball_x × 0.8 + possession(±4.5) + goal_bonus(±3) "
+               "- cluster - lane_open + pressing + marking, gated by match_state.status, clamped [-10, +10]")
     fig.text(0.5, 0.01, formula, ha='center', va='bottom', color='#888888',
              fontsize=6, style='italic', wrap=True)
 
@@ -429,31 +429,65 @@ def generate_ensemble_chart(runs, output_path, scenario_name, n_runs=5,
 def main():
     parser = argparse.ArgumentParser(description="Generate score delta bar charts")
     parser.add_argument("--scenario", type=str, help="Scenario name")
-    parser.add_argument("--all", action="store_true", help="Generate for all scenarios")
-    parser.add_argument("--all-empirical", action="store_true", help="Generate for empirical scenarios only")
+    parser.add_argument("--all", action="store_true", help="Generate for all scenarios (auto-detect mode)")
+    parser.add_argument("--all-handcrafted", action="store_true", help="Generate ensemble charts for hand-crafted scenarios (non-emp, non-w)")
+    parser.add_argument("--all-empirical", action="store_true", help="Generate bar-delta charts for empirical scenarios only")
     parser.add_argument("--ensemble", action="store_true",
-                        help="Ensemble forecast chart (hand-crafted: 3 runs, shaded band + mean)")
+                        help="Ensemble forecast chart (hand-crafted: 5 runs, shaded band + mean)")
     args = parser.parse_args()
-    
-    if args.all:
+
+    def is_handcrafted(name):
+        return not name.startswith("emp_") and not name.startswith("w")
+
+    def is_empirical(name):
+        return name.startswith("emp_")
+
+    if args.all_handcrafted:
         scenarios = sorted([d.name for d in SCENARIO_DIR.iterdir()
-                           if d.is_dir() and (d / "scenario.json").exists()])
+                           if d.is_dir() and (d / "scenario.json").exists()
+                           and is_handcrafted(d.name)])
+        use_ensemble = True
     elif args.all_empirical:
         scenarios = sorted([d.name for d in SCENARIO_DIR.iterdir()
                            if d.is_dir() and (d / "scenario.json").exists()
-                           and d.name.startswith("emp_")])
+                           and is_empirical(d.name)])
+        use_ensemble = False
+    elif args.all:
+        all_scens = sorted([d.name for d in SCENARIO_DIR.iterdir()
+                           if d.is_dir() and (d / "scenario.json").exists()
+                           and not d.name.startswith("w")])
+        # Split into hand-crafted (ensemble) and empirical (bar-delta)
+        for scen in all_scens:
+            output_path = SCENARIO_DIR / scen / "score_chart.png"
+            if is_empirical(scen):
+                scores = load_world_traces_for_scenario(scen)
+                deltas, goal_info = compute_score_deltas(scores, n_periods=16, latency_s=0.5)
+                umschalt_desc = None
+                am_path = SCENARIO_DIR / scen / "analysis.md"
+                if am_path.exists():
+                    am_text = am_path.read_text(encoding="utf-8")
+                    m = re.search(r"Umschalt type:\s*\S+\s*—\s*(.+)", am_text)
+                    if m:
+                        umschalt_desc = m.group(1).strip()
+                generate_bar_chart(deltas, output_path, scen, latency_s=0.5,
+                                   goal_info=goal_info, umschalt_desc=umschalt_desc)
+            else:
+                all_runs = load_all_traces_for_scenario(scen, max_duration_s=4.0)
+                generate_ensemble_chart(all_runs, output_path, scen, duration_s=4.0)
+        print(f"  Generated {len(all_scens)} charts")
+        return
     else:
         scenarios = [args.scenario]
-    
+        use_ensemble = args.ensemble
+
     for scen in scenarios:
-        if args.ensemble:
+        output_path = SCENARIO_DIR / scen / "score_chart.png"
+        if use_ensemble:
             all_runs = load_all_traces_for_scenario(scen, max_duration_s=4.0)
-            output_path = SCENARIO_DIR / scen / "score_chart.png"
             generate_ensemble_chart(all_runs, output_path, scen, duration_s=4.0)
         else:
             scores = load_world_traces_for_scenario(scen)
             deltas, goal_info = compute_score_deltas(scores, n_periods=16, latency_s=0.5)
-            # Read umschalt description from analysis.md for NO GOAL label
             umschalt_desc = None
             am_path = SCENARIO_DIR / scen / "analysis.md"
             if am_path.exists():
@@ -461,7 +495,6 @@ def main():
                 m = re.search(r"Umschalt type:\s*\S+\s*—\s*(.+)", am_text)
                 if m:
                     umschalt_desc = m.group(1).strip()
-            output_path = SCENARIO_DIR / scen / "score_chart.png"
             generate_bar_chart(deltas, output_path, scen, latency_s=0.5,
                                goal_info=goal_info, umschalt_desc=umschalt_desc)
 
