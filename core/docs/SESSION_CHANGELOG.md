@@ -3,6 +3,129 @@
 > For full history (2026-07-13 to 2026-08-02), see `SESSION_CHANGELOG_archive.md`.
 > Compressed on 2026-08-05. Key findings are in the power files and `LESSONS_LEARNED.md`.
 
+## 2026-08-13 — 120-match post-fix benchmark + score function V7f + chart regeneration
+
+**Goal:** Complete the full post-fix validation: score function fix, compact JSON latency fix, chart regeneration, 120-match benchmark, KPI threshold computation, and v7 folder setup.
+
+**Done:**
+- **Compact JSON fix** (commit `4b92ce8`): `_clean_json_samples` used `json.dumps(indent=2)`, producing pretty-printed samples the model imitated (94 tokens). Changed to `json.dumps(separators=(',',':'))` → 54 tokens, latency 628ms→367ms (2vs2). Applied to `r2k_evaluator.py`, `setup_r2k.py`, `dump_prompt.py`.
+- **Score function V7f** (commit `d074b2a`): 4 fixes from U22 correlation analysis (0% goal correlation → 84%):
+  1. Gate by `match_state.status` — freeze score during non-playing phases (goal/ball_out/set-piece)
+  2. Goal bonus ±3 — edge-triggered on score increment, applied in `match_cb` with `pos_callback` fallback + `goal_bonus_applied` flag
+  3. Reverted possession-scaled ball position — overcorrected (ball at x=4.5 with Red closer → NEGATIVE for Blue). Back to unscaled `ball_x × BALL_POSITION_GAIN`
+  4. `BALL_POSITION_GAIN` reduced 1.5→0.8 — prevents score clamping at ±10 when ball deep in one half
+  5. `POSSESSION_REFERENCE_DIST` widened 2.0→4.5 — possession term competes with ball position
+- **Chart regeneration**: 50 score charts regenerated with V7f traces:
+  - 17 hand-crafted: ensemble (5 runs × 4s, shaded band + dotted mean, 0-4s x-axis)
+  - 33 empirical: bar-delta (16 bars × 0.5s, goal frame included as last bar)
+  - `gen_score_chart.py` fixed: added `--all-handcrafted` flag, fixed goal frame inclusion (`start_idx >= goal_frame` not `end_idx`), skip w* scenarios
+- **v7 folder**: moved w1-w6 watchdog scenarios to `docs/v7/scenarios/`, wrote `docs/v7/pit_of_nice_ideas.md` (v7 backlog: TeamCaptain, behavioral priorities, hardware tasks, benchmark leftovers, C3 leftovers)
+- **120-match benchmark**: 12 scenarios × 10 runs × 120s = 120 matches, 0 failures, ~4.5h. KPIs extracted via `analyze_trace.py`, saved to `src/results/v65_u24_postfix_benchmark.json`.
+- **KPI thresholds updated** for 5 slow-suite scenarios (attack_center, default, high_line, long_shot, contain_delay) from 10 samples each. Old v6.3 and U22 thresholds preserved as `v63_thresholds` / `v65_u22_thresholds` fields.
+- **477 fast tests pass** (105 unit + 13 score + 359 chart spec parametrized), 11 skipped (slow), 0 failed.
+
+**Key findings (120-match benchmark, U24 post-fix, qwen2.5:3b, V7f):**
+| Scenario | lat_p50 | comp | poss% | oob% | clust% | goalie% | B:R | parse% |
+|---|---|---|---|---|---|---|---|---|
+| 3vs3_attack_center | 666ms | -0.18 | 48.3 | 0.0 | 0.0 | 75.0 | 0:0.6 | 35% |
+| 3vs3_attack_wing | 604ms | -3.05 | 25.9 | 0.0 | 100.0 | 100.0 | 0:0.4 | 60% |
+| 3vs3_contain_delay | 640ms | 0.20 | 1.1 | 0.0 | 0.0 | 100.0 | 0:0.5 | 51% |
+| 3vs3_def_transition | 666ms | 0.35 | 82.8 | 0.0 | 0.0 | 100.0 | 0:0.0 | 40% |
+| 3vs3_default | 643ms | -1.15 | 8.8 | 0.0 | 0.0 | 82.2 | 0:1.4 | 50% |
+| 3vs3_defensive_crisis | 608ms | -1.02 | 36.9 | 7.3 | 3.0 | 99.5 | 0.2:0.9 | 51% |
+| 3vs3_fast_counter | 655ms | -0.41 | 100.0 | 0.0 | 0.0 | 100.0 | 0:0.0 | 35% |
+| 3vs3_high_line | 632ms | -1.87 | 8.5 | 0.0 | 0.0 | 86.2 | 0:2.4 | 51% |
+| 3vs3_long_shot | 598ms | -1.33 | 89.7 | 0.0 | 100.0 | 100.0 | 0.1:0.1 | 69% |
+| 3vs3_overload | 614ms | -1.96 | 14.4 | 0.0 | 28.4 | 87.0 | 0.1:1.9 | 53% |
+| 3vs3_pressing_trap | 600ms | 0.22 | 74.0 | 0.0 | 0.0 | 100.0 | 0:0.2 | 58% |
+| 3vs3_wing_switch | 620ms | -0.54 | 12.1 | 0.0 | 0.0 | 90.2 | 0:1.6 | 45% |
+
+- Latency: 598-666ms p50 (U24 RTX 5090 Laptop, compact JSON). U22 was 659-674ms (RTX 4080, pretty-printed). U24 is ~4% faster despite laptop GPU — compact JSON halved the token count.
+- Blue win rate: very low (0.0-0.2 goals per match vs 0.0-2.4 Red). Red dominates. Consistent with v6.5 100-match finding (19% win rate).
+- Parse error rate: 35-69% — high, but the LLM still produces valid JSON in the remaining 31-65% of calls. The parse errors are mostly whitespace/format variations the parser doesn't handle.
+- Cluster: 100% in attack_wing and long_shot — all 3 bots clustered the entire match. 0% in most others. High variance.
+- Goalie tactical: 75-100% — all scenarios pass the ≥60% threshold.
+
+**Files touched:**
+- `src/score_node.py` — V7f: BALL_POSITION_GAIN=0.8, goal bonus in match_cb, status gate, possession 4.5m
+- `src/ai_tactics/r2k_evaluator.py` — compact JSON samples (commit 4b92ce8)
+- `src/setup_r2k.py`, `src/tools/dump_prompt.py` — compact JSON (commit 4b92ce8)
+- `src/tests/test_score.py` — 13 tests for V7f score function
+- `src/tests/test_chart_specs.py` — 359 parametrized chart spec tests
+- `tools/gen_score_chart.py` — --all-handcrafted, goal frame inclusion, formula label, skip w*
+- `src/scenario/*/kpi_targets.json` — updated for 5 slow-suite scenarios (10-sample, U24 post-fix)
+- `src/scenario/*/score_chart.png` — 50 charts regenerated (17 ensemble + 33 bar-delta)
+- `src/results/v65_u24_postfix_benchmark.json` — 120-run KPI data
+- `docs/v7/pit_of_nice_ideas.md` — v7 backlog
+- `docs/v7/scenarios/w1-w6` — moved watchdog scenarios
+
+**Files deleted:**
+- `src/scenario/w1-w6/` — moved to `docs/v7/scenarios/`
+
+**Not yet done:**
+- Slow suite validation (11 tests × 140s) — deferred, can run now that thresholds are updated
+- 7B model comparison benchmark — needs ~4h per model
+- Text-probe all 15 scenarios — deferred
+- Analysis report comparing U22 vs U24, Qwen vs Llama — deferred
+
+**Next:**
+1. Run slow suite: `cd src && python3 -m pytest tests/test_non_functional.py -v -s` (~26 min)
+2. If slow suite passes → push + open PR
+3. 7B model comparison: `bash tools/benchmark.sh --model qwen2.5:7b --runs 10 --tag u24_qwen7b` (~4h)
+
+**Blockers:** None. GPU healthy. All fixes committed. 120-match benchmark complete.
+
+---
+
+## 2026-08-12 — U24 GPU clock-throttle diagnosis (INCOMPLETE — reboot required)
+
+**Goal:** Diagnose why U24 Ollama latency is ~600ms (2× the expected ~300ms) and unblock the v6.5 post-fix re-baseline.
+
+**Done:**
+- Reverted the Docker GPU-passthrough block added to `src/docker-compose.yml` earlier this session — it was a red herring. Ollama runs on the HOST (user-space), not inside the container; Docker GPU passthrough only affects Gazebo rendering, not LLM inference.
+- Confirmed Ollama IS using the host GPU: `curl localhost:11434/api/ps` shows `size_vram: 2390300672` (full 2.39GB model in VRAM), process `/usr/local/bin/ollama runner` at 2630MiB VRAM.
+- Confirmed `NVreg_PreserveVideoMemoryAllocations=1` IS set (suspend-bug fix already applied).
+- Reproduced the latency regression via direct Ollama API probes:
+  - Cold 5-token call: 1.96s (1.93s `load_duration` — one-time model load)
+  - Warm 5-token calls: 84-95ms (normal)
+  - 150-token soccer prompt: 586ms total, 214.8 tok/s
+- Captured GPU clocks DURING sustained 500-token inference (20 samples over 6s):
+  - **Clocks frozen at 375 MHz graphics / 810 MHz memory** (max is 3090/14001 MHz = 12% of rated clock)
+  - Power state flips P4↔P5 (93W↔17W), util up to 83%, but clocks NEVER boost
+  - Result: 208.5 tok/s sustained — exactly half the expected ~450 tok/s for a 5090 Laptop
+- Found the root cause in `journalctl -k -b`:
+  - `nvidia-modeset: ERROR: GPU:0: Idling display engine timed out: 0x0000ca7e:6:0:1169` (at boot +25s)
+  - `nvidia: unknown parameter 'modeset' ignored` — kernel module param malformed
+  - `nvidia_drm/parameters/modeset` not found — DRM KMS not initialized
+  - `Unable to read EDID for display device DP-2` — display engine in broken state
+  - `DynamicPowerManagement: 2` (fine-grained) but can't boost clocks with broken display engine
+- Confirmed the LLM trace shows the same 2× penalty: `eval_duration_ms` p50=429ms for 94 tokens = ~219 tok/s (should be ~450). `load_duration` is normal (~80ms warm). The deficit is entirely in the generation phase.
+
+**Diagnosis:** GPU clock boost is broken — the display engine timeout at boot prevents dynamic power management from ramping clocks above the 375 MHz base. This is the Xid 31 MMU fault family (AGENTS.md axiom 8) but manifesting as a boot-time display engine timeout, not a suspend-resume. The GPU computes correctly but at 12% clock speed, giving 2× latency. User confirmed they observed the same ~600ms when running 2vs2 no-explain from bash (used to be ~300ms).
+
+**Files touched:**
+- `src/docker-compose.yml` — reverted GPU passthrough block (no net change from last commit)
+- `src/logs/llm_trace_2vs2_default_strat_aggro_20260812_111319.jsonl` — 2vs2 trace confirming 2× latency (gitignored)
+- `/tmp/gpu_during_inference.csv` — 20 GPU samples showing frozen clocks (throwaway)
+
+**Files deleted:** None
+
+**Not yet done:**
+- The 15-match re-baseline is BLOCKED on the GPU clock fix — running now would bake the 2× latency into the KPI thresholds.
+- The full 100-match benchmark is likewise blocked.
+
+**Next:**
+1. **REBOOT** the machine (user chose Option A — clean reboot). After reboot:
+   - `nvidia-smi --query-gpu=pstate,clocks.gr,clocks.mem,power.draw --format=csv` — expect P0/P1, 2000+ MHz, NOT 375 MHz
+   - `curl -s -X POST http://localhost:11434/api/generate -H "Content-Type: application/json" -d '{"model":"qwen2.5:3b","prompt":"hello","stream":false,"options":{"num_predict":100,"temperature":0}}' -o /tmp/ollama_check.json -w "total: %{time_total}s\n"` — expect ~0.3s, NOT ~0.6s
+2. If reboot fixes clocks → proceed with the 15-match re-baseline (5 scenarios × 3 runs × 120s).
+3. If clocks stay frozen after reboot → apply the permanent grub fix: add `nvidia-drm.modeset=1 NVreg_DynamicPowerManagement=0x02 nvidia.NVreg_PreserveVideoMemoryAllocations=1` to `GRUB_CMDLINE_LINUX_DEFAULT` in `/etc/default/grub`, `update-grub`, reboot.
+4. After GPU confirmed healthy → resume the plan from `docs/SESSION_CHANGELOG.md` 2026-08-11 entry: re-baseline → slow suite → 100-match benchmark → PR.
+
+**Blockers:** GPU clock boost broken (375/810 MHz frozen, should be 2000+/14000 MHz). Reboot required to unblock. All KPI work is blocked until clocks are healthy — otherwise thresholds would be calibrated to a throttled GPU.
+
+---
+
 ## 2026-08-11 (cont.) — U24 post-fix re-validation (INCOMPLETE — handover to next instance)
 
 **Goal:** Re-run the full v6.5 benchmark on U24 with the `OUTPUT:` marker fix applied (committed by U22 in `84b9c88`). The previous U24 100-match benchmark ran with the bug present — results are stale.

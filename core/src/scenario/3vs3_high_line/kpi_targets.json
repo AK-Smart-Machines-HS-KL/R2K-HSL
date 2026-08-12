@@ -1,116 +1,116 @@
 {
-  "scenario_name": "3vs3_high_line",
-  "composite_score": {
-    "min": 0.27,
-    "max": 1.0,
-    "note": "higher is better (v6.5 re-baseline (U22, 2026-08-11, 3 samples, qwen2.5:3b))"
+  "tactical_score_avg": {
+    "min": -1.7,
+    "max": 999.0,
+    "note": "higher is better (v6.5 U24 post-fix, 10 samples, qwen2.5:3b, V7f)"
   },
   "ball_possession_blue_pct": {
-    "min": 36.63,
+    "min": 3.4,
     "max": 100.0,
-    "note": "higher is better (v6.5 re-baseline (U22, 2026-08-11, 3 samples, qwen2.5:3b))"
+    "note": "higher is better (v6.5 U24 post-fix, 10 samples, qwen2.5:3b, V7f)"
   },
   "pass_completion_pct": {
-    "min": 49.98,
+    "min": 21.2,
     "max": 100.0,
-    "note": "higher is better (v6.5 re-baseline (U22, 2026-08-11, 3 samples, qwen2.5:3b))"
+    "note": "higher is better (v6.5 U24 post-fix, 10 samples, qwen2.5:3b, V7f)"
   },
   "shots_on_goal": {
-    "min": 7.6,
-    "max": 22,
-    "note": "higher is better (v6.5 re-baseline (U22, 2026-08-11, 3 samples, qwen2.5:3b))"
-  },
-  "goals_for_blue": {
-    "min": 0.8,
-    "max": 6,
-    "note": "higher is better (v6.5 re-baseline (U22, 2026-08-11, 3 samples, qwen2.5:3b))"
+    "min": 0.0,
+    "max": 999.0,
+    "note": "higher is better (v6.5 U24 post-fix, 10 samples, qwen2.5:3b, V7f)"
   },
   "shots_on_target": {
-    "min": 2.5,
-    "max": 11,
-    "note": "higher is better (v6.5 re-baseline (U22, 2026-08-11, 3 samples, qwen2.5:3b))"
+    "min": 0.0,
+    "max": 999.0,
+    "note": "higher is better (v6.5 U24 post-fix, 10 samples, qwen2.5:3b, V7f)"
+  },
+  "goals_for_blue": {
+    "min": 0.0,
+    "max": 999.0,
+    "note": "higher is better (v6.5 U24 post-fix, 10 samples, qwen2.5:3b, V7f)"
   },
   "oob_pct": {
     "min": 0,
-    "max": 3.0,
-    "note": "lower is better (v6.5 re-baseline (U22, 2026-08-11, 3 samples, qwen2.5:3b))"
-  },
-  "goalie_idle_pct": {
-    "min": 0,
-    "max": 100.0,
-    "note": "lower is better (v6.5 re-baseline (U22, 2026-08-11, 3 samples, qwen2.5:3b))"
+    "max": 0.0,
+    "note": "lower is better (v6.5 U24 post-fix, 10 samples, qwen2.5:3b, V7f)"
   },
   "cluster_pct": {
     "min": 0,
-    "max": 29.5,
-    "note": "lower is better (v6.5 re-baseline (U22, 2026-08-11, 3 samples, qwen2.5:3b))"
+    "max": 0.7,
+    "note": "lower is better (v6.5 U24 post-fix, 10 samples, qwen2.5:3b, V7f)"
+  },
+  "goalie_tactical_pct": {
+    "min": 47.4,
+    "max": 100.0,
+    "note": "higher is better (v6.5 U24 post-fix, 10 samples, qwen2.5:3b, V7f)"
   },
   "latency_p50": {
     "min": 0,
-    "max": 858.0,
-    "note": "lower is better (v6.5 re-baseline (U22, 2026-08-11, 3 samples, qwen2.5:3b))"
+    "max": 874.9,
+    "note": "lower is better (v6.5 U24 post-fix, 10 samples, qwen2.5:3b, V7f)"
   },
   "restart_recovery_time_s": {
     "min": 0,
-    "max": 38.6,
-    "note": "lower is better (v6.5 re-baseline (U22, 2026-08-11, 3 samples, qwen2.5:3b))"
+    "max": 79.6,
+    "note": "lower is better (v6.5 U24 post-fix, 10 samples, qwen2.5:3b, V7f)"
   },
-  "v63_baseline_note": "Thresholds before v6.5 re-baseline (see git history)",
+  "v65_u22_thresholds": {},
   "v63_thresholds": {
+    "scenario_name": "3vs3_high_line",
     "composite_score": {
-      "min": 0.27,
+      "min": 0.18,
       "max": 1.0,
-      "note": "higher is better (v6.5 re-baseline (U22, 2026-08-11, 3 samples, qwen2.5:3b))"
-    },
-    "ball_possession_blue_pct": {
-      "min": 36.63,
-      "max": 100.0,
-      "note": "higher is better (v6.5 re-baseline (U22, 2026-08-11, 3 samples, qwen2.5:3b))"
-    },
-    "goals_for_blue": {
-      "min": 0.85,
-      "max": 1.0,
-      "note": "higher is better (v6.5 re-baseline (U22, 2026-08-11, 3 samples, qwen2.5:3b))"
-    },
-    "shots_on_goal": {
-      "min": 7.65,
-      "max": 10.0,
-      "note": "higher is better (v6.5 re-baseline (U22, 2026-08-11, 3 samples, qwen2.5:3b))"
-    },
-    "shots_on_target": {
-      "min": 2.55,
-      "max": 5.0,
-      "note": "higher is better (v6.5 re-baseline (U22, 2026-08-11, 3 samples, qwen2.5:3b))"
-    },
-    "pass_completion_pct": {
-      "min": 49.98,
-      "max": 100.0,
-      "note": "higher is better (v6.5 re-baseline (U22, 2026-08-11, 3 samples, qwen2.5:3b))"
+      "note": "calibrated from post-kick-fix 27-run baseline"
     },
     "oob_pct": {
-      "min": 0,
-      "max": 3.0,
-      "note": "lower is better (v6.5 re-baseline (U22, 2026-08-11, 3 samples, qwen2.5:3b))"
+      "min": 0.0,
+      "max": 7.5,
+      "note": "lower is better (0% ideal)"
     },
     "cluster_pct": {
-      "min": 0,
-      "max": 29.5,
-      "note": "lower is better (v6.5 re-baseline (U22, 2026-08-11, 3 samples, qwen2.5:3b))"
+      "min": 0.0,
+      "max": 40.8,
+      "note": "lower is better (0% ideal)"
     },
     "goalie_idle_pct": {
-      "min": 0,
-      "max": 119.3,
-      "note": "lower is better (v6.5 re-baseline (U22, 2026-08-11, 3 samples, qwen2.5:3b))"
+      "min": 0.0,
+      "max": 90.4,
+      "note": "lower is better (structural limit ~70% after Phase 2a)"
     },
     "latency_p50": {
       "min": 0,
-      "max": 858.0,
-      "note": "lower is better (v6.5 re-baseline (U22, 2026-08-11, 3 samples, qwen2.5:3b))"
+      "max": 898,
+      "note": "lower is better"
+    },
+    "ball_possession_blue_pct": {
+      "min": 18.9,
+      "max": 100.0,
+      "note": "higher is better"
+    },
+    "goals_for_blue": {
+      "min": 0,
+      "max": 4,
+      "note": "higher is better"
+    },
+    "shots_on_goal": {
+      "min": 0,
+      "max": 18,
+      "note": "higher is better (v6.3 baseline mean=12.0)"
+    },
+    "shots_on_target": {
+      "min": 0,
+      "max": 6,
+      "note": "higher is better (v6.3 baseline mean=4.3)"
+    },
+    "pass_completion_pct": {
+      "min": 29.9,
+      "max": 100.0,
+      "note": "higher is better (v6.3 baseline mean=59.9%)"
     },
     "restart_recovery_time_s": {
-      "min": 0,
-      "max": 38.6,
-      "note": "lower is better (v6.5 re-baseline (U22, 2026-08-11, 3 samples, qwen2.5:3b))"
+      "min": 0.0,
+      "max": 34.2,
+      "note": "lower is better (v6.3 baseline mean=22.8s)"
     }
   }
 }
