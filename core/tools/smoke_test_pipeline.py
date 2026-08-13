@@ -83,10 +83,11 @@ def main():
     print("OK: Ollama running, qwen2.5:3b loaded")
 
     rc, docker_out, _ = run(["docker", "ps", "--format", "{{.Names}}", "--filter", f"name={CONTAINER}"])
-    if CONTAINER not in docker_out:
-        print(f"FAIL: Docker container {CONTAINER} not running")
-        sys.exit(1)
-    print(f"OK: Docker container {CONTAINER} running")
+    HAS_DOCKER = CONTAINER in docker_out
+    if not HAS_DOCKER:
+        print(f"WARN: Docker container {CONTAINER} not running (U22 native mode — skipping bridge test)")
+    else:
+        print(f"OK: Docker container {CONTAINER} running")
 
     # --- Step 1: Write mock Worldstate.json ---
     step("STEP 1: Write mock Worldstate.json")

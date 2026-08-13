@@ -168,5 +168,15 @@
       "max": 15.7,
       "note": "lower is better (v6.3 baseline mean=10.5s)"
     }
+  },
+  "composite_score": {
+    "min": 0.226,
+    "max": 1.0,
+    "note": "higher is better (v6.5 U24 post-parse-fix, computed from 10 samples, qwen2.5:3b, V7f) obs=[0.266..0.387]"
+  },
+  "goalie_idle_pct": {
+    "min": 0.0,
+    "max": 122.1,
+    "note": "lower is better (v6.5 U24 post-parse-fix, 10 samples, qwen2.5:3b, V7f) obs=[65.6..93.9]"
   }
 }
