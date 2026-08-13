@@ -1,0 +1,35 @@
+{
+  "scenario_name": "3vs3_possession_lost",
+  "mode": "3vs3",
+  "tactical_situation": "Blue loses possession in the opponent half \u2014 red counters; blue must transition from attack to defense immediately",
+  "entities": {
+    "soccer_ball": {
+      "x": 1.0,
+      "y": 0.5
+    },
+    "blue_1": {
+      "x": -4.0,
+      "y": 0.0
+    },
+    "blue_2": {
+      "x": -0.5,
+      "y": 1.5
+    },
+    "blue_3": {
+      "x": -1.0,
+      "y": -1.0
+    },
+    "red_1": {
+      "x": 1.5,
+      "y": 0.5
+    },
+    "red_2": {
+      "x": 0.0,
+      "y": 2.0
+    },
+    "red_3": {
+      "x": -1.0,
+      "y": -1.5
+    }
+  }
+}

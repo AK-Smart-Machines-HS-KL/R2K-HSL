@@ -1,2 +1,5 @@
-STATUS: ball_out. You are restarting (kick-in). Approach the ball from behind — up to 1m outside the field boundary is allowed. Kick toward the opponent goal.
-After the kick, return to normal play immediately.
+STATUS: ball_out. You are restarting (kick-in). The ball is on the sideline.
+The restart bot (closest blue bot to the ball) moves behind the ball on the out-of-bounds side, then kicks toward the opponent goal (X=4.5).
+After the kick, return to normal play.
+
+ONE LINE PER BOT: Output one line for every blue bot.

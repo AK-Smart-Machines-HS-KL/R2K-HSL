@@ -1,2 +1,4 @@
-STATUS: corner_kick_in. The ball is at a corner flag. Approach from behind, cross into the opponent penalty area toward a teammate.
+STATUS: corner_kick_in. The ball is at a corner flag. Approach from behind the ball, kick toward a teammate near the opponent goal.
 After the kick, return to normal play.
+
+ONE LINE PER BOT: Output one line for every blue bot.

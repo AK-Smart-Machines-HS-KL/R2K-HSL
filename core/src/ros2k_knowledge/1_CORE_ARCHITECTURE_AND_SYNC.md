@@ -3,8 +3,8 @@ id: 1_CORE
 title: "Section 1: System Overview, Core Architecture & State Sync (V6.1)"
 type: KNOWLEDGE_BASE_POWER_FILE
 tags: [architecture, tmpfs, threading, race-conditions, decoupled-multiplexing, os.replace, qwen, state-aggregator, v5, v6.1, trace-logging, observability]
-last_modified: 2026-07-22
-version: v6.2
+last_modified: 2026-08-05
+version: v6.4
 ---
 # Section 1: System Overview, Core Architecture & State Sync
 
@@ -159,3 +159,79 @@ Trace logging could have been a ROS 2 topic (e.g. `/llm_trace`). It wasn't, beca
 Both trace files share a common `R2K_RUN_ID` (env var set by `launch_r2k.sh:82`). This allows `analyze_trace.py` to join world-state frames with LLM calls by timestamp, reconstructing the full decision loop: world state → LLM input → LLM output → parse result → latency.
 
 See `6_DATA_SCHEMAS_AND_LIFECYCLE.md` §V6.1 Addendum for trace file schemas and KPI definitions.
+
+## V6.4 Addendum — Bridge Changes, TeamCaptain Architecture, Demo Mode
+
+### Bridge changes (v6.4)
+
+The bridge (`ollama_sandbox_bridge.py`) received several changes in v6.4:
+
+- **Goalie goal-line mode** (`R2K_GOALIE_BLEND=0`, default): disables the
+  Phase 2a angle-block mode that was pulling the goalie to X=-2.5 during
+  normal play. Goalie now stays at X=-4.0 with damped Y (0.5 × ball_y).
+  When enabled (`R2K_GOALIE_BLEND=1`), the full Phase 2a blending is
+  restored (preserved for future Kalman filter integration, Phase 5.1).
+- **Anti-collision:** non-kicker bot pushed 1m away from kicker when within
+  0.5m. Physics-level supplement to the SPLIT RULE.
+- **Kick direction override:** blue_1 (goalie) always kicks toward +X
+  (opponent goal), regardless of bot yaw. Prevents sideways kicks out of
+  bounds.
+- **PD gain boost:** lin_x = 1.2 (was 0.8) when distance > 1.0m. Helps
+  goalie return to line after being pushed by physics.
+- **`GOALIE_DEADBAND_PCT`:** 0.022 → 0.015 (tighter Y tracking).
+- **`prompt_utils.py`:** `clean_json_samples()` extracted to shared module,
+  imported by both `setup_r2k.py` and `r2k_evaluator.py`.
+- **`TEXT_OUTPUT_HEADER`:** moved from hardcoded string in evaluator to
+  `strategy/fragments/header_k3.txt` (read at runtime via `_read_fragment`).
+
+### TeamCaptain architecture (v7 — ADR-A07)
+
+A proposed new ROS2 node (CPU-only) that sits between the evaluator and the
+bridge:
+
+```
+LLM (evaluator, GPU) → current_strategy.json → TeamCaptain (CPU)
+  → optimized_path.json → Bridge (10Hz) → cmd_vel/RPC → bots
+```
+
+**Responsibilities:** path computation, hardware-aware planning (K1 fall
+risk, Yahboom diff-drive, trailer non-holonomic), multi-bot coordination
+(non-colliding trajectories), augmented world model (free pathways, sweet
+spots, risk zones injected into LLM's world state), watchdog (odometry
+comparison → failsafe or LLM re-prompt), kick abort (ball motion change →
+kChangeMode for K1).
+
+**Downward compatible:** bridge reads `optimized_path.json` when TeamCaptain
+is active; falls back to `current_strategy.json` when TeamCaptain is down.
+No breaking change to v6.4.
+
+See `core/docs/adr/ADR-A07-team-captain-architecture.md` for full design.
+
+### Demo/calibration mode (--demo flag)
+
+A third prompt mode for human-driven bot control:
+- `--demo` flag in `launch_r2k.sh` loads `strategy/fragments/header_demo.txt`
+  instead of `header_k3.txt`
+- Human types commands ("blue_2 move to (1.0, 0.5)")
+- LLM reformats to inter-lingua (same format as match mode)
+- Same evaluator → bridge pipeline (tests full stack)
+- No tactical reasoning, no Expert/Oracle — pure command relay
+- Dual-use: workshop demos + calibration
+- JSON fallback (`tools/calibrate_bot.py`) works when LLM is down
+- Demo prompt contains NO meta-knowledge (no bridge, cmd_vel, RPC, executor)
+
+### start_ollama.sh path bug fix
+
+`launch_r2k.sh` line 73 does `cd src` — changing CWD. The `start_ollama.sh`
+path resolution must use `ORIGINAL_DIR` (saved before the `cd`) to find the
+correct path: `bash "$ORIGINAL_DIR/tools/start_ollama.sh"`. The log file
+path in `start_ollama.sh` uses `/tmp/r2k_ollama.log` (simplified from a
+relative path that broke after reboot).
+
+### Meta-knowledge axiom (reinforced)
+
+The LLM prompt must NEVER contain implementation details: "bridge commands",
+"cmd_vel", "RPC", "path executor", "ROS2K protocols". The LLM's world is:
+read positions, output per-bot instructions with X,Y coordinates. Everything
+else is infrastructure. This is a recurring mistake that must be eliminated
+permanently.

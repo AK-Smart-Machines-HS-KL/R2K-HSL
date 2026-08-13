@@ -1,0 +1,7 @@
+{
+  "scenario_name": "emp_empirical-proven_restart_007",
+  "tag": "empirical-proven",
+  "umschalt_type": "restart",
+  "cluster_size": 1,
+  "note": "Auto-generated from umschaltmoment extraction, reduced by clustering"
+}

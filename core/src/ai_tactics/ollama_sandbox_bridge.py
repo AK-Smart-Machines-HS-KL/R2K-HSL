@@ -194,7 +194,10 @@ class HalBridge(Node):
                 dist_to_ball = math.hypot(self.ball_pos.x - cx, self.ball_pos.y - cy)
                 action = target.get('action', '').lower()
                 is_attacking = False
-                
+
+                if action == 'hold':
+                    continue  # explicit hold: bot keeps current position
+
                 if action == 'kick':
                     is_attacking = True
                     # Role-aware kick direction: goalie kicks away from own goal

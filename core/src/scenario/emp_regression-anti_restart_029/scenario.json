@@ -1,0 +1,42 @@
+{
+  "scenario_name": "emp_regression-anti_restart_029",
+  "mode": "3vs3",
+  "tactical_situation": "Umschalt: restart (regression-anti)",
+  "entities": {
+    "soccer_ball": {
+      "x": -4.4,
+      "y": -0.314,
+      "yaw": -2.73
+    },
+    "blue_1": {
+      "x": -4.387,
+      "y": -0.603,
+      "yaw": 0.55
+    },
+    "blue_2": {
+      "x": -3.939,
+      "y": -0.665,
+      "yaw": 2.51
+    },
+    "blue_3": {
+      "x": -1.285,
+      "y": -1.128,
+      "yaw": 0.48
+    },
+    "red_1": {
+      "x": 0.391,
+      "y": 1.558,
+      "yaw": -1.06
+    },
+    "red_2": {
+      "x": 4.212,
+      "y": -0.288,
+      "yaw": 1.06
+    },
+    "red_3": {
+      "x": -4.4,
+      "y": -0.912,
+      "yaw": 1.29
+    }
+  }
+}

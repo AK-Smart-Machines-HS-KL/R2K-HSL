@@ -1,0 +1,42 @@
+{
+  "scenario_name": "emp_regression-anti_ball_won_018",
+  "mode": "3vs3",
+  "tactical_situation": "Umschalt: ball_won (regression-anti)",
+  "entities": {
+    "soccer_ball": {
+      "x": -4.4,
+      "y": -0.073,
+      "yaw": 0.0
+    },
+    "blue_1": {
+      "x": -3.967,
+      "y": -2.9,
+      "yaw": -1.79
+    },
+    "blue_2": {
+      "x": -2.136,
+      "y": -1.192,
+      "yaw": 2.99
+    },
+    "blue_3": {
+      "x": -2.045,
+      "y": -2.9,
+      "yaw": 2.59
+    },
+    "red_1": {
+      "x": 0.564,
+      "y": 1.604,
+      "yaw": -2.7
+    },
+    "red_2": {
+      "x": -4.104,
+      "y": -0.475,
+      "yaw": 2.04
+    },
+    "red_3": {
+      "x": 4.131,
+      "y": -0.024,
+      "yaw": -1.55
+    }
+  }
+}

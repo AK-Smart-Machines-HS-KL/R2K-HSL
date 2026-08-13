@@ -1,5 +1,0 @@
-2vs1 OFFENSIVE ADVANTAGE:
-- You MUST assign roles to BOTH blue bots ("blue_1", "blue_2").
-- One bot MUST act as "striker" to pressure the ball.
-- The second bot should position itself to catch deflections or defend the goal.
-- IMPORTANT: Entity names are flat. Target "blue_1" and "blue_2" directly.

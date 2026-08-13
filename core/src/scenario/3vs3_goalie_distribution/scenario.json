@@ -1,0 +1,35 @@
+{
+  "scenario_name": "3vs3_goalie_distribution",
+  "mode": "3vs3",
+  "tactical_situation": "Goalie has the ball at the edge of the box \u2014 must distribute to an open teammate before red presses; blue_2 is open on the left wing, blue_3 is marked in the center",
+  "entities": {
+    "soccer_ball": {
+      "x": -3.5,
+      "y": 0.0
+    },
+    "blue_1": {
+      "x": -3.5,
+      "y": 0.0
+    },
+    "blue_2": {
+      "x": -1.0,
+      "y": 2.0
+    },
+    "blue_3": {
+      "x": -0.5,
+      "y": 0.0
+    },
+    "red_1": {
+      "x": -2.0,
+      "y": 0.5
+    },
+    "red_2": {
+      "x": 0.5,
+      "y": 0.5
+    },
+    "red_3": {
+      "x": 2.0,
+      "y": 0.0
+    }
+  }
+}

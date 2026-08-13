@@ -1,0 +1,14 @@
+{
+  "scenario_name": "w5_boundary_violation",
+  "mode": "3vs3",
+  "tactical_situation": "Ball near corner — blue must not send bots out of bounds",
+  "entities": {
+    "soccer_ball": {"x": 4.2, "y": 2.7},
+    "blue_1": {"x": -4.0, "y": 0.0},
+    "blue_2": {"x": 2.0, "y": 1.5},
+    "blue_3": {"x": 1.0, "y": -0.5},
+    "red_1": {"x": 4.0, "y": 2.5},
+    "red_2": {"x": 3.0, "y": 0.0},
+    "red_3": {"x": 2.5, "y": -1.5}
+  }
+}

@@ -1,58 +1,58 @@
 {
-    "scenario_name": "3vs3_pressing_trap",
-    "composite_score": {
-        "min": 0.21,
-        "max": 1.0,
-        "note": "calibrated from post-kick-fix 27-run baseline"
-    },
-    "oob_pct": {
-        "min": 0.0,
-        "max": 16.8,
-        "note": "lower is better (0% ideal)"
-    },
-    "cluster_pct": {
-        "min": 0.0,
-        "max": 86.9,
-        "note": "lower is better (0% ideal)"
-    },
-    "goalie_idle_pct": {
-        "min": 0.0,
-        "max": 100.0,
-        "note": "lower is better (structural limit ~70% after Phase 2a)"
-    },
-    "latency_p50": {
-        "min": 0,
-        "max": 895,
-        "note": "lower is better"
-    },
-    "ball_possession_blue_pct": {
-        "min": 30.7,
-        "max": 100.0,
-        "note": "higher is better"
-    },
-    "goals_for_blue": {
-        "min": 0,
-        "max": 3,
-        "note": "higher is better"
-    },
-    "shots_on_goal": {
-        "min": 0,
-        "max": 21,
-        "note": "higher is better (v6.3 baseline mean=14.0)"
-    },
-    "shots_on_target": {
-        "min": 0,
-        "max": 4,
-        "note": "higher is better (v6.3 baseline mean=2.7)"
-    },
-    "pass_completion_pct": {
-        "min": 38.6,
-        "max": 100.0,
-        "note": "higher is better (v6.3 baseline mean=77.3%)"
-    },
-    "restart_recovery_time_s": {
-        "min": 0.0,
-        "max": 24.8,
-        "note": "lower is better (v6.3 baseline mean=16.5s)"
-    }
+  "scenario_name": "3vs3_pressing_trap",
+  "composite_score": {
+    "min": 0.2798666666666666,
+    "max": 1.0,
+    "note": "higher is better (v6.3 re-baseline)"
+  },
+  "oob_pct": {
+    "min": 0.0,
+    "max": 10.85,
+    "note": "lower is better"
+  },
+  "cluster_pct": {
+    "min": 0.0,
+    "max": 38.85,
+    "note": "lower is better"
+  },
+  "goalie_idle_pct": {
+    "min": 0.0,
+    "max": 100.0,
+    "note": "lower is better (structural limit ~70%)"
+  },
+  "latency_p50": {
+    "min": 0,
+    "max": 995,
+    "note": "lower is better"
+  },
+  "ball_possession_blue_pct": {
+    "min": 32.766666666666666,
+    "max": 100.0,
+    "note": "higher is better"
+  },
+  "goals_for_blue": {
+    "min": 0,
+    "max": 1,
+    "note": "higher is better"
+  },
+  "shots_on_goal": {
+    "min": 0,
+    "max": 6,
+    "note": "higher is better (v6.3 re-baseline mean=4.0)"
+  },
+  "shots_on_target": {
+    "min": 0,
+    "max": 1,
+    "note": "higher is better (v6.3 re-baseline mean=0.7)"
+  },
+  "pass_completion_pct": {
+    "min": 35.016666666666666,
+    "max": 100.0,
+    "note": "higher is better (v6.3 re-baseline mean=70.0%)"
+  },
+  "restart_recovery_time_s": {
+    "min": 0.0,
+    "max": 17.305,
+    "note": "lower is better (v6.3 re-baseline mean=11.5s)"
+  }
 }

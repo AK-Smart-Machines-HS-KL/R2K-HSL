@@ -1,4 +1,5 @@
 3vs1 POWER PLAY STRATEGY:
-- You MUST assign roles to ALL THREE blue bots ("blue_1", "blue_2", "blue_3").
-- Maintain strict roles: Attacker (attacks ball), Defender (mid-field), Goalie (defends X=-4.0).
-- IMPORTANT: Entity names are flat.
+- You control THREE blue bots ("blue_1", "blue_2", "blue_3") against one opponent.
+- The closest bot moves to the ball and kicks toward the opponent goal (X=4.5).
+- One bot holds midfield (X=-2.0) to intercept passes.
+- One bot covers the goal line (X=-4.0) and follows the ball's Y position.

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import rclpy
 import json
+import os
 import random
 import time
 import math
@@ -9,6 +10,9 @@ from std_msgs.msg import String
 from geometry_msgs.msg import Twist
 from gazebo_msgs.srv import SetEntityState
 from collections import deque
+
+RESET_FLAG = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                          'shared_state', 'reset_flag.json')
 
 class RefereeNode(Node):
     def __init__(self):
@@ -60,10 +64,19 @@ class RefereeNode(Node):
         self.GOAL_AREA_Y = 1.0      # ±1.0m, 2m wide goal area
         self.SET_PIECE_WARP_RADIUS = 1.5   # opponents within this get warped away
         self.WARP_AWAY_DISTANCE = 2.0      # warp this far radially from ball
-        
-        # Kickoff logic
-        self.kickoff_positions = {}  # Loaded from first world_positions
-        self.kickoff_positions_loaded = False
+
+        # Kickoff formation (RoboCup standard: all bots in own half, >=1.5m from center)
+        self.KICKOFF_MIN_DIST_FROM_CENTER = 1.5
+        self.KICKOFF_FORMATIONS = {
+            3: {  # 3vs3
+                'blue_1': (-4.2, 0.0), 'blue_2': (-1.5, 1.5), 'blue_3': (-1.5, -1.5),
+                'red_1': (4.2, 0.0), 'red_2': (1.5, 1.5), 'red_3': (1.5, -1.5),
+            },
+            2: {  # 2vs2
+                'blue_1': (-4.2, 0.0), 'blue_2': (-1.5, 0.0),
+                'red_1': (4.2, 0.0), 'red_2': (1.5, 0.0),
+            },
+        }
         
         # Freeze enforcement
         self.freeze_pubs = {}
@@ -82,10 +95,36 @@ class RefereeNode(Node):
         # Position history for velocity calculation
         self.position_history = deque(maxlen=10)
         
-        self.get_logger().info("⚖️  Referee V6 Online: Goals + Fouls + Ball-out detection")
+        self.get_logger().info("Referee V7 Online: Goals + Fouls + Ball-out + warp-reset")
+
+    def _check_reset(self):
+        """Check for warp-and-resume reset flag. Clears all match state."""
+        if os.path.exists(RESET_FLAG):
+            self.score_blue = 0
+            self.score_red = 0
+            self.ball_was_in_goal = False
+            self.status = "playing"
+            self.frozen_bots.clear()
+            self.restart_start_time = None
+            self.ball_out_event = None
+            self.restart_team = None
+            self.restart_pos = None
+            self.last_toucher = None
+            self.foul_event = None
+            self.foul_cooldown.clear()
+            self.blocking_timers.clear()
+            self.position_history.clear()
+            self.ball_out_frames = 0
+            self.last_toucher_frames.clear()
+            try:
+                os.remove(RESET_FLAG)
+            except OSError:
+                pass
+            self.get_logger().info("Reset flag detected — clearing all match state")
     
     def pos_callback(self, msg):
         try:
+            self._check_reset()
             data = json.loads(msg.data)
             entities = data.get('entities', {})
             ball = entities.get('soccer_ball')
@@ -95,10 +134,6 @@ class RefereeNode(Node):
             
             # Store position history for velocity calculation
             self.position_history.append((time.time(), entities))
-            
-            # Load kickoff positions from first world state
-            if not self.kickoff_positions_loaded:
-                self._store_kickoff_positions(entities)
             
             # 1. Goal detection
             self._check_goal(ball, entities)
@@ -163,35 +198,46 @@ class RefereeNode(Node):
         elif -4.0 <= x <= 4.0:
             self.ball_was_in_goal = False
     
-    def _store_kickoff_positions(self, entities):
-        """Store initial positions for kickoff reset."""
-        for bot_id, bot_pos in entities.items():
-            if bot_id != 'soccer_ball':
-                self.kickoff_positions[bot_id] = {'x': bot_pos['x'], 'y': bot_pos['y']}
-        self.kickoff_positions_loaded = True
-        self.get_logger().info(f"📍 Stored {len(self.kickoff_positions)} kickoff positions")
-    
     def _kickoff_reset(self, entities, scoring_team):
-        """Reset ball to center and bots to kickoff. Scoring team frozen 5s."""
+        """Reset ball to center and bots to standard kickoff formation.
+
+        RoboCup kickoff rule: all bots in own half, >=1.5m from center.
+        Uses KICKOFF_FORMATIONS (not scenario start positions) to enforce this.
+        Scoring team frozen 5s — freeze is sufficient to prevent pressing.
+        """
         # 1. Reset ball to center
         self._reset_ball(0.0, 0.0)
-        
-        # 2. Reset all bots to their kickoff positions
-        for bot_id, pos in self.kickoff_positions.items():
-            self._warp_bot(bot_id, pos['x'], pos['y'])
-        
-        # 3. Freeze scoring team for 5 seconds (unified set-piece countdown)
+
+        # 2. Determine formation by bot count
+        n_blue = sum(1 for k in entities if k.startswith('blue'))
+        formation = self.KICKOFF_FORMATIONS.get(n_blue, self.KICKOFF_FORMATIONS[3])
+
+        # 3. Warp all bots to standard kickoff positions
+        for bot_id, (x, y) in formation.items():
+            if bot_id in entities:
+                self._warp_bot(bot_id, x, y)
+
+        # 4. Validate: all bots must be >=1.5m from center
+        for bot_id, (x, y) in formation.items():
+            dist = math.hypot(x, y)
+            if dist < self.KICKOFF_MIN_DIST_FROM_CENTER:
+                angle = math.atan2(y, x)
+                new_x = self.KICKOFF_MIN_DIST_FROM_CENTER * math.cos(angle)
+                new_y = self.KICKOFF_MIN_DIST_FROM_CENTER * math.sin(angle)
+                self._warp_bot(bot_id, new_x, new_y)
+
+        # 5. Freeze scoring team for 5 seconds (unified set-piece countdown)
         self._freeze_team(scoring_team, entities, self.SET_PIECE_COUNTDOWN)
-        
-        # 4. Set restart timer
+
+        # 6. Set restart timer
         self.restart_start_time = time.time()
-        
-        # 5. Clear event state
+
+        # 7. Clear event state
         self.ball_out_event = None
         self.restart_team = "red" if scoring_team == "blue" else "blue"
         self.foul_event = None
-        
-        self.get_logger().info(f"🥅 KICKOFF: Ball reset. {scoring_team.upper()} frozen {self.SET_PIECE_COUNTDOWN:.0f}s.")
+
+        self.get_logger().info(f"KICKOFF: Ball reset to center. Standard formation applied. {scoring_team.upper()} frozen {self.SET_PIECE_COUNTDOWN:.0f}s.")
     
     def _reset_after_goal(self):
         """Clear event state after goal (called by kickoff)."""

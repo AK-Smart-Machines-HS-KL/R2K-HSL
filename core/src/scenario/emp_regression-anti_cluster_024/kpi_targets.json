@@ -1,0 +1,7 @@
+{
+  "scenario_name": "emp_regression-anti_cluster_024",
+  "tag": "regression-anti",
+  "umschalt_type": "cluster",
+  "cluster_size": 1,
+  "note": "Auto-generated from umschaltmoment extraction, reduced by clustering"
+}

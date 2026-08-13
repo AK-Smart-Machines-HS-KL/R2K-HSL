@@ -1,14 +1,14 @@
 {
   "scenario_name": "3vs3_attack_center",
   "mode": "3vs3",
-  "tactical_situation": "Midfield, even formation — baseline decision quality",
+  "tactical_situation": "Blue attacking through the center — red defenders pulled wide, goalie off-center",
   "entities": {
-    "soccer_ball": {"x": 0.0, "y": 0.0},
+    "soccer_ball": {"x": 2.2, "y": 0.3},
     "blue_1": {"x": -4.2, "y": 0.0},
-    "blue_2": {"x": -1.5, "y": 1.5},
-    "blue_3": {"x": -1.5, "y": -1.5},
-    "red_1": {"x": 4.2, "y": 0.0},
-    "red_2": {"x": 1.5, "y": 1.5},
-    "red_3": {"x": 1.5, "y": -1.5}
+    "blue_2": {"x": 1.5, "y": 1.2},
+    "blue_3": {"x": 1.5, "y": -1.2},
+    "red_1": {"x": 4.2, "y": 0.5},
+    "red_2": {"x": 2.8, "y": 2.2},
+    "red_3": {"x": 2.8, "y": -2.2}
   }
 }

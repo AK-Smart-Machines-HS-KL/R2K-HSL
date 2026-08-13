@@ -12,8 +12,8 @@ All work happens under `core/`. The repo root is a thin wrapper (README, `git_ru
 
 - `core/docs/SESSION_CHANGELOG.md` — **READ THIS FIRST after a reboot.** Append-only session log: what was done, what's next, what's blocking. Cross-session continuity.
 - `core/.github/copilot-instructions.md` — architecture axioms and agent persona rules.
-- `core/docs/` — developer-facing specs: `optimization_spec_v6.md` (v6.1 spec with phase checkpoints), `spec_taktische_evaluierung.md` (German historical design decisions), `referee_rulebook.md` (complete referee decision catalog with thresholds, field diagrams, state machine — read before changing any rule).
-- `core/src/ros2k_knowledge/` — RAG power-files (`1_CORE_…` … `6_DATA_…`) + `META_KNOWLEDGE_ROUTER.md` (inverted index of symptoms → which file has the answer). Consult the router before debugging.
+- `core/docs/` — developer-facing specs: `optimization_spec_v6.md` (v6.1 spec with phase checkpoints), `spec_taktische_evaluierung.md` (German historical design decisions), `referee_rulebook.md` (complete referee decision catalog with thresholds, field diagrams, state machine — read before changing any rule). C3 inter-lingua work: `c3_phase0_literature_and_plan.md`, `c3_vocabulary_dictionary.md`, `c3_testcase_review.md`, `c3_scenario_generation_playbook.md` (see `7_C3_INTER_LINGUA.md` §9).
+- `core/src/ros2k_knowledge/` — RAG power-files (`1_CORE_…` … `8_C3_SOCCER_KNOWLEDGE.md`) + `META_KNOWLEDGE_ROUTER.md` (inverted index of symptoms → which file has the answer). Consult the router before debugging.
 - `core/user doc/rosk2_technical_documentation/` — 40-file detailed architecture reference (human-facing).
 - `core/src/scenario/README.md` — scenario naming + v5/v6 schema rules.
 - `git_rules.md` (repo root) — branch naming + language conventions.
@@ -121,9 +121,12 @@ opencode session via `.opencode/opencode.json → instructions`.
   (`scene_type`/`label`) and v6 schema (`scenario_name`/`mode`/`tactical_situation`) coexist;
   see `scenario/README.md`.
 - `core/src/strategy/fragments/` — prompt fragments (`header.txt`, `rules_core.txt`,
-  `rules_<mode>.txt`, `samples_<mode>.txt`) assembled by `setup_r2k.py` into
-  `ai_tactics/system_prompt.txt` on each boot. `strategy/strat_*.txt` are build artifacts
-  (gitignored) — do NOT hand-edit them; edit `fragments/` instead.
+  `rules_<mode>.txt`, `samples_<mode>.txt`, `rules_ball_out.txt`, `rules_goal_kick.txt`,
+  `rules_corner_kick_in.txt`, `rules_kickoff.txt`) assembled by `setup_r2k.py` into
+  `ai_tactics/system_prompt.txt` on each boot (for `dump_prompt.py` dry-runs only —
+  the evaluator assembles from fragments directly at runtime via dynamic prompt
+  injection). `strategy/strat_*.txt` are build artifacts (gitignored) — do NOT hand-edit
+  them; edit `fragments/` instead.
 - `core/src/shared_state/` — runtime state files (`Worldstate.json`, `current_strategy.json`).
   Should be on tmpfs in production; tracked in git as scaffolding.
 - `core/src/ros2_ws/src/brain/msg/` — custom ROS 2 msgs. Rebuild with colcon when changed.
@@ -143,6 +146,14 @@ opencode session via `.opencode/opencode.json → instructions`.
   One coherent change per branch. Name in CamelCase, English, no umlauts.
 - Code, comments, variables, commit messages: **English**. Team-internal docs/project work: German.
 - AI prompts living in code: English. AI prompts used by the team: German.
+- **[C3 inter-lingua] No meta-knowledge in model-facing text:** Anything fed to the
+  LLM (fragments, transforms, scenario text) contains ONLY soccer/referee knowledge
+  in dictionary vocabulary. Never mention ROS2K internals (JSON schema, PID, tmpfs,
+  phantom kick, file paths, etc.). Every positional/negational verb carries explicit X,Y.
+- **No hard-wired thresholds in code:** Distances, velocities, angles, timeouts must be
+  named module constants at file top (e.g. `PRESSING_GAIN = 0.5`, not `if dist < 0.3:`).
+  Prefer continuous/proportional functions over step thresholds where avoidable.
+  Enables tuning without code archaeology and documents intent.
 
 ## Mermaid in docs
 
@@ -155,6 +166,9 @@ See `META_KNOWLEDGE_ROUTER.md` §3.
 - `launch_r2k.sh` wipes `shared_state/current_strategy.json` and `Worldstate.json` on every start.
 - `setup_r2k.py` overwrites `ai_tactics/system_prompt.txt` on every boot.
   `strategy/strat_*.txt` are no longer written (Phase 0 disentanglement); edit `fragments/` instead.
+  **[V6.3]** The evaluator no longer reads `system_prompt.txt` at runtime — it assembles
+  the prompt directly from fragments via dynamic prompt injection, based on `match_state.status`.
+  `system_prompt.txt` is now only for `dump_prompt.py` dry-runs.
 - The `ros2_ws/build` and `ros2_ws/install` dirs are root-owned (created inside Docker) — may need
   `sudo rm -rf` to rebuild natively on U22.
 - `numpy<2.0` is pinned (install.sh + Dockerfile) — Gazebo compatibility. Don't bump blindly.
@@ -172,8 +186,18 @@ See `META_KNOWLEDGE_ROUTER.md` §3.
   use plain `docker compose up -d` then `docker exec ... colcon build` instead.
 - `r2k_evaluator.py` polls `Worldstate.json` mtime every 20ms; it only POSTs to Ollama when the file
   changes. A stale `Worldstate.json` ⇒ no AI output. Check `state_aggregator.py` is running first.
+  **[V6.3]** Content-hash skip: the evaluator also hashes `min_ents` and skips the LLM call if
+  positions are unchanged. `current_strategy.json` may not update for seconds during stable
+  positions — this is normal, not failure. Effective latency ~684ms (was ~1328ms).
+  **[2026-08-01]** `temperature: 0.0` is NOT bit-exact deterministic across KV-cache states
+  (measured): identical prompt+options can yield different token streams (e.g. pretty vs
+  compact JSON, 118 vs 91 tokens) depending on cache history (fresh prefill vs cached prefix).
+  Semantics stay stable, so content-hash skip remains safe; but A/B latency comparisons must
+  control cache state (disturb with a different world before both sides, or compare
+  steady-state calls).
 - `temperature: 0.0` and `num_predict` (150 no-explain / 600 explain) are hardcoded in
-  `r2k_evaluator.py` — tune there, not via flags.
+  `r2k_evaluator.py` — tune there, not via flags. **[V6.3]** `R2K_EXPLAIN` env var
+  (set by `launch_r2k.sh`) controls `{{EXPLAIN_INSTRUCTION}}` replacement in `header.txt`.
 
 ## Session continuity protocol
 

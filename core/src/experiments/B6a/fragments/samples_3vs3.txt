@@ -1,9 +1,0 @@
---- EXAMPLE 1: MIDFIELD PASSING (NO KICK YET) ---
-INPUT: {"soccer_ball": {"x": -1.0, "y": 0.0}, "blue_1": {"x": -4.0, "y": 0.0}, "blue_2": {"x": -1.5, "y": 0.0}, "blue_3": {"x": 1.0, "y": 2.0}, "red_1": {"x": 0.0, "y": 0.0}}
-ASSISTANT: {
-  "assignments": {
-    "blue_1": {"role": "goalie", "action": "Move", "x": -4.5, "y": 0.0},
-    "blue_2": {"role": "passer", "action": "Kick"},
-    "blue_3": {"role": "receiver", "action": "Move", "x": 1.5, "y": 2.0}
-  }
-}

@@ -9,7 +9,7 @@ export PYTHONWARNINGS="ignore"
 
 SCENARIO="2vs2_default"
 STRATEGY="strat_aggro"
-MODEL="qwen2.5-coder:3b"
+MODEL="qwen2.5:3b"
 EXPLAIN_FLAG="--no-explain"
 RELAY="only_sim_bots"
 HEADLESS=false
@@ -37,7 +37,7 @@ while [[ "$#" -gt 0 ]]; do
             echo "=========================================================="
             echo "  --scenario <name>     (default: 2vs2_default)"
             echo "  --strategy <name>     (default: strat_aggro)"
-            echo "  --model <name>        (default: qwen2.5-coder:3b)"
+            echo "  --model <name>        (default: qwen2.5:3b)"
             echo "  --relay <name>        (Available: only_sim_bots, hardware_mirror)"
             echo "  --explain             (Enable AI reasoning output)"
             echo "  --no-explain          (Disable AI reasoning)"
@@ -334,7 +334,7 @@ if [ "$UBUNTU_VERSION" == "22.04" ]; then
     fi
     
     # Ausführung des Visualizers ohne Fehlerunterdrückung
-    python3 r2k_visualizer.py
+    python3 r2k_visualizer.py --live
     
     # Crash-Falle: Wenn der Visualizer abstürzt, fangen wir das ab und halten das Terminal offen.
     if [ $? -ne 0 ]; then
@@ -422,7 +422,7 @@ else
     $DOCKER_BASE "$SOURCE_CMD && python3 reward_node.py > /dev/null 2>&1"
     docker exec -d -e R2K_RUN_ID="$R2K_RUN_ID" $CONTAINER_NAME bash -c "$SOURCE_CMD && python3 state_aggregator.py > /dev/null 2>&1"
     $DOCKER_BASE "$SOURCE_CMD && python3 rule_evaluator_red.py > /dev/null 2>&1"
-    $DOCKER_BASE "$SOURCE_CMD && python3 ai_tactics/ollama_sandbox_bridge.py > /dev/null 2>&1"
+    docker exec -d -e R2K_RUN_ID="$R2K_RUN_ID" $CONTAINER_NAME bash -c "$SOURCE_CMD && python3 ai_tactics/ollama_sandbox_bridge.py > /dev/null 2>&1"
     
     echo "🧠 Starting Team Blue AI (Live Output)..."
     docker exec -d -e PYTHONUNBUFFERED=1 -e PYTHONWARNINGS="ignore" -e R2K_OLLAMA_MODEL=$MODEL -e R2K_OLLAMA_URL="${OLLAMA_DOCKER}/api/generate" -e R2K_RUN_ID="$R2K_RUN_ID" -e R2K_EXPLAIN="$R2K_EXPLAIN" $CONTAINER_NAME bash -c "$SOURCE_CMD && python3 -u ai_tactics/r2k_evaluator.py"
@@ -447,7 +447,7 @@ else
     fi
     
     # Ausführung des Visualizers ohne Fehlerunterdrückung
-    docker exec -it -e PYTHONWARNINGS="ignore" -e DISPLAY=$DISPLAY -e QT_X11_NO_MITSHM=1 $CONTAINER_NAME bash -c "$SOURCE_CMD && python3 r2k_visualizer.py"
+    docker exec -it -e PYTHONWARNINGS="ignore" -e DISPLAY=$DISPLAY -e QT_X11_NO_MITSHM=1 $CONTAINER_NAME bash -c "$SOURCE_CMD && python3 r2k_visualizer.py --live"
     
     # Crash-Falle
     if [ $? -ne 0 ]; then

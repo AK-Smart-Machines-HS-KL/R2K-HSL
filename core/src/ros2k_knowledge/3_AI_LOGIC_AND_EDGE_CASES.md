@@ -1,10 +1,10 @@
 ---
 id: 3_AI_LOGIC
-title: "Section 3: AI Logic, Failsafes & Edge Cases (V6.2)"
+title: "Section 3: AI Logic, Failsafes & Edge Cases (V6.3)"
 type: KNOWLEDGE_BASE_POWER_FILE
-tags: [qwen, team-blue, team-red, failsafes, bounding-box, hysteresis, orbital-singularity, setup_r2k, phantom-kick, flat-json, ollama-tuning, kv-cache, user-space, v6, v6.1, v6.2, kick-in, prompt-switching, prompt-injection, reward-node, momentum, aggression, prompt-disentanglement, strat-artifact, sample-override, dump-prompt, match-state-injection, goalie-idle, red-p1-p5, blocking-avoidance, freeze-bug]
-last_modified: 2026-07-22
-version: v6.2
+tags: [qwen, team-blue, team-red, failsafes, bounding-box, hysteresis, orbital-singularity, setup_r2k, phantom-kick, flat-json, ollama-tuning, kv-cache, user-space, v6, v6.1, v6.2, v6.3, v6.5, kick-in, prompt-switching, prompt-injection, reward-node, momentum, aggression, prompt-disentanglement, strat-artifact, sample-override, dump-prompt, match-state-injection, goalie-idle, red-p1-p5, blocking-avoidance, freeze-bug, dynamic-prompt-injection, content-hash-skip, role-condensation, replay-system, r2k-explain, output-marker, text-mode, r2k-text-mode, samples-3vs3, clean-samples]
+last_modified: 2026-08-11
+version: v6.5
 ---
 # Section 3: AI Logic, Failsafes & Edge Cases
 
@@ -262,3 +262,114 @@ Beyond the V6 aggression and freeze compliance documented above, V6.1 adds:
 * **P4 — Blocking avoidance:** `rule_evaluator_red.py:250-275` — non-closest red bots check if their target is between a blue opponent and the ball. If the perpendicular distance to the opponent-to-ball line is < 0.5m, the bot shifts toward the nearest sideline by `0.6m - perp_dist`. This opens the goal-ward path for the striker instead of accidentally blocking it.
 * **P5 — Aggression guarded during freeze:** `rule_evaluator_red.py:171` — `aggression_active = (not all_red_frozen) and (random.random() < self.AGGRESSION_FACTOR)`. No aggression during any freeze state.
 * **Set-piece context flags:** `rule_evaluator_red.py:71-74` — `goal_kick_for_red/against_red`, `corner_kick_in_for_red/against_red` added alongside the existing `kick_in_for_red/against_red`. All used by the restart behavior override.
+
+## V6.3 Addendum: Dynamic Prompt Injection, Content-Hash Skip, Role Condensation, Replay System
+
+### Dynamic Prompt Injection (Phase 2.5b — IMPLEMENTED)
+
+**Status update:** Was "planned Phase 4a" in v6.1/v6.2. Now **implemented** (2026-07-27,
+commit `41d4d92`). The evaluator assembles the system prompt at runtime from fragment
+files, based on `match_state.status`.
+
+**Mechanism (`r2k_evaluator.py`):**
+- Evaluator reads `Worldstate.json` every 20ms → extracts `match_state.status`
+- `_assemble_prompt(status, mode)` builds prompt from fragments:
+  - Static (always): `header.txt`, `rules_core.txt`, `rules_{mode}.txt`, `samples_{mode}.txt`
+  - Game-phase (additive, only if status ≠ "playing"): `rules_{status}.txt`, `samples_{status}.txt`
+- Game-phase fragments are ADDITIVE to mode fragments — they don't replace, they supplement
+- Cached by `(status, mode)` tuple → file reads only on status transitions (<10/match)
+- `system_prompt.txt` written by `setup_r2k.py` at boot is now only for `dump_prompt.py`
+  dry-runs — evaluator no longer reads it at runtime
+
+**4 minimal game-phase stubs (Phase 2.5c):** `rules_ball_out.txt`,
+`rules_goal_kick.txt`, `rules_corner_kick_in.txt`, `rules_kickoff.txt` (2 lines each).
+Fallback: if a game-phase fragment doesn't exist, evaluator uses the "playing" prompt
+(no crash).
+
+**Why this replaces `R2K_INCLUDE_MATCH_STATE`:** The B3 experiment (Phase 1) showed
+that injecting `match_state` data into the prompt produced no improvement — the 3B
+model doesn't use game-state information effectively. Dynamic prompt injection takes
+a different approach: instead of giving the model more data, it changes the prompt
+itself based on the game state. The prompt IS context-aware, without the model having
+to parse game-state data.
+
+### Content-Hash Skip (Phase 2.3 — IMPLEMENTED)
+
+Evaluator hashes entity positions (`min_ents` JSON) and skips LLM call if identical to
+previous call. At `temperature: 0.0`, identical input → identical output → 64% of calls
+were wasted (171→62 per match).
+
+> [!warning] [2026-08-01] `temperature: 0.0` is NOT bit-exact deterministic across
+> KV-cache states (measured, A/B cache-layout study). Byte-identical prompt + options
+> produced different token streams (pretty vs compact JSON, 118 vs 91 tokens) depending
+> on cache history — fresh prefill vs cached prefix, direction even flipped between
+> test runs. Reproduced with both `OLLAMA_KV_CACHE_TYPE=q8_0` and default f16; the
+> cause is llama.cpp cache-reuse numerics, not KV quantization. Semantic output stays
+> stable, so content-hash skip remains safe. Consequences:
+> - Latency A/B studies must control cache state (disturb with a different world first,
+>   or compare steady-state calls after warming both prefixes).
+> - `prompt_eval_count` is NOT a cache indicator (constant regardless of hits); use
+>   `prompt_eval_duration` (identical calls: 68.9ms → 5.0ms → 3.8ms).
+> - Cache/timing fields in `llm_trace` (prompt_eval_duration_ms, eval_duration_ms, ...)
+>   added 2026-08-01 — see `6_DATA_SCHEMAS_AND_LIFECYCLE.md`.
+
+**Impact:**
+- Effective latency (situation change → strategy output): ~684ms (was ~1328ms)
+- Evaluator is idle 64% of the time instead of busy 100%
+- Reacts to real changes within ~20ms (one poll cycle) instead of waiting up to 664ms
+  for a redundant call to finish
+
+**`current_strategy.json` mtime staleness:** The file may not update for seconds during
+stable positions — this is normal, not failure. Phase 5.4 failsafe must check
+`llm_trace` records, not file mtime.
+
+### Role Condensation (Phase 2.3 — IMPLEMENTED)
+
+Roles reduced from 5 (striker/midfielder/passer/receiver/supporter) to 3
+(goalie/attacker/defender). The bridge only checks `role == 'goalie'`; all other roles
+were cosmetic labels the 3B model generated without any consumer caring.
+
+**Changes:**
+- All fragments updated (rules + samples for all modes)
+- `analyze_trace.py` pass detection: position-based (kicker NOT in opponent half = pass),
+  not role-based (was `role in ('passer','receiver','midfielder')`)
+- `role_diversity` KPI dropped (dead metric, CV=0% across 27 v6.3 baseline runs,
+  always 3.0 after condensation)
+
+### Explain-Mode Fix (`R2K_EXPLAIN` env var — IMPLEMENTED)
+
+Phase 2.5b's dynamic injection bypassed `setup_r2k.py`'s `clean_json_samples()`, which
+broke `--explain` mode (the `{{EXPLAIN_INSTRUCTION}}` placeholder was never replaced,
+so `num_predict` stayed at 150 regardless of `--explain`).
+
+**Fix:** `launch_r2k.sh` now sets `R2K_EXPLAIN=1` (`--explain`) or `0` (`--no-explain`).
+The evaluator reads this env var directly (`os.getenv("R2K_EXPLAIN", "0") == "1"`) and
+replaces `{{EXPLAIN_INSTRUCTION}}` in `header.txt` at runtime. The evaluator duplicates
+`clean_json_samples()` (~70 lines) from `setup_r2k.py` to inject default analysis/oracle
+strings into samples.
+
+**V6.5 UPDATE (2026-08-11):** `_clean_text_samples` and `_clean_json_samples` regex
+updated to accept `(?:ASSISTANT|OUTPUT):` marker. v6.5 `samples_3vs3.txt` uses `OUTPUT:`
+instead of `ASSISTANT:` (all other sample files still use `ASSISTANT:`). The old
+`ASSISTANT:`-only regex silently passed raw `OUTPUT:` blocks unconverted — latent bug
+present during the 100-match U24 benchmark. LLM coped (imitated raw format), but cleaned
+format was not applied. Fix: `r2k_evaluator.py:144,208` now match `(?:ASSISTANT|OUTPUT):`.
+
+**TEXT_MODE default:** `R2K_TEXT_MODE` env var defaults to `"0"` (JSON mode).
+`launch_r2k.sh` never sets `R2K_TEXT_MODE` — all production runs use JSON mode.
+TEXT_MODE is exercised only by the fast test suite (`test_text_mode.py`).
+This is why the `OUTPUT:` marker bug was silent on U24 (JSON mode, LLM coped with
+raw samples) but caught on U22 (fast test suite exercises TEXT_MODE, asserts cleaned
+output).
+
+### Replay System (Phase 2.3 — IMPLEMENTED)
+
+- `tools/match_annotate.py` — live: pause Gazebo via `/gazebo/pause_physics`, record
+  game state + last LLM decision + comment, unpause. Writes
+  `logs/annotations_<run_id>.jsonl`.
+- `tools/replay_trace.py` — post-match CLI: step through annotations, show LLM decision
+  before each + ball trajectory + events in the 5s after.
+- `r2k_visualizer.py --replay` — visual playback with nav controls (f/b annotation
+  jumps, ←/→ seek ±5s, SPACE pause/resume, q quit). No ROS 2 required for replay.
+- `--nav` flag deprecated (nav always on in replay mode). `--live` flag for live mode
+  (no-args defaults to replay latest).

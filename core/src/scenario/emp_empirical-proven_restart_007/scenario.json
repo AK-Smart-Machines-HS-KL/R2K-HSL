@@ -1,0 +1,35 @@
+{
+  "scenario_name": "emp_empirical-proven_restart_007",
+  "mode": "3vs3",
+  "tactical_situation": "Umschalt: restart (empirical-proven)",
+  "entities": {
+    "soccer_ball": {
+      "x": 3.539,
+      "y": -0.164
+    },
+    "blue_1": {
+      "x": -2.938,
+      "y": -0.357
+    },
+    "blue_2": {
+      "x": 3.108,
+      "y": -0.283
+    },
+    "blue_3": {
+      "x": 1.124,
+      "y": -0.847
+    },
+    "red_1": {
+      "x": 0.557,
+      "y": 1.607
+    },
+    "red_2": {
+      "x": 3.421,
+      "y": -0.625
+    },
+    "red_3": {
+      "x": 3.099,
+      "y": 1.994
+    }
+  }
+}

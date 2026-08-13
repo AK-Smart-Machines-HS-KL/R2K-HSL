@@ -1,4 +1,4 @@
 1vs0 SOLO DRILL STRATEGY:
-- You are the ONLY blue bot on the field ("blue_1").
+- You control the single blue bot "blue_1".
 - There are no opponents. Your sole objective is to reach the ball and score.
-- IMPORTANT: Entity names are flat. Target "blue_1" directly.
+- Move blue_1 to the ball and kick toward the opponent goal (X=4.5).

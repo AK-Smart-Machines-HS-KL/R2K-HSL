@@ -1,0 +1,14 @@
+{
+  "scenario_name": "3vs3_deep_cross",
+  "mode": "3vs3",
+  "tactical_situation": "Red delivers a deep cross from the right wing toward the far post — blue must defend the two-man goal-mouth bracket (short post + long post guard)",
+  "entities": {
+    "soccer_ball": {"x": 3.5, "y": -2.2},
+    "blue_1": {"x": -4.0, "y": 0.0},
+    "blue_2": {"x": -3.5, "y": 0.7},
+    "blue_3": {"x": -3.5, "y": -0.7},
+    "red_1": {"x": 3.5, "y": -2.2},
+    "red_2": {"x": -2.0, "y": 0.9},
+    "red_3": {"x": -1.5, "y": -0.9}
+  }
+}

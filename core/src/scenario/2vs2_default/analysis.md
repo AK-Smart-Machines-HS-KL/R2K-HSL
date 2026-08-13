@@ -1,9 +1,27 @@
-# 2vs2_default — Analysis
+# 2vs2_default
 
-## Oracle (strategic)
+![field diagram](field_diagram.png)
 
-Simple 2-bot scenario. One bot attacks, one defends. With only 2 bots, role clarity is critical — there's no third bot to cover mistakes. Possession and quick transitions are key.
+## Expert (Analysis)
 
-## Expert (technical)
+Ball at (-0.5, 0.5) near midfield. red_1 (-0.4, 0.6) has the ball — 0.1m away. blue_2 (-1.5, -0.2) is 1.2m from the ball, blue_1 (-1.8, 0.2) is 1.3m. Red has possession. blue bots are clustered 0.5m apart — must separate.
 
-Blue LLM should assign one goalie (X=-4.0) and one striker. The striker does everything: attack, defend, support. Expect high role diversity (the striker switches between roles frequently). Simpler decision space — good for prompt iteration.
+## Oracle (Strategy)
+
+blue_2 challenges red_1 for the ball. blue_1 drops to the goal line to block the shot lane. Prevent a quick red shot on goal.
+
+```
+blue_1 cover the goal line at (-4.0, 0.5)
+blue_2 move to (-0.5, 0.5)
+```
+
+## Output to bridge
+
+```
+blue_1 move to (-4.0, 0.5)
+blue_2 move to (-0.5, 0.5)
+```
+
+## Score delta
+
+![score chart](score_chart.png)

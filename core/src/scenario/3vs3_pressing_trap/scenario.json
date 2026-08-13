@@ -1,14 +1,35 @@
 {
   "scenario_name": "3vs3_pressing_trap",
   "mode": "3vs3",
-  "tactical_situation": "Red team pressing high, no clear outlet — breaking pressure",
+  "tactical_situation": "Red team pressing high, no clear outlet \u2014 breaking pressure",
   "entities": {
-    "soccer_ball": {"x": 0.45, "y": 0.45},
-    "blue_1": {"x": 0.3, "y": 0.3},
-    "blue_2": {"x": -1.0, "y": 0.8},
-    "blue_3": {"x": -2.0, "y": -0.5},
-    "red_1": {"x": 0.8, "y": 0.5},
-    "red_2": {"x": 0.2, "y": -0.2},
-    "red_3": {"x": -0.5, "y": 1.0}
+    "soccer_ball": {
+      "x": 0.45,
+      "y": 0.45
+    },
+    "blue_1": {
+      "x": -0.5,
+      "y": 0.3
+    },
+    "blue_2": {
+      "x": -1.0,
+      "y": 0.8
+    },
+    "blue_3": {
+      "x": -2.0,
+      "y": -0.5
+    },
+    "red_1": {
+      "x": 0.8,
+      "y": 0.5
+    },
+    "red_2": {
+      "x": 0.2,
+      "y": -0.2
+    },
+    "red_3": {
+      "x": -0.5,
+      "y": 1.0
+    }
   }
 }

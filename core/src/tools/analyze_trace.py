@@ -27,8 +27,11 @@ Usage:
   python3 tools/analyze_trace.py --run-id test_001
   python3 tools/analyze_trace.py --run-id test_001 --output results/
   python3 tools/analyze_trace.py --run-id test_001 --plot
+  python3 tools/analyze_trace.py --stats-a "results/kpis_C6_current_*.json" --stats-b "results/kpis_C6_3sample_*.json"
 """
 import argparse
+import bisect
+import glob
 import json
 import math
 import os
@@ -500,7 +503,7 @@ def compute_llm_kpis(llm_records):
 
 def main():
     parser = argparse.ArgumentParser(description="Analyze LLM + world trace logs")
-    parser.add_argument('--run-id', type=str, required=True,
+    parser.add_argument('--run-id', type=str, default=None,
                         help='Run ID (matches R2K_RUN_ID used during launch)')
     parser.add_argument('--log-dir', type=str, default=None,
                         help='Override log directory (default: ../logs relative to this script)')
@@ -508,7 +511,24 @@ def main():
                         help='Output JSON file (default: print to stdout)')
     parser.add_argument('--plot', action='store_true',
                         help='Generate matplotlib plots (latency histogram, score timeline)')
+    parser.add_argument('--stats-a', type=str, default=None,
+                        help='Glob pattern for group A KPI JSONs (for --stats comparison mode)')
+    parser.add_argument('--stats-b', type=str, default=None,
+                        help='Glob pattern for group B KPI JSONs (for --stats comparison mode)')
     args = parser.parse_args()
+
+    # Stats comparison mode: compare two groups of KPI JSONs
+    if args.stats_a and args.stats_b:
+        stats_comparison(args)
+        return
+
+    if args.stats_a or args.stats_b:
+        print("ERROR: --stats requires both --stats-a and --stats-b", file=sys.stderr)
+        sys.exit(1)
+
+    if not args.run_id:
+        print("ERROR: --run-id is required (or use --stats-a + --stats-b for comparison mode)", file=sys.stderr)
+        sys.exit(1)
 
     script_dir = os.path.dirname(os.path.abspath(__file__))
     src_dir = os.path.dirname(script_dir)
@@ -620,6 +640,126 @@ def main():
 
         except ImportError:
             print("matplotlib not available, skipping plots", file=sys.stderr)
+
+
+# --- C6: Statistical comparison of two experiment groups ---
+
+STAT_KPIS = [
+    ("goals_for_blue", "world_kpis", "int"),
+    ("goals_for_red", "world_kpis", "int"),
+    ("cluster_pct", "world_kpis", "float"),
+    ("oob_pct", "world_kpis", "float"),
+    ("goalie_idle_pct", "world_kpis", "float"),
+    ("goalie_tactical_pct", "world_kpis", "float"),
+    ("ball_possession_blue_pct", "world_kpis", "float"),
+    ("tactical_score_avg", "world_kpis", "float"),
+    ("shots_on_goal", "world_kpis", "int"),
+    ("shots_on_target", "world_kpis", "int"),
+    ("pass_completion_pct", "world_kpis", "float"),
+    ("restart_recovery_time_s", "world_kpis", "float"),
+    ("latency_p50", "llm_kpis", "int"),
+    ("parse_error_rate", "llm_kpis", "float"),
+]
+
+
+def _mann_whitney_u(x, y):
+    """Mann-Whitney U test (two-sided). Returns (U, p_value). No scipy needed."""
+    nx, ny = len(x), len(y)
+    if nx < 2 or ny < 2:
+        return None, None
+    combined = sorted([(v, i) for i, v in enumerate(x + y)])
+    ranks = [0.0] * (nx + ny)
+    i = 0
+    while i < len(combined):
+        j = i
+        while j < len(combined) and combined[j][0] == combined[i][0]:
+            j += 1
+        avg_rank = (i + j + 1) / 2.0
+        for k in range(i, j):
+            ranks[combined[k][1]] = avg_rank
+        i = j
+    R_x = sum(ranks[:nx])
+    U_x = R_x - nx * (nx + 1) / 2.0
+    U_y = nx * ny - U_x
+    U = min(U_x, U_y)
+    # Normal approximation (valid for nx, ny >= ~8)
+    mu = nx * ny / 2.0
+    sigma = math.sqrt(nx * ny * (nx + ny + 1) / 12.0)
+    if sigma == 0:
+        return U, None
+    z = (U - mu) / sigma
+    # Two-sided p from standard normal
+    p = 2.0 * (1.0 - 0.5 * (1.0 + math.erf(abs(z) / math.sqrt(2.0))))
+    return U, p
+
+
+def _load_kpi_group(pattern):
+    """Load all KPI JSON files matching a glob pattern."""
+    files = sorted(glob.glob(pattern))
+    if not files:
+        return {}, []
+    values = {}
+    for f in files:
+        with open(f) as fh:
+            data = json.load(fh)
+        for kpi_name, section, _ in STAT_KPIS:
+            val = data.get(section, {}).get(kpi_name, None)
+            if val is not None:
+                values.setdefault(kpi_name, []).append(float(val))
+    return values, files
+
+
+def stats_comparison(args):
+    """Compare two groups of KPI JSONs: mean, std, 95% CI, Mann-Whitney U."""
+    group_a_vals, group_a_files = _load_kpi_group(args.stats_a)
+    group_b_vals, group_b_files = _load_kpi_group(args.stats_b)
+
+    if not group_a_files:
+        print(f"ERROR: No KPI files found for --stats-a pattern: {args.stats_a}", file=sys.stderr)
+        sys.exit(1)
+    if not group_b_files:
+        print(f"ERROR: No KPI files found for --stats-b pattern: {args.stats_b}", file=sys.stderr)
+        sys.exit(1)
+
+    print("\n" + "=" * 80)
+    print("STATISTICAL COMPARISON")
+    print("=" * 80)
+    print(f"Group A: {len(group_a_files)} runs  (pattern: {args.stats_a})")
+    print(f"Group B: {len(group_b_files)} runs  (pattern: {args.stats_b})")
+    print("=" * 80)
+    print(f"{'KPI':<25s} {'A mean±std':>18s} {'B mean±std':>18s} {'Δ':>8s} {'p (M-W U)':>10s} {'sig':>5s}")
+    print("-" * 80)
+
+    for kpi_name, section, _ in STAT_KPIS:
+        a = group_a_vals.get(kpi_name, [])
+        b = group_b_vals.get(kpi_name, [])
+        if not a or not b:
+            print(f"{kpi_name:<25s} {'(no data)':>18s} {'(no data)':>18s}")
+            continue
+        a_mean = statistics.mean(a)
+        b_mean = statistics.mean(b)
+        a_std = statistics.stdev(a) if len(a) > 1 else 0.0
+        b_std = statistics.stdev(b) if len(b) > 1 else 0.0
+        delta = b_mean - a_mean
+        # 95% CI (t-distribution approximated by z=1.96 for n>=10, z=2.45 for n=5)
+        z = 1.96 if min(len(a), len(b)) >= 10 else 2.776  # t(4)=2.776
+        a_ci = z * a_std / math.sqrt(len(a)) if a_std > 0 else 0.0
+        b_ci = z * b_std / math.sqrt(len(b)) if b_std > 0 else 0.0
+        U, p = _mann_whitney_u(a, b)
+        sig = ""
+        if p is not None:
+            if p < 0.01:
+                sig = "**"
+            elif p < 0.05:
+                sig = "*"
+        p_str = f"{p:.4f}" if p is not None else "n/a"
+        print(f"{kpi_name:<25s} {a_mean:>8.2f}±{a_std:<5.2f} {b_mean:>8.2f}±{b_std:<5.2f} "
+              f"{delta:>+8.2f} {p_str:>10s} {sig:>5s}")
+
+    print("-" * 80)
+    print("sig: ** = p<0.01, * = p<0.05. Mann-Whitney U (two-sided, normal approx).")
+    print(f"CI: 95% (z={'1.96' if min(len(group_a_files), len(group_b_files)) >= 10 else '2.776'})")
+    print("=" * 80)
 
 
 if __name__ == "__main__":

@@ -2,9 +2,9 @@
 id: 6_DATA_LIFECYCLE
 title: "Section 6: Data Schemas & System Lifecycle (V6.2)"
 type: KNOWLEDGE_BASE_POWER_FILE
-tags: [json, schema, rpc, bash, lifecycle, orchestration, setup_r2k, flat-json, relay-profiles, watchdog, cli-ergonomics, active_relay, bashrc-immunity, v6, v6.1, v6.2, tactical-score, tactical-reward, match-state, eval-results, batch-evaluator, momentum, set-piece, goal-kick, corner-kick-in, own-half-warp, trace-logging, llm-trace, world-trace, r2k-run-id, analyze-trace, kpi, test-non-functional, composite-score, pytest, regression-suite, kpi-targets, skip-slow]
-last_modified: 2026-07-22
-version: v6.2
+tags: [json, schema, rpc, bash, lifecycle, orchestration, setup_r2k, flat-json, relay-profiles, watchdog, cli-ergonomics, active_relay, bashrc-immunity, v6, v6.1, v6.2, v6.3, v6.5, tactical-score, tactical-reward, match-state, eval-results, batch-evaluator, momentum, set-piece, goal-kick, corner-kick-in, own-half-warp, trace-logging, llm-trace, world-trace, r2k-run-id, analyze-trace, kpi, test-non-functional, composite-score, pytest, regression-suite, kpi-targets, skip-slow, output-marker, text-mode, r2k-text-mode, clean-samples]
+last_modified: 2026-08-11
+version: v6.5
 ---
 # Section 6: Data Schemas & System Lifecycle (V5)
 
@@ -346,13 +346,22 @@ One JSON line per LLM call. Written to `logs/llm_trace_<run_id>.jsonl`.
   "latency_ms": 827,
   "model": "qwen2.5-coder:3b",
   "num_predict": 150,
-  "explain": false
+  "explain": false,
+  "timings": {
+    "prompt_eval_count": 881,
+    "eval_count": 118,
+    "prompt_eval_duration_ms": 19.2,
+    "eval_duration_ms": 548.4,
+    "load_duration_ms": 3.1,
+    "total_duration_ms": 734.6
+  }
 }
 ~~~
 
 * `parse_code`: `0` = clean JSON, `1` = trailing comma fix, `2` = assignments extraction fallback, `3` = total parse failure.
 * `raw_response` truncated to 2000 chars.
 * `sys_prompt_hash` is SHA1 of the system prompt (first 16 hex chars) — allows detecting prompt changes between runs without storing the full prompt.
+* `timings` [2026-08-01]: Ollama `timings` block passthrough for cache/latency analysis. **`prompt_eval_count` is NOT a cache indicator** (constant regardless of hits — reports full prompt length); the cache-hit signal is `prompt_eval_duration_ms` (identical calls measured: 68.9ms → 5.0ms → 3.8ms). `eval_count` differs between pretty/compact JSON formatting of the same semantic output.
 
 ### `world_trace_<run_id>.jsonl` (state_aggregator.py)
 
@@ -458,7 +467,7 @@ where:
 * Schema: `{ "scenario_name": "...", "<kpi_name>": { "min": N, "max": N, "note": "..." } }`.
 * KPIs covered: `composite_score`, `oob_pct`, `cluster_pct`, `goalie_idle_pct`, `latency_p50`, `ball_possession_blue_pct`, `goals_for_blue`.
 * `test_non_functional.py` asserts each KPI is within its scenario's `[min, max]` range.
-* Thresholds are calibrated from the 27-run baseline (Phase 2e, not yet run). Current values are estimates from the spec.
+* Thresholds are calibrated from the v6.3 27-run baseline (Phase 2.5d, commit `532360b`) with 30-50% margin.
 
 ### Current Test Scenarios (grows in Phase 2f)
 
@@ -472,3 +481,168 @@ where:
 * Ball far from goal → goalie should be forward (angle-block). Ball near → goalie near goal line + tracking Y.
 * Computed by `analyze_trace.py` alongside `goalie_idle_pct` (which is kept for backward comparison).
 * `test_non_functional.py` asserts `goalie_tactical_pct >= 60%`.
+
+## V6.3 Addendum: Attack KPIs, Dynamic Prompt Injection, Content-Hash Skip, Replay System
+
+### 4 New Attack/Passing/Restart KPIs (Phase 2.5a)
+
+Computed by `analyze_trace.py`'s `compute_attack_kpis()` function, joining `llm_trace`
+actions (Kick/Pass with `world_snapshot` at decision time) with `world_trace` ball
+position deltas after the action. Uses `t_wall` (wall-clock) for timestamps — sim-time
+(`t`) is 0.0 in all existing traces without `libgazebo_ros_init.so`.
+
+| KPI | Definition | Source |
+|-----|-----------|--------|
+| `shots_on_goal` | Kick action where kicker x > 0, ball within 2m of kicker, AND ball x-velocity > 0.5 m/s in the 5 frames (0.5s) after the LLM call | Join `llm_trace` Kick events with `world_trace` ball deltas |
+| `shots_on_target` | Subset of `shots_on_goal` where ball Y extrapolated to x=4.5 is within ±1.3m (goal posts) | Same join + linear extrapolation |
+| `pass_completion_pct` | % of Pass actions (kicker NOT in opponent half) where a different blue bot is closest to ball within 20 frames (2s) | Join `llm_trace` Pass events with `world_trace` closest-bot |
+| `restart_recovery_time_s` | Mean time from `status != "playing"` transition to first frame where restart-team bot within 0.35m of ball | Pure `world_trace` computation |
+
+**KPI count:** 18 (was 15 in v6.2). Changes: +4 attack KPIs, +`goalie_tactical_pct` (v6.2), -`role_diversity` (v6.3, dead metric after role condensation).
+
+### Dynamic Prompt Injection (Phase 2.5b)
+
+The evaluator (`r2k_evaluator.py`) assembles the system prompt at runtime from fragment
+files, based on `match_state.status`. Ollama is stateless (sends `system` per call), so
+the prompt can change between calls without restarting anything.
+
+**Fragment assembly order (additive):**
+1. `header.txt` (static)
+2. `rules_core.txt` (static)
+3. `rules_{status}.txt` (game-phase, only if status ≠ "playing")
+4. `rules_{mode}.txt` (mode rules — IS the "playing" rules when status = "playing")
+5. `samples_{status}.txt` (game-phase, only if status ≠ "playing")
+6. `samples_{mode}.txt` (mode samples — always)
+
+**Caching:** Prompt cached by `(status, mode)` tuple. Fragment files re-read only on
+status transitions (<10 per match). `system_prompt.txt` written by `setup_r2k.py` at
+boot is now only for `dump_prompt.py` dry-runs — the evaluator no longer reads it at
+runtime.
+
+**`sys_prompt_hash` in `llm_trace`:** Each `llm_trace` record includes a hash of the
+system prompt used for that call. Use this to verify which prompt variant was active
+when debugging behavior.
+
+### `R2K_EXPLAIN` env var (Phase 2.3, fix for explain-mode)
+
+`launch_r2k.sh` sets `R2K_EXPLAIN=1` (`--explain`) or `R2K_EXPLAIN=0` (`--no-explain`).
+The evaluator replaces `{{EXPLAIN_INSTRUCTION}}` in `header.txt` based on this var:
+- `0` → assignments-only instruction (150 tokens, `num_predict`)
+- `1` → analysis + oracle + assignments instruction (600 tokens)
+
+This fixes the explain-mode broken by Phase 2.5b (dynamic injection bypassed
+`setup_r2k.py`'s `clean_json_samples()`). The evaluator duplicates
+`clean_json_samples()` (~70 lines) from `setup_r2k.py` to inject default analysis/oracle
+strings into samples at runtime.
+
+**V6.5 UPDATE (2026-08-11):** `_clean_text_samples` and `_clean_json_samples` now
+accept `(?:ASSISTANT|OUTPUT):` marker. v6.5 `samples_3vs3.txt` uses `OUTPUT:` instead
+of `ASSISTANT:`. The old regex silently passed raw `OUTPUT:` blocks unconverted.
+**TEXT_MODE default:** `R2K_TEXT_MODE` defaults to `"0"` (JSON mode) — `launch_r2k.sh`
+never sets it. TEXT_MODE is exercised only by `test_text_mode.py`.
+
+### Content-Hash Skip (Phase 2.3)
+
+Evaluator hashes entity positions (`min_ents` JSON) and skips LLM call if identical to
+previous call. At `temperature: 0.0`, identical input → identical output → 64% of calls
+were wasted (171→62 per match). Effective latency drops from ~1328ms to ~684ms.
+
+> [!warning] [2026-08-01] `temperature: 0.0` is NOT bit-exact deterministic across
+> KV-cache states (measured in the cache-layout A/B study, `experiments/cache_layout_ab.py`):
+> byte-identical prompt + options produced different token streams (pretty vs compact
+> JSON, 118 vs 91 tokens) depending on cache history; the direction flipped between test
+> runs. Reproduced with `OLLAMA_KV_CACHE_TYPE=q8_0` AND default f16 — llama.cpp
+> cache-reuse numerics, not KV quantization. Semantic output stays stable → content-hash
+> skip remains safe. Latency A/B comparisons must control cache state (disturb with a
+> different world, or compare steady-state calls after warming both prefixes).
+
+**Impact on staleness checks:** `current_strategy.json` mtime is no longer a reliable
+staleness indicator — the file may not update for seconds during stable positions
+(normal, not failure). Phase 5.4 failsafe must check `llm_trace` records, not file mtime.
+
+### v6.3 Baseline (Phase 2.5d, commit `532360b`)
+
+27-run v6.3 re-baseline (9 scenarios × 3 × 120s). All runs completed with warm-up curl
+(zero dead-blue-team). Content-hash skip active (~170 LLM calls/match, ~738ms p50
+latency). Dynamic prompt injection active.
+
+| Scenario | B:R | Comp | Shots | PassCmp% | RstrtRcv |
+|----------|------|------|-------|----------|----------|
+| attack_center | 3:4 | 0.34 | 11.1 | 50.5% | 13.4s |
+| attack_wing | 0:1 | 0.36 | 5.7 | 74.4% | 19.0s |
+| contain_delay | 1:1 | 0.35 | 23.7 | 39.4% | 10.5s |
+| def_transition | 1:2 | 0.28 | 7.7 | 70.9% | 20.6s |
+| defensive_crisis | 0:1 | 0.29 | 7.7 | 89.6% | 20.0s |
+| fast_counter | 0:3 | 0.34 | 9.0 | 85.8% | 25.5s |
+| high_line | 0:2 | 0.26 | 12.0 | 59.9% | 22.8s |
+| long_shot | 0:2 | 0.35 | 7.7 | 72.3% | 23.3s |
+| pressing_trap | 1:2 | 0.34 | 14.0 | 77.3% | 16.5s |
+
+3 worst by composite: `high_line` (0.26), `def_transition` (0.28), `defensive_crisis` (0.29).
+Blue scores rarely (5 goals total vs 18 conceded across 27 runs).
+
+**Note:** The stored KPI JSONs (`results/kpis_baseline_v63_*.json`) show 0 for the 4
+new attack KPIs because they were generated before the `t_wall` bugfix in
+`compute_attack_kpis()`. The code fix is committed; the JSONs need a re-run to reflect
+correct values. The table above contains the post-fix numbers from the commit message.
+
+## V6.4 Addendum — Score Function Refinement and Empirical Scenarios
+
+### Score function refined (Phase R)
+
+`score_node.py` extended with two new metrics (non-breaking, appended to
+existing code):
+
+1. **Cluster penalty:** -2 if any two blue bots within 0.5m, -1 if within
+   1.0m. Computed via pairwise distance between all blue bot positions.
+2. **Lane openness:** -3 if no blue bot is between the ball and the own goal
+   (ball in own half, X < 0). Checks if any blue bot is on the ball-to-goal
+   line within 1.5m Y proximity.
+
+Score range still [-10, +10]. Verified:
+- **A1 (partial ordering):** winning matches avg_score=-0.44, losing=-1.38,
+  delta=0.94. A1 holds.
+- **A2 (slope):** blue goals avg momentum before=+0.076 (78% positive),
+  red goals avg momentum=-0.045 (66% negative). A2 holds.
+
+### Empirical scenarios (Phase R.3-R.4)
+
+74 umschaltmomente extracted from 467 matches with goals. Backward-scan
+algorithm: goal scored → find kick → find umschaltmoment → find LLM call.
+
+**Types:** ball_won (50), restart (10), cluster (8), pass (3), clearance (3)
+**Tags:** empirical-proven (31, blue scored), regression-anti (43, red scored)
+
+**Reduction:** 74 → 33 representative scenarios by 3.0m clustering threshold
+(all entities within 3m = "similar"). Centroid selection (closest to mean
+position). All 5 umschalt types preserved in both tags.
+
+**Empirical scenario format:**
+1. Source (original match, umschalt type, tag, cluster size)
+2. Expert (Analysis) — GLM-written tactical analysis
+3. Oracle (Strategy) — GLM-written recommended actions + strategy explanation
+4. Output to bridge — bridge-format commands (move to / kick / hold)
+5. Qwen's decision at t_umschalt — raw LLM response from historical trace
+6. Regression metrics — score before/after, delta, red behavior, match result
+7. Score chart — bar chart (x-axis [-10, +10])
+8. Test specification — duration 8s, expected outcome, pass criterion
+
+### Analysis.md format (v6.4, all 17 hand-crafted + 33 empirical)
+
+Standard format for all scenario packages:
+1. **Image** — field diagram with yellow dotted arrows showing Oracle positions
+   (ground truth, NOT Qwen output)
+2. **Expert (Analysis)** — tactical facts (possession, distances, threats)
+3. **Oracle (Strategy)** — strategy line ("to achieve X") + per-bot commands
+   using: "cover the goal line at (X,Y)" / "move to (X,Y)" / "kick" /
+   "hold position"
+4. **Output to bridge** — same commands but "cover the goal line at" → "move to"
+   (what the bridge actually receives)
+5. **Score delta** — bar chart, x-axis [-10, +10], consistent layout
+
+Key rules:
+- Oracle positions must be reachable within 1-2 LLM latency periods (~0.7-1.4s)
+- Blue_1 position depends on scenario (not always on goal line)
+- All bots accounted for (no missing/overlaid bots)
+- No meta-knowledge in Oracle (no "bridge executes", "cmd_vel", "RPC")
+- Yellow vectors show Oracle (ground truth), not Qwen's output

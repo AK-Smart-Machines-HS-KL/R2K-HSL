@@ -34,7 +34,11 @@ TC-10 (`3vs3_kick_in.json`) is deferred to Phase 5 pending referee v6 ball-out d
 
 ## Notable Overlap
 
-`3vs3_default.json` (v5 schema) and `3vs3_attack_center.json` (v6 TC-01) share identical entity positions by design — TC-01 IS the baseline kickoff scenario. The v5 file uses `scene_type`/`label`; the v6 file uses `scenario_name`/`mode`/`tactical_situation`.
+`3vs3_default.json` (v5 schema) is the baseline kickoff scenario (ball at
+center, mirrored formation). `3vs3_attack_center.json` (v6 TC-01) previously
+shared identical positions by design — **changed 2026-08-01**: TC-01 is now a
+distinct pro-blue attack scenario (ball advanced to X=2.2, red defenders
+pulled wide, goalie off-center). `3vs3_default` remains the kickoff baseline.
 
 ## Code Coupling
 

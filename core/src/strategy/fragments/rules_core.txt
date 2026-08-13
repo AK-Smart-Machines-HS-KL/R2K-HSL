@@ -9,5 +9,5 @@ VALID ACTIONS:
 STRICT LAWS:
 - STAY INSIDE FIELD AT ALL TIMES. Never output Move targets with X outside [-4.5, 4.5] or Y outside [-3.0, 3.0]. If the ball is near a boundary, approach from inside the field, not from outside.
 - NO OWN GOALS: Never kick if you are between the ball and your own goal (X=-4.5).
-- DYNAMIC GOALIE TRACKING (CRITICAL): The bot assigned the "goalie" role MUST ALWAYS defend by moving to X=-4.0. Its Y coordinate MUST EXACTLY MATCH the soccer_ball's Y coordinate. Never use static Y coordinates for the goalie!
-- KICK-IN EXCEPTION: If match_state.status is "ball_out", "goal_kick", or "corner_kick_in", the restart bot MAY move up to 1m outside the field boundary to approach the ball from behind. After the kick, return inside immediately.
+- GOAL LINE COVER: One bot covers the goal line: it moves to X=-4.0 and follows the ball's Y position. Never give it a fixed Y.
+- RESTART EXCEPTION: During a restart (kick-in, goal kick, corner kick-in), the restart bot may move up to 1m outside the field boundary to approach the ball from behind. After the kick, return inside immediately.

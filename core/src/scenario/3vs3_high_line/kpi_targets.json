@@ -1,58 +1,182 @@
 {
-    "scenario_name": "3vs3_high_line",
-    "composite_score": {
-        "min": 0.18,
-        "max": 1.0,
-        "note": "calibrated from post-kick-fix 27-run baseline"
-    },
-    "oob_pct": {
-        "min": 0.0,
-        "max": 7.5,
-        "note": "lower is better (0% ideal)"
-    },
-    "cluster_pct": {
-        "min": 0.0,
-        "max": 40.8,
-        "note": "lower is better (0% ideal)"
-    },
-    "goalie_idle_pct": {
-        "min": 0.0,
-        "max": 90.4,
-        "note": "lower is better (structural limit ~70% after Phase 2a)"
-    },
-    "latency_p50": {
-        "min": 0,
-        "max": 898,
-        "note": "lower is better"
+  "tactical_score_avg": {
+    "min": -1.5,
+    "max": 999.0,
+    "note": "higher is better (v6.5 U24 post-parse-fix, 10 samples, qwen2.5:3b, V7f)"
+  },
+  "ball_possession_blue_pct": {
+    "min": 22.8,
+    "max": 100.0,
+    "note": "higher is better (v6.5 U24 post-parse-fix, 10 samples, qwen2.5:3b, V7f)"
+  },
+  "pass_completion_pct": {
+    "min": 27.4,
+    "max": 100.0,
+    "note": "higher is better (v6.5 U24 post-parse-fix, 10 samples, qwen2.5:3b, V7f)"
+  },
+  "shots_on_goal": {
+    "min": 5.1,
+    "max": 999.0,
+    "note": "higher is better (v6.5 U24 post-parse-fix, 10 samples, qwen2.5:3b, V7f)"
+  },
+  "shots_on_target": {
+    "min": 1.7,
+    "max": 999.0,
+    "note": "higher is better (v6.5 U24 post-parse-fix, 10 samples, qwen2.5:3b, V7f)"
+  },
+  "goals_for_blue": {
+    "min": 0.0,
+    "max": 999.0,
+    "note": "higher is better (v6.5 U24 post-parse-fix, 10 samples, qwen2.5:3b, V7f)"
+  },
+  "oob_pct": {
+    "min": 0,
+    "max": 34.7,
+    "note": "lower is better (v6.5 U24 post-parse-fix, 10 samples, qwen2.5:3b, V7f)"
+  },
+  "cluster_pct": {
+    "min": 0,
+    "max": 53.3,
+    "note": "lower is better (v6.5 U24 post-parse-fix, 10 samples, qwen2.5:3b, V7f)"
+  },
+  "goalie_tactical_pct": {
+    "min": 79.2,
+    "max": 100.0,
+    "note": "higher is better (v6.5 U24 post-parse-fix, 10 samples, qwen2.5:3b, V7f)"
+  },
+  "latency_p50": {
+    "min": 0,
+    "max": 850.2,
+    "note": "lower is better (v6.5 U24 post-parse-fix, 10 samples, qwen2.5:3b, V7f)"
+  },
+  "restart_recovery_time_s": {
+    "min": 0,
+    "max": 72.2,
+    "note": "lower is better (v6.5 U24 post-parse-fix, 10 samples, qwen2.5:3b, V7f)"
+  },
+  "v65_u22_preparse_thresholds": {
+    "tactical_score_avg": {
+      "min": -1.7,
+      "max": 999.0,
+      "note": "higher is better (v6.5 U24 post-fix, 10 samples, qwen2.5:3b, V7f)"
     },
     "ball_possession_blue_pct": {
-        "min": 18.9,
-        "max": 100.0,
-        "note": "higher is better"
-    },
-    "goals_for_blue": {
-        "min": 0,
-        "max": 4,
-        "note": "higher is better"
-    },
-    "shots_on_goal": {
-        "min": 0,
-        "max": 18,
-        "note": "higher is better (v6.3 baseline mean=12.0)"
-    },
-    "shots_on_target": {
-        "min": 0,
-        "max": 6,
-        "note": "higher is better (v6.3 baseline mean=4.3)"
+      "min": 3.4,
+      "max": 100.0,
+      "note": "higher is better (v6.5 U24 post-fix, 10 samples, qwen2.5:3b, V7f)"
     },
     "pass_completion_pct": {
-        "min": 29.9,
-        "max": 100.0,
-        "note": "higher is better (v6.3 baseline mean=59.9%)"
+      "min": 21.2,
+      "max": 100.0,
+      "note": "higher is better (v6.5 U24 post-fix, 10 samples, qwen2.5:3b, V7f)"
+    },
+    "shots_on_goal": {
+      "min": 0.0,
+      "max": 999.0,
+      "note": "higher is better (v6.5 U24 post-fix, 10 samples, qwen2.5:3b, V7f)"
+    },
+    "shots_on_target": {
+      "min": 0.0,
+      "max": 999.0,
+      "note": "higher is better (v6.5 U24 post-fix, 10 samples, qwen2.5:3b, V7f)"
+    },
+    "goals_for_blue": {
+      "min": 0.0,
+      "max": 999.0,
+      "note": "higher is better (v6.5 U24 post-fix, 10 samples, qwen2.5:3b, V7f)"
+    },
+    "oob_pct": {
+      "min": 0,
+      "max": 0.0,
+      "note": "lower is better (v6.5 U24 post-fix, 10 samples, qwen2.5:3b, V7f)"
+    },
+    "cluster_pct": {
+      "min": 0,
+      "max": 0.7,
+      "note": "lower is better (v6.5 U24 post-fix, 10 samples, qwen2.5:3b, V7f)"
+    },
+    "goalie_tactical_pct": {
+      "min": 47.4,
+      "max": 100.0,
+      "note": "higher is better (v6.5 U24 post-fix, 10 samples, qwen2.5:3b, V7f)"
+    },
+    "latency_p50": {
+      "min": 0,
+      "max": 874.9,
+      "note": "lower is better (v6.5 U24 post-fix, 10 samples, qwen2.5:3b, V7f)"
     },
     "restart_recovery_time_s": {
-        "min": 0.0,
-        "max": 34.2,
-        "note": "lower is better (v6.3 baseline mean=22.8s)"
+      "min": 0,
+      "max": 79.6,
+      "note": "lower is better (v6.5 U24 post-fix, 10 samples, qwen2.5:3b, V7f)"
     }
+  },
+  "v63_thresholds": {
+    "scenario_name": "3vs3_high_line",
+    "composite_score": {
+      "min": 0.18,
+      "max": 1.0,
+      "note": "calibrated from post-kick-fix 27-run baseline"
+    },
+    "oob_pct": {
+      "min": 0.0,
+      "max": 7.5,
+      "note": "lower is better (0% ideal)"
+    },
+    "cluster_pct": {
+      "min": 0.0,
+      "max": 40.8,
+      "note": "lower is better (0% ideal)"
+    },
+    "goalie_idle_pct": {
+      "min": 0.0,
+      "max": 90.4,
+      "note": "lower is better (structural limit ~70% after Phase 2a)"
+    },
+    "latency_p50": {
+      "min": 0,
+      "max": 898,
+      "note": "lower is better"
+    },
+    "ball_possession_blue_pct": {
+      "min": 18.9,
+      "max": 100.0,
+      "note": "higher is better"
+    },
+    "goals_for_blue": {
+      "min": 0,
+      "max": 4,
+      "note": "higher is better"
+    },
+    "shots_on_goal": {
+      "min": 0,
+      "max": 18,
+      "note": "higher is better (v6.3 baseline mean=12.0)"
+    },
+    "shots_on_target": {
+      "min": 0,
+      "max": 6,
+      "note": "higher is better (v6.3 baseline mean=4.3)"
+    },
+    "pass_completion_pct": {
+      "min": 29.9,
+      "max": 100.0,
+      "note": "higher is better (v6.3 baseline mean=59.9%)"
+    },
+    "restart_recovery_time_s": {
+      "min": 0.0,
+      "max": 34.2,
+      "note": "lower is better (v6.3 baseline mean=22.8s)"
+    }
+  },
+  "composite_score": {
+    "min": 0.239,
+    "max": 1.0,
+    "note": "higher is better (v6.5 U24 post-parse-fix, computed from 10 samples, qwen2.5:3b, V7f) obs=[0.281..0.394]"
+  },
+  "goalie_idle_pct": {
+    "min": 0.0,
+    "max": 127.4,
+    "note": "lower is better (v6.5 U24 post-parse-fix, 10 samples, qwen2.5:3b, V7f) obs=[80.2..98.0]"
+  }
 }

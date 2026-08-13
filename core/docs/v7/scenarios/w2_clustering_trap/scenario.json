@@ -1,0 +1,14 @@
+{
+  "scenario_name": "w2_clustering_trap",
+  "mode": "3vs3",
+  "tactical_situation": "3 blue bots clustered near ball — must separate to open passing lanes",
+  "entities": {
+    "soccer_ball": {"x": -0.5, "y": 0.0},
+    "blue_1": {"x": -0.3, "y": 0.1},
+    "blue_2": {"x": -0.4, "y": -0.1},
+    "blue_3": {"x": -0.2, "y": 0.2},
+    "red_1": {"x": 0.8, "y": 0.0},
+    "red_2": {"x": 2.0, "y": 1.5},
+    "red_3": {"x": 2.5, "y": -1.0}
+  }
+}
