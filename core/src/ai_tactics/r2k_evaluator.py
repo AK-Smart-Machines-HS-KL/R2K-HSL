@@ -265,7 +265,7 @@ def _clean_json_samples(content, explain_active):
                 data.pop("analysis", None)
                 data.pop("oracle", None)
                 new_data["assignments"] = data
-            formatted_json = json.dumps(new_data, separators=(',', ':'))
+            formatted_json = json.dumps(new_data, separators=(',', ': '))
         else:
             if "assignments" in data:
                 new_data = {"assignments": data["assignments"]}
@@ -273,7 +273,7 @@ def _clean_json_samples(content, explain_active):
                 data.pop("analysis", None)
                 data.pop("oracle", None)
                 new_data = {"assignments": data}
-            formatted_json = json.dumps(new_data, separators=(',', ':'))
+            formatted_json = json.dumps(new_data, separators=(',', ': '))
         output += "ASSISTANT: " + formatted_json
         last_idx = json_end
     output += content[last_idx:]
@@ -385,6 +385,7 @@ def fast_parse(text):
         
     json_str = re.sub(r',\s*\}', '}', json_str)
     json_str = re.sub(r',\s*\]', ']', json_str)
+    json_str = re.sub(r'"y:', '"y":', json_str)  # fix missing closing quote on y key (compact JSON artifact)
     try: return json.loads(json_str), 1
     except json.JSONDecodeError:
         assignments_match = re.search(r'"assignments"\s*:\s*(\{.*?\})\s*\}', json_str, re.DOTALL)
@@ -607,6 +608,8 @@ def main():
                     data, err = fast_parse(raw_response)
                 
                 if data:
+                    if "assignments" not in data:
+                        data = {"assignments": data}
                     data["latency_ms"] = lat
                     data["model_name"] = MODEL_NAME
                     with open(STRATEGY_PATH + ".tmp", 'w') as f: json.dump(data, f)

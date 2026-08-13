@@ -3,6 +3,82 @@
 > For full history (2026-07-13 to 2026-08-02), see `SESSION_CHANGELOG_archive.md`.
 > Compressed on 2026-08-05. Key findings are in the power files and `LESSONS_LEARNED.md`.
 
+## 2026-08-13 (cont.) — Parse pipeline fix + 120-match post-parse-fix benchmark
+
+**Goal:** Fix the LLM→bridge pipeline that prevented Blue bots from moving, then re-benchmark with the fix applied.
+
+**Done:**
+- **Root cause identified**: The 120-match post-fix benchmark showed Blue bots not moving (0.0-0.2 goals/match, 21% win rate was actually 0% because bots were stationary). Two distinct failure modes:
+  1. **40% parse errors** (code=3): The model outputs `"y:-0.0` instead of `"y":-0.0` — the single-character `"y"` key merges with the colon in the tokenizer when using `separators=(',', ':')` (no space after colon). 100% of parse errors (334/334) were this exact bug.
+  2. **60% missing `assignments` wrapper** (code=0 but bots don't move): The model sometimes outputs `{"blue_1": {...}, "blue_2": {...}, "blue_3": {...}}` without the `"assignments"` wrapper. `fast_parse` returns the raw dict, the evaluator writes it to `current_strategy.json`, and the bridge does `data.get('assignments', {})` → gets `{}` → no bots move.
+- **3 fixes applied**:
+  1. `separators=(',', ': ')` instead of `separators=(',', ':')` in `_clean_json_samples` (r2k_evaluator.py, setup_r2k.py, dump_prompt.py). The space after the colon prevents the `"y"` tokenization merge. Cost: +8% chars (~5 extra tokens), ~10ms latency.
+  2. Wrap parsed dict in `{"assignments": data}` if `"assignments"` key is missing (r2k_evaluator.py, after `fast_parse` call). Handles the pretty-printed case where the model omits the wrapper.
+  3. Regex cleanup `re.sub(r'"y:', '"y":', json_str)` in `fast_parse` as a safety net for any remaining tokenization artifacts.
+- **Smoke test written** (`tools/smoke_test_pipeline.py`): Verifies LLM→evaluator→current_strategy.json→bridge→cmd_vel pipeline without Gazebo. Checks: valid JSON, `assignments` key present, all blue bots have action+coords, no `"y:` errors. Also runs a 4s Gazebo match to verify bots move end-to-end.
+- **120-match post-parse-fix benchmark**: 12 scenarios × 10 runs × 120s = 120 matches, 0 failures, ~5h. KPIs extracted, saved to `src/results/v65_u24_postparse_benchmark.json`.
+- **KPI thresholds recomputed** for 5 slow-suite scenarios from post-parse-fix data (10 samples each). Old pre-parse-fix thresholds preserved as `v65_u22_preparse_thresholds`. v6.3 thresholds preserved as `v63_thresholds`.
+
+**Key findings (post-parse-fix benchmark, 120 matches, qwen2.5:3b, V7f):**
+| Scenario | lat_p50 | comp | poss% | oob% | clust% | goalie% | B:R | parse% | W-L-D |
+|---|---|---|---|---|---|---|---|---|---|
+| 3vs3_attack_center | 652ms | 2.33 | 36.2 | 4.5 | 2.1 | 96.1 | 0.5:1.2 | 0.1% | 1-6-3 |
+| 3vs3_attack_wing | 649ms | 0.80 | 46.4 | 7.3 | 21.9 | 98.2 | 0.9:0.5 | 0.0% | 4-1-5 |
+| 3vs3_contain_delay | 648ms | 0.33 | 42.1 | 11.7 | 7.0 | 88.7 | 0.8:1.5 | 0.0% | 2-5-3 |
+| 3vs3_def_transition | 650ms | 1.93 | 43.7 | 8.7 | 9.7 | 96.7 | 1.0:0.8 | 0.0% | 4-2-4 |
+| 3vs3_default | 650ms | 0.65 | 48.8 | 4.5 | 6.1 | 95.5 | 0.6:0.9 | 0.0% | 2-4-4 |
+| 3vs3_defensive_crisis | 650ms | -1.38 | 52.5 | 2.3 | 5.2 | 92.2 | 0.4:1.3 | 0.0% | 0-5-5 |
+| 3vs3_fast_counter | 650ms | -0.23 | 52.2 | 9.7 | 33.1 | 91.5 | 0.5:0.7 | 0.0% | 1-3-6 |
+| 3vs3_high_line | 650ms | 0.73 | 45.2 | 7.5 | 7.3 | 98.2 | 0.5:1.3 | 0.0% | 0-7-3 |
+| 3vs3_long_shot | 648ms | 1.00 | 34.5 | 6.8 | 12.6 | 94.1 | 0.4:0.8 | 0.0% | 1-4-5 |
+| 3vs3_overload | 650ms | 0.79 | 38.2 | 12.4 | 36.6 | 95.3 | 0.8:0.7 | 0.0% | 3-2-5 |
+| 3vs3_pressing_trap | 649ms | 1.23 | 44.3 | 3.7 | 13.2 | 94.8 | 0.9:0.7 | 0.0% | 3-2-5 |
+| 3vs3_wing_switch | 652ms | 1.17 | 59.0 | 9.1 | 6.3 | 95.7 | 0.9:0.8 | 0.0% | 4-3-3 |
+| **TOTAL** | | | | | | | | | **25-44-51** |
+
+- Parse errors: **0.0-0.1%** (was 35-69%). The 3 fixes eliminated the pipeline bug.
+- Win rate: **21%** (25W/44L/51D). Was effectively 0% (bots didn't move).
+- Blue outscored Red in 5 scenarios: attack_wing (40%), def_transition (40%), wing_switch (40%), overload (30%), pressing_trap (30%).
+- Goalie kicks: **0** (out of 24,125 LLM calls). No goalie-kick sample in the prompt — the model never learns to clear.
+- OOB: 83% of matches had a blue bot leave the field. LLM doesn't respect boundaries reliably.
+- Clustering: 92% of matches had blue bots within 2m of each other.
+- Passing: 95% of matches had ≥1 pass (different blue bot closest to ball within 2s of kick). Pass completion 52-72% (likely unintentional — LLM kicks toward goal, ball bounces to teammate).
+- Latency: 648-652ms p50 (consistent, +5 tokens from space-after-colon).
+
+**v7 consequences confirmed:**
+1. Goalie never kicks → TeamCaptain must trigger goalie clearance (CPU planner, not LLM)
+2. 83% OOB → Bridge needs boundary clamping (CPU-side fix)
+3. 92% clustering → TeamCaptain must enforce minimum spacing
+4. Passing is unintentional → Need explicit pass samples + TeamCaptain kick routing
+5. 42% draw rate → Consider 180s+ matches
+6. No goalie-kick sample in prompt → Add Example 6 (goalie clearance) to samples_3vs3.txt
+
+**Files touched:**
+- `src/ai_tactics/r2k_evaluator.py` — 3 parse fixes (separators, assignments wrapper, y-key regex)
+- `src/setup_r2k.py`, `src/tools/dump_prompt.py` — separators fix
+- `tools/smoke_test_pipeline.py` — new pipeline smoke test
+- `src/results/v65_u24_postparse_benchmark.json` — 120-match post-parse-fix KPI data
+- `src/scenario/*/kpi_targets.json` — 5 slow-suite scenarios updated from post-parse-fix data
+- `docs/SESSION_CHANGELOG.md` — this entry
+
+**Files deleted:** None
+
+**Not yet done:**
+- U22 regression test (fast suite + smoke test + slow suite) — ~27 min on U22
+- Merge to main — after U22 regression passes
+- U22 overnight benchmark (120-match, for U22 vs U24 comparison) — ~5h
+- Goalie-kick sample addition to samples_3vs3.txt — deferred to v7
+- Second human review of 50 analysis.md files — ready, content unchanged since 2026-08-07
+
+**Next:**
+1. U22: `git pull` → fast suite → smoke test → slow suite (~27 min)
+2. If passes → merge to main via PR
+3. U22 overnight: 120-match benchmark for U22 vs U24 comparison (~5h)
+
+**Blockers:** None. All fixes applied. Smoke test passes. 120-match benchmark complete.
+
+---
+
 ## 2026-08-13 — 120-match post-fix benchmark + score function V7f + chart regeneration
 
 **Goal:** Complete the full post-fix validation: score function fix, compact JSON latency fix, chart regeneration, 120-match benchmark, KPI threshold computation, and v7 folder setup.

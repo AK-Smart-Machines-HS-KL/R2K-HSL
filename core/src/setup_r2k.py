@@ -62,14 +62,14 @@ def clean_json_samples(content, explain_active):
                 data.pop("analysis", None)
                 data.pop("oracle", None)
                 new_data["assignments"] = data
-            formatted_json = json.dumps(new_data, separators=(',', ':'))
+            formatted_json = json.dumps(new_data, separators=(',', ': '))
         else:
             if "assignments" in data: new_data = {"assignments": data["assignments"]}
             else:
                 data.pop("analysis", None)
                 data.pop("oracle", None)
                 new_data = {"assignments": data}
-            formatted_json = json.dumps(new_data, separators=(',', ':'))
+            formatted_json = json.dumps(new_data, separators=(',', ': '))
         output += "ASSISTANT: " + formatted_json
         last_idx = json_end
     output += content[last_idx:]
