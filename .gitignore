@@ -43,6 +43,33 @@ core/src/results/kpis_*.json
 core/src/results/*.log
 core/src/results/baseline_summary.md
 
+# Research artifacts (probe/battery reports, experiment data — untracked)
+core/src/results/*.jsonl
+core/src/results/*.md
+core/src/experiments/
+
+# Throwaway tools (not part of the production pipeline)
+core/tools/auto_loop.py
+core/tools/cluster_experiment.py
+core/tools/regression_runner.py
+core/tools/restructure_analysis.py
+
+# Broken tests (pre-existing, not yet fixed)
+core/src/tests/test_adaptive_horizon.py
+core/src/tests/test_i3_sweep.py
+
+# Scratch docs (work-in-progress, not ready for review)
+core/docs/gui_concept.md
+core/docs/gui_concept.mmd
+core/docs/openrouter.odt
+core/docs/redesign_eval_questions.txt
+core/docs/redesing_eval.txt
+core/docs/redesing_prompts.txt
+core/docs/scenario_review_guide.pdf
+core/docs/scrum_tasks.pdf
+core/docs/v66_calibration_poc.md
+core/docs/workshop v6.2/
+
 # Backup files
 *.bak
 *.nope
