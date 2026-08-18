@@ -216,23 +216,25 @@ if [[ "$SCENARIO" != 0vs* ]]; then
     echo "✅ Model '$MODEL' is warm."
 fi
 
-# Verify container can reach Ollama via Docker bridge gateway (U24 only).
+# Verify Ollama is bound to 0.0.0.0 (reachable from Docker container once it starts).
 # Without this, the evaluator inside the container silently fails with
 # ConnectionError on every poll loop → dead blue team, no llm_trace.
+# Note: we check 0.0.0.0 binding, not 172.17.0.1 directly, because docker0
+# interface may be DOWN before the container starts (no carrier).
 if [[ "$UBUNTU_VERSION" == 24.* ]]; then
-    if ! curl -s --max-time 2 "${OLLAMA_DOCKER}/api/tags" > /dev/null 2>&1; then
+    if ! ss -tlnp 2>/dev/null | grep -q "0.0.0.0:11434\|\\*:11434"; then
         echo "=========================================================="
-        echo "❌ FEHLER: Ollama ist vom Docker-Container aus nicht erreichbar!"
-        echo "   Ollama lauscht auf 127.0.0.1, aber der Container braucht 172.17.0.1."
+        echo "❌ FEHLER: Ollama lauscht nicht auf 0.0.0.0:11434!"
+        echo "   Container koennen Ollama nur erreichen, wenn es an 0.0.0.0 gebunden ist."
         echo "   Fix (systemd): sudo systemctl edit ollama"
         echo "      → paste: [Service]"
         echo "      → paste: Environment=\"OLLAMA_HOST=0.0.0.0\""
         echo "      → sudo systemctl daemon-reload && sudo systemctl restart ollama"
-        echo "   Fix (manual): OLLAMA_HOST=0.0.0.0 ollama serve"
+        echo "   Fix (manual): kill existing ollama, then: OLLAMA_HOST=0.0.0.0 ollama serve"
         echo "=========================================================="
         exit 1
     fi
-    echo "✅ Ollama vom Docker-Container aus erreichbar (172.17.0.1)."
+    echo "✅ Ollama lauscht auf 0.0.0.0:11434 (Docker-Container kann erreichbar werden)."
 fi
 
 export R2K_OLLAMA_URL="${OLLAMA_LOCAL}/api/generate"
