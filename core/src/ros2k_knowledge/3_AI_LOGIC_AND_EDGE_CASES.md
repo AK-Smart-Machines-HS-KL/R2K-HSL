@@ -13,7 +13,7 @@ version: v6.5
 > 1. **Team Paradigm:** Team Blue uses async JSON file multiplexing via REST API. Team Red bypasses File I/O, acting as a low-latency ROS 2 node. BOTH teams share parity in utilizing the `/gazebo/set_entity_state` service for Phantom Kicking.
 > 2. **Delegation Boundary:** The LLM ONLY outputs flat JSON arrays. It NEVER outputs Python code (`Twist` messages) or executes motor commands natively.
 > 3. **Dynamic Prompting:** There is NO static `system_prompt.txt` committed to version control. It is stitched together dynamically at runtime by `setup_r2k.py` using text fragments stored in `/strategy/fragments/`.
-> 4. **LLM Performance Tuning:** The Ollama engine (`qwen2.5-coder:3b`) MUST run strictly in User-Space to allow the `0.2s Asynchronous Watchdog` to execute `pkill -9`. Systemd services are explicitly prohibited.
+> 4. **LLM Performance Tuning:** The Ollama engine (`qwen2.5-coder:3b`) MUST be reachable at `0.0.0.0:11434` (not just `127.0.0.1`). Both user-space (`OLLAMA_HOST=0.0.0.0 ollama serve`) and systemd (with `OLLAMA_HOST=0.0.0.0` override via `install.sh`) are acceptable. The 0.2s watchdog works in both cases.
 
 ## 1. Unified System Topology
 

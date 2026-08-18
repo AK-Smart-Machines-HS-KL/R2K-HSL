@@ -19,7 +19,7 @@ This section strictly defines architectural components to prevent hallucinated s
   * *Constraint:* Exists strictly in the ROS 2 execution loop (10Hz). **Explicitly removes OOP HALs (Hardware Abstraction Layers).** It does NOT perform HTTP requests or interact with the LLM directly.
 * **Evaluator ('r2k_evaluator.py'):**
   * *Definition:* Standalone Python daemon managing synchronous HTTP POST requests to the Ollama REST API (qwen2.5-coder:3b via Port 11434).
-  * *Constraint:* Ollama MUST run in User-Space, not as a systemd service. **CRITICAL: The directory 'shared_state/' must exist, otherwise it silently crashes with a FileNotFoundError.**
+  * *Constraint:* Ollama MUST be reachable at 0.0.0.0:11434 (not just 127.0.0.1). Both user-space (`OLLAMA_HOST=0.0.0.0 ollama serve`) and systemd (with `OLLAMA_HOST=0.0.0.0` override) are acceptable. **CRITICAL: The directory 'shared_state/' must exist, otherwise it silently crashes with a FileNotFoundError.**
 * **Tracker ('tracker_node.py'):**
   * *Definition:* The perception node converting '/gazebo/model_states' into 2D cartesian coordinates (10Hz).
   * *Constraint:* Executes POSIX atomic renames ('os.replace') in RAM-Disk/tmpfs to prevent 'JSONDecodeError' crashes.

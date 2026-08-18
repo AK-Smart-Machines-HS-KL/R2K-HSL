@@ -196,7 +196,8 @@ class TestTextModeMainFlow:
         ev.TEXT_MODE = True
         assert ev._build_text_world  # sanity: transform exists
         # num_predict logic lives in main(); verify constants used there
-        from r2k_evaluator import TEXT_OUTPUT_HEADER, TEXT_EXPLAIN_INSTRUCTION
-        assert "move to (X, Y)" in TEXT_OUTPUT_HEADER
-        assert "hold position" in TEXT_OUTPUT_HEADER
+        from r2k_evaluator import _text_output_header, TEXT_EXPLAIN_INSTRUCTION
+        header = _text_output_header(3)
+        assert "move to (X, Y)" in header
+        assert "hold position" in header
         assert "ANALYSIS:" in TEXT_EXPLAIN_INSTRUCTION

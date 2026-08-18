@@ -32,6 +32,7 @@ os.makedirs(LOG_DIR, exist_ok=True)
 # caching by tuple to avoid re-reading files every 20ms poll.
 _prompt_cache = {}  # (status, mode) -> assembled prompt string
 _active_mode = None  # determined once at startup from active_scenario.json
+_active_n_blue = 3  # number of blue bots, derived from mode
 
 # --- Phase I (C3 inter-lingua): text transform mode ---
 # R2K_TEXT_MODE=1 replaces the JSON min_ents world encoding with a condensed
@@ -40,13 +41,23 @@ _active_mode = None  # determined once at startup from active_scenario.json
 # both encodings without code changes. Default 0 = current JSON behavior.
 TEXT_MODE = os.getenv("R2K_TEXT_MODE", "0") == "1"
 
-TEXT_OUTPUT_HEADER = (
-    "Output exactly one line per blue bot in the INPUT above (blue_1, blue_2, "
-    "blue_3, ...). Never use the same bot twice. Format: 'blue_1 move to (X, Y)', "
-    "'blue_1 kick', 'blue_1 cover the goal line at (-4.0, Y)', or "
-    "'blue_1 hold position'. Use the positions from the INPUT. "
-    "Do NOT copy example coordinates."
-)
+def _n_blue_from_mode(mode):
+    """Derive number of blue bots from mode string (e.g. '2vs2' -> 2, '3vs3' -> 3)."""
+    try:
+        return int(mode.split('vs')[0])
+    except (ValueError, IndexError):
+        return 3
+
+def _text_output_header(n_blue):
+    """Build the text-mode output header with the correct bot count."""
+    bot_names = ", ".join(f"blue_{i+1}" for i in range(n_blue))
+    return (
+        f"Output exactly one line per blue bot in the INPUT above ({bot_names}). "
+        f"Never use the same bot twice. Format: 'blue_1 move to (X, Y)', "
+        f"'blue_1 kick', 'blue_1 cover the goal line at (-4.0, Y)', or "
+        f"'blue_1 hold position'. Use the positions from the INPUT. "
+        f"Do NOT copy example coordinates."
+    )
 TEXT_EXPLAIN_INSTRUCTION = (
     "Start with 'ANALYSIS: <assessment>', then 'ORACLE: <prediction>', "
     "then one line per blue bot."
@@ -279,7 +290,7 @@ def _clean_json_samples(content, explain_active):
     output += content[last_idx:]
     return output
 
-def _assemble_prompt(status, mode):
+def _assemble_prompt(status, mode, n_blue=3):
     """Assemble system prompt from fragments based on (status, mode).
     Fragment load order (matches setup_r2k.py / dump_prompt.py):
       1. header.txt (static, contains {{EXPLAIN_INSTRUCTION}} placeholder)
@@ -295,9 +306,10 @@ def _assemble_prompt(status, mode):
     Fallback: if rules_<status>.txt doesn't exist → skip it (mode rules suffice).
     """
     is_explain = os.getenv("R2K_EXPLAIN", "0") == "1"
+    text_header = _text_output_header(n_blue)
     if TEXT_MODE:
-        explain_instr = TEXT_EXPLAIN_INSTRUCTION if is_explain else TEXT_OUTPUT_HEADER
-        output_format = "OUTPUT FORMAT: " + (TEXT_EXPLAIN_INSTRUCTION if is_explain else TEXT_OUTPUT_HEADER)
+        explain_instr = TEXT_EXPLAIN_INSTRUCTION if is_explain else text_header
+        output_format = "OUTPUT FORMAT: " + (TEXT_EXPLAIN_INSTRUCTION if is_explain else text_header)
     else:
         explain_instr = (
             "- Include 'analysis', 'oracle', and 'assignments' keys."
@@ -337,12 +349,13 @@ def _assemble_prompt(status, mode):
 def _get_sys_prompt(status):
     """Return the assembled system prompt for the current (status, mode).
     Caches by (status, mode) tuple — re-reads fragment files only on status change."""
-    global _active_mode
+    global _active_mode, _active_n_blue
     if _active_mode is None:
         _active_mode = _determine_mode()
+        _active_n_blue = _n_blue_from_mode(_active_mode)
     key = (status, _active_mode)
     if key not in _prompt_cache:
-        _prompt_cache[key] = _assemble_prompt(status, _active_mode)
+        _prompt_cache[key] = _assemble_prompt(status, _active_mode, _active_n_blue)
     return _prompt_cache[key]
 
 def log_llm_call(world_snapshot, sys_prompt, raw_response, parse_code, latency_ms, tokens_limit, is_explain, timings=None):
@@ -534,7 +547,7 @@ def main():
                 world_text = _build_text_world(ents, match_state, velocities)
                 blue_names = ", ".join(sorted(k for k in ents if k.startswith("blue")))
                 user_prompt = (world_text + f"\n\nCommand: {blue_names}\n\n" +
-                               (TEXT_EXPLAIN_INSTRUCTION if is_explain else TEXT_OUTPUT_HEADER))
+                               (TEXT_EXPLAIN_INSTRUCTION if is_explain else _text_output_header(len([k for k in ents if k.startswith("blue")]))))
                 tokens_limit = 600 if is_explain else 200
             else:
                 min_ents = {k: {"x": round(v["x"], 1), "y": round(v["y"], 1)} for k, v in ents.items()}
