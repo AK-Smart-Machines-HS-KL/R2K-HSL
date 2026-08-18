@@ -201,7 +201,7 @@ def run_encoding(label, ents, match_state, model):
         user_prompt = ev._build_text_world(ents, match_state)
         blue_names = ", ".join(sorted(k for k in ents if k.startswith("blue")))
         user_prompt += f"\n\nCommand: {blue_names}\n\n" + (
-            ev.TEXT_EXPLAIN_INSTRUCTION if is_explain else ev.TEXT_OUTPUT_HEADER)
+            ev.TEXT_EXPLAIN_INSTRUCTION if is_explain else ev._text_output_header(len([k for k in ents if k.startswith("blue")])))
         tokens_limit = 600 if is_explain else 200
     else:
         min_ents = {k: {"x": round(v["x"], 1), "y": round(v["y"], 1)} for k, v in ents.items()}

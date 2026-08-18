@@ -1,7 +1,7 @@
 # ADR-A06: Ollama — User-Space Axiom vs. systemd Override
 
 **Date:** 2026-08-03
-**Status:** Needs reconciliation (see Resolution below)
+**Status:** Applied (2026-08-18 — axiom 5 updated in agent_prompt_de.txt, META_KNOWLEDGE_ROUTER.md, 3_AI_LOGIC_AND_EDGE_CASES.md, ROS2K_GEM_FAQ.md)
 
 ## Glossary
 
@@ -35,7 +35,7 @@ The axiom and the code **directly contradict each other.**
 
 **Reconcile the axiom with the code.** The axiom's intent (watchdog can kill Ollama) is preserved; the "strictly forbidden systemd" wording is updated.
 
-### Resolution (proposed, pending user confirmation)
+### Resolution (applied 2026-08-18)
 
 Update axiom 5 in `agent_prompt_de.txt` to:
 

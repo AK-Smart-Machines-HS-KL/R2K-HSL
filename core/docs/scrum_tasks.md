@@ -286,9 +286,9 @@ Details:
 [ ] Add wingman pattern to header_k3.txt
 [ ] Run 5x 120s Gazebo matches for missing score chart scenarios
 [ ] Add ball velocity deque to score_node.py
-[ ] Gate output line count to n_blue in header_k3.txt for 2vs2
+[x] Gate output line count to n_blue (done via _text_output_header function, header_k3.txt deleted as dead code)
 [ ] Tune PD gains: test 1.5x boost when distance > 1.0m
-[ ] Update agent_prompt_de.txt axiom 5 per ADR-A06
+[x] Update agent_prompt_de.txt axiom 5 per ADR-A06
 [ ] Commit all work: Phase A, H1, C, M', H2, R, 2, empirical, bridge fixes
 [ ] Run 3 live matches focusing on set-pieces
 ```

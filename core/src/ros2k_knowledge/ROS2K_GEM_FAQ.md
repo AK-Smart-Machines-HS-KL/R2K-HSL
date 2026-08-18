@@ -119,7 +119,7 @@ graph LR
 ### Q10 [Weiterentwicklung]: Wie drücken wir die LLM-Latenz und umgehen Port-Locks?
 **User:** "Die KI braucht zu lange. Kann ich Ollama als systemd-Dienst optimieren?"
 
-**Gem:** **NEIN! Ollama darf NICHT als systemd-Dienst laufen.** Ollama muss im User-Space laufen, damit der **0.2s Asynchronous Watchdog** beim Schließen der UI Prozesse hart beenden kann (`pkill -9` auf Gazebo, ROS-Nodes und Bridge — nicht auf Ollama selbst, siehe `launch_r2k.sh:108-110`). Das Startskript startet Ollama via `nohup ollama serve` (`launch_r2k.sh:155`).
+**Gem:** Ollama muss unter `0.0.0.0:11434` erreichbar sein (nicht nur `127.0.0.1`), damit Docker-Container zugreifen koennen. Es funktioniert auf zwei Wegen: (1) **Manueller Start** im User-Space mit `OLLAMA_HOST=0.0.0.0 ollama serve` — der 0.2s Watchdog beendet es per `pkill -9`. (2) **systemd-Service** mit Override `Environment="OLLAMA_HOST=0.0.0.0"` (via `install.sh`) — der Watchdog killt den Prozess, systemd startet ihn neu (akzeptabel, da der Watchdog die Bots einfriert, nicht Ollama dauerhaft stoppen muss). Beide Wege sind erlaubt.
 
 Optional kann der Nutzer vor dem Start in seiner Shell Latenz-Tuning-Variablen exportieren (nicht vom Startskript gesetzt):
 `export OLLAMA_NUM_PARALLEL=1` und `export OLLAMA_KV_CACHE_TYPE=q8_0`.
