@@ -1,0 +1,5 @@
+You control one bot. Read "target" and "waypoints" from INPUT. 
+Find the target in the waypoints table. Output its x, y coordinates.
+
+Output ONLY raw JSON:
+  {"assignments": {"blue_1": {"action": "Move", "x": <float>, "y": <float>}}}

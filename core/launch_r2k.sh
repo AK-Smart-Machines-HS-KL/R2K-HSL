@@ -13,8 +13,10 @@ MODEL="qwen2.5:3b"
 EXPLAIN_FLAG="--no-explain"
 RELAY="only_sim_bots"
 HEADLESS=false
+NO_VIZ=false
 DURATION=0
 ANALYZE=false
+DEMO=false
 TRAP_TRIGGERED=false
 UBUNTU_VERSION=$(lsb_release -rs)
 
@@ -41,9 +43,11 @@ while [[ "$#" -gt 0 ]]; do
             echo "  --relay <name>        (Available: only_sim_bots, hardware_mirror)"
             echo "  --explain             (Enable AI reasoning output)"
             echo "  --no-explain          (Disable AI reasoning)"
-            echo "  --headless            (Run without visualizer)"
+            echo "  --headless            (No Gazebo GUI + no visualizer)"
+            echo "  --no-visualizer       (Gazebo GUI but no matplotlib visualizer)"
             echo "  --duration <seconds> (Auto-terminate after N seconds)"
             echo "  --analyze             (Open annotator in new terminal)"
+            echo "  --demo                (Demo/calibration mode — overrides mode with demo fragments)"
             echo "=========================================================="
             exit 0 ;;
         --scenario) SCENARIO="$2"; shift ;;
@@ -53,8 +57,10 @@ while [[ "$#" -gt 0 ]]; do
         --no-explain) EXPLAIN_FLAG="--no-explain" ;;
         --relay) RELAY="$2"; shift ;;
         --headless) HEADLESS=true ;;
+        --no-visualizer) NO_VIZ=true ;;
         --duration) DURATION="$2"; shift ;;
         --analyze) ANALYZE=true ;;
+        --demo) DEMO=true ;;
         *) echo "⚠️ Unknown parameter: $1"; exit 1 ;;
     esac
     shift
@@ -87,7 +93,7 @@ jq -r '.mapping | to_entries[] | "  \(.key): \(.value.hardware_type) → \(.valu
 
 export ROS2K_WS="$PWD"
 mkdir -p shared_state logs
-rm -f shared_state/current_strategy.json shared_state/Worldstate.json
+rm -f shared_state/current_strategy.json shared_state/Worldstate.json shared_state/waypoints.json shared_state/task_input.json
 
 # --- Phase 1 instrumentation: auto-tag run ID for trace logs ---
 export R2K_RUN_ID="${SCENARIO}_${STRATEGY}_$(date +%Y%m%d_%H%M%S)"
@@ -114,7 +120,9 @@ launch_annotator() {
     fi
 }
 
-python3 setup_r2k.py --scenario "$SCENARIO" --strategy "$STRATEGY" --model "$MODEL" --relay "$RELAY" $EXPLAIN_FLAG || { echo "❌ Setup failed!"; exit 1; }
+DEMO_FLAG=""
+if [ "$DEMO" = true ]; then DEMO_FLAG="--demo"; fi
+python3 setup_r2k.py --scenario "$SCENARIO" --strategy "$STRATEGY" --model "$MODEL" --relay "$RELAY" $EXPLAIN_FLAG $DEMO_FLAG || { echo "❌ Setup failed!"; exit 1; }
 
 # ---- CLEANUP TRAP ----
 cleanup() {
@@ -216,23 +224,25 @@ if [[ "$SCENARIO" != 0vs* ]]; then
     echo "✅ Model '$MODEL' is warm."
 fi
 
-# Verify container can reach Ollama via Docker bridge gateway (U24 only).
+# Verify Ollama is bound to 0.0.0.0 (reachable from Docker container once it starts).
 # Without this, the evaluator inside the container silently fails with
 # ConnectionError on every poll loop → dead blue team, no llm_trace.
+# Note: we check 0.0.0.0 binding, not 172.17.0.1 directly, because docker0
+# interface may be DOWN before the container starts (no carrier).
 if [[ "$UBUNTU_VERSION" == 24.* ]]; then
-    if ! curl -s --max-time 2 "${OLLAMA_DOCKER}/api/tags" > /dev/null 2>&1; then
+    if ! ss -tlnp 2>/dev/null | grep -q "0.0.0.0:11434\|\\*:11434"; then
         echo "=========================================================="
-        echo "❌ FEHLER: Ollama ist vom Docker-Container aus nicht erreichbar!"
-        echo "   Ollama lauscht auf 127.0.0.1, aber der Container braucht 172.17.0.1."
+        echo "❌ FEHLER: Ollama lauscht nicht auf 0.0.0.0:11434!"
+        echo "   Container koennen Ollama nur erreichen, wenn es an 0.0.0.0 gebunden ist."
         echo "   Fix (systemd): sudo systemctl edit ollama"
         echo "      → paste: [Service]"
         echo "      → paste: Environment=\"OLLAMA_HOST=0.0.0.0\""
         echo "      → sudo systemctl daemon-reload && sudo systemctl restart ollama"
-        echo "   Fix (manual): OLLAMA_HOST=0.0.0.0 ollama serve"
+        echo "   Fix (manual): kill existing ollama, then: OLLAMA_HOST=0.0.0.0 ollama serve"
         echo "=========================================================="
         exit 1
     fi
-    echo "✅ Ollama vom Docker-Container aus erreichbar (172.17.0.1)."
+    echo "✅ Ollama lauscht auf 0.0.0.0:11434 (Docker-Container kann erreichbar werden)."
 fi
 
 export R2K_OLLAMA_URL="${OLLAMA_LOCAL}/api/generate"
@@ -304,11 +314,13 @@ if [ "$UBUNTU_VERSION" == "22.04" ]; then
 
     echo "⚡ Igniting Realtime Nodes & AI..."
     ros2 run r2k_world_model tracker > /dev/null 2>&1 &
-    python3 referee_node.py > /dev/null 2>&1 &
-    python3 score_node.py > /dev/null 2>&1 &
-    python3 reward_node.py > /dev/null 2>&1 &
+    if [ "$DEMO" = false ]; then
+        python3 referee_node.py > /dev/null 2>&1 &
+        python3 score_node.py > /dev/null 2>&1 &
+        python3 reward_node.py > /dev/null 2>&1 &
+        python3 rule_evaluator_red.py > /dev/null 2>&1 &
+    fi
     python3 state_aggregator.py > /dev/null 2>&1 &
-    python3 rule_evaluator_red.py > /dev/null 2>&1 &
     python3 ai_tactics/ollama_sandbox_bridge.py > /dev/null 2>&1 &
     
     echo "🧠 Starting Team Blue AI (Live Output)..."
@@ -327,9 +339,9 @@ if [ "$UBUNTU_VERSION" == "22.04" ]; then
     
     launch_annotator
     
-    # Headless mode: skip visualizer
-    if [ "$HEADLESS" = true ]; then
-        echo "🏃 Headless mode: No visualizer"
+    # Headless or no-visualizer mode: skip matplotlib visualizer
+    if [ "$HEADLESS" = true ] || [ "$NO_VIZ" = true ]; then
+        echo "🏃 No matplotlib visualizer"
         while true; do sleep 1; done
     fi
     
@@ -417,11 +429,13 @@ else
 
     echo "⚡ Igniting Realtime Nodes & AI..."
     $DOCKER_BASE "$SOURCE_CMD && ros2 run r2k_world_model tracker > /dev/null 2>&1"
-    $DOCKER_BASE "$SOURCE_CMD && python3 referee_node.py > /dev/null 2>&1"
-    $DOCKER_BASE "$SOURCE_CMD && python3 score_node.py > /dev/null 2>&1"
-    $DOCKER_BASE "$SOURCE_CMD && python3 reward_node.py > /dev/null 2>&1"
+    if [ "$DEMO" = false ]; then
+        $DOCKER_BASE "$SOURCE_CMD && python3 referee_node.py > /dev/null 2>&1"
+        $DOCKER_BASE "$SOURCE_CMD && python3 score_node.py > /dev/null 2>&1"
+        $DOCKER_BASE "$SOURCE_CMD && python3 reward_node.py > /dev/null 2>&1"
+        $DOCKER_BASE "$SOURCE_CMD && python3 rule_evaluator_red.py > /dev/null 2>&1"
+    fi
     docker exec -d -e R2K_RUN_ID="$R2K_RUN_ID" $CONTAINER_NAME bash -c "$SOURCE_CMD && python3 state_aggregator.py > /dev/null 2>&1"
-    $DOCKER_BASE "$SOURCE_CMD && python3 rule_evaluator_red.py > /dev/null 2>&1"
     docker exec -d -e R2K_RUN_ID="$R2K_RUN_ID" $CONTAINER_NAME bash -c "$SOURCE_CMD && python3 ai_tactics/ollama_sandbox_bridge.py > /dev/null 2>&1"
     
     echo "🧠 Starting Team Blue AI (Live Output)..."
@@ -440,9 +454,9 @@ else
     
     launch_annotator
     
-    # Headless mode: skip visualizer
-    if [ "$HEADLESS" = true ]; then
-        echo "🏃 Headless mode: No visualizer"
+    # Headless or no-visualizer mode: skip matplotlib visualizer
+    if [ "$HEADLESS" = true ] || [ "$NO_VIZ" = true ]; then
+        echo "🏃 No matplotlib visualizer"
         while true; do sleep 1; done
     fi
     

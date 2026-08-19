@@ -69,11 +69,11 @@ EXPLAIN_ANALYSIS_HEADER = (
     "Start with 'ANALYSIS: <assessment>', then one line per blue bot."
 )
 
-# KICK/SPLIT/PASS rules extracted from TEXT_OUTPUT_HEADER (K3 winner) —
+# KICK/SPLIT/PASS rules extracted from the text output header (K3 winner) —
 # used by the explain-k3h variant to test whether the K3 rules rescue
 # kick selection in explain mode.
 def _k3_rules_section():
-    hdr = ev.TEXT_OUTPUT_HEADER
+    hdr = ev._text_output_header(3)
     idx = hdr.find("\nKICK RULE:")
     return hdr[idx:].strip() if idx >= 0 else ""
 
@@ -214,9 +214,9 @@ def build_user_prompt(ents, match_state, user_header):
     world = ev._build_text_world(ents, match_state)
     blue_names = ", ".join(sorted(k for k in ents if k.startswith("blue")))
     if user_header == "full":
-        hdr = ev.TEXT_OUTPUT_HEADER
+        hdr = ev._text_output_header(len([k for k in ents if k.startswith("blue")]))
     elif user_header == "full_nok3h":
-        hdr = ev.TEXT_OUTPUT_HEADER.split("\nKICK RULE:")[0]
+        hdr = ev._text_output_header(len([k for k in ents if k.startswith("blue")])).split("\nKICK RULE:")[0]
     elif user_header == "minimal":
         hdr = MINIMAL_USER_HEADER
     elif user_header == "explain_full":

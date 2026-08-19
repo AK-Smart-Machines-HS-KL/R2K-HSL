@@ -181,8 +181,10 @@ The bridge (`ollama_sandbox_bridge.py`) received several changes in v6.4:
 - **`GOALIE_DEADBAND_PCT`:** 0.022 → 0.015 (tighter Y tracking).
 - **`prompt_utils.py`:** `clean_json_samples()` extracted to shared module,
   imported by both `setup_r2k.py` and `r2k_evaluator.py`.
-- **`TEXT_OUTPUT_HEADER`:** moved from hardcoded string in evaluator to
-  `strategy/fragments/header_k3.txt` (read at runtime via `_read_fragment`).
+- **`TEXT_OUTPUT_HEADER`:** now a function `_text_output_header(n_blue)` in
+  `r2k_evaluator.py` — generates the output format instruction with the correct
+  bot count (e.g. 2 for 2vs2, 3 for 3vs3). Replaced the dead `header_k3.txt`
+  fragment (deleted 2026-08-18, was never loaded by any Python file).
 
 ### TeamCaptain architecture (v7 — ADR-A07)
 
@@ -211,7 +213,7 @@ See `core/docs/adr/ADR-A07-team-captain-architecture.md` for full design.
 
 A third prompt mode for human-driven bot control:
 - `--demo` flag in `launch_r2k.sh` loads `strategy/fragments/header_demo.txt`
-  instead of `header_k3.txt`
+  instead of `header.txt`
 - Human types commands ("blue_2 move to (1.0, 0.5)")
 - LLM reformats to inter-lingua (same format as match mode)
 - Same evaluator → bridge pipeline (tests full stack)

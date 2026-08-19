@@ -3,8 +3,8 @@ id: META_ROUTER
 title: "Semantic Glossary & Routing Matrix (Inverted Index)"
 type: KNOWLEDGE_BASE_POWER_FILE
 tags: [router, glossary, index, rag, meta, flat-json, phantom-kick, setup_r2k, active_relay, watchdog, hybrid-os, uros_ws, xid-31, mermaid, v6, v6.1, v6.2, v6.3, foul, ball-out, kick-in, momentum, reward-node, batch-evaluator, aggression, set-piece, goal-kick, corner-kick-in, kickoff, own-half-warp, blitting, referee-rulebook, trace-logging, llm-trace, world-trace, r2k-run-id, analyze-trace, kpi, prompt-disentanglement, dump-prompt, strat-artifact, goalie-idle, red-p1-p5, blocking-avoidance, headless-gzserver, docker-env-passthrough, test-non-functional, composite-score, pytest, regression-suite, kpi-targets, skip-slow, dynamic-prompt-injection, content-hash-skip, role-condensation, replay-system, attack-kpis, shots-on-goal, pass-completion, restart-recovery, r2k-explain, match-annotate, replay-trace, c3, inter-lingua, controlled-vocabulary, expert-oracle, coordinate-rule, scenario-generation, analysis-md, c3-playbook, c3-dictionary, c3-testcase-review, vocab-probe, soccer-knowledge, universal-knowledge]
-last_modified: 2026-08-11
-version: v6.5
+last_modified: 2026-08-19
+version: v6.6
 ---
 # Semantic Glossary & Routing Matrix
 
@@ -19,7 +19,7 @@ This section strictly defines architectural components to prevent hallucinated s
   * *Constraint:* Exists strictly in the ROS 2 execution loop (10Hz). **Explicitly removes OOP HALs (Hardware Abstraction Layers).** It does NOT perform HTTP requests or interact with the LLM directly.
 * **Evaluator ('r2k_evaluator.py'):**
   * *Definition:* Standalone Python daemon managing synchronous HTTP POST requests to the Ollama REST API (qwen2.5-coder:3b via Port 11434).
-  * *Constraint:* Ollama MUST run in User-Space, not as a systemd service. **CRITICAL: The directory 'shared_state/' must exist, otherwise it silently crashes with a FileNotFoundError.**
+  * *Constraint:* Ollama MUST be reachable at 0.0.0.0:11434 (not just 127.0.0.1). Both user-space (`OLLAMA_HOST=0.0.0.0 ollama serve`) and systemd (with `OLLAMA_HOST=0.0.0.0` override) are acceptable. **CRITICAL: The directory 'shared_state/' must exist, otherwise it silently crashes with a FileNotFoundError.**
 * **Tracker ('tracker_node.py'):**
   * *Definition:* The perception node converting '/gazebo/model_states' into 2D cartesian coordinates (10Hz).
   * *Constraint:* Executes POSIX atomic renames ('os.replace') in RAM-Disk/tmpfs to prevent 'JSONDecodeError' crashes.
@@ -86,6 +86,9 @@ This section strictly defines architectural components to prevent hallucinated s
 * **Universal Soccer Knowledge ('8_C3_SOCCER_KNOWLEDGE.md') [NEW in v6.3, C3 Layer 1]:**
   * *Definition:* Distilled human soccer coaching knowledge (from the 2026-08-01 TC-01..TC-06 walkthrough dialogue), structured for a LARGE generating LLM that writes new scenario packages (Expert + Oracle). Three layers: 1 = model-agnostic soccer principles (control/spacing/angle, attacking, defending, transition — each with Check/Express/Source), 2 = ROS2K specifics (physics, referee, execution — SHORT, subject to change), 3 = inter-lingua mapping (short — refers to `7_C3_INTER_LINGUA.md` + dictionary).
   * *Constraint:* Universal axioms must NOT be repeated verbatim inside per-scenario text (testcase review §2.2). Session lessons are INTEGRATED into the entries (not a separate changelog): every positional verb carries X,Y; short oracles are fine WITH coords; recommended actions must be executable from the actual `scenario.json` starting state; hybrid (Expert facts + Oracle coords) is the quality ceiling.
+* **Demo Mode ('--demo' flag) [NEW in v6.6]:**
+  * *Definition:* Calibration mode reusing the soccer pipeline (evaluator→bridge) for non-soccer bot control. User types NL tasks via `calib_cli.py`, 7B compiler translates to `waypoints.json`, 3B executor does per-cycle string→coordinate lookup. Fast-path commands (stop/resume/restart/go home) bypass the compiler for instant response. `--no-visualizer` shows Gazebo GUI without matplotlib.
+  * *Constraint:* No yaw in Worldstate (deferred to v7). No visual markers (requires colcon build). No weg queue (per-cycle LLM, not pre-compiled). All changes are standalone Python — no colcon build needed. Active brake on Hold (zero velocity, not skip) required for hardware safety.
 
 ## 2. Routing Matrix (Inverted Index)
 If the user query involves [SYMPTOM / KEYWORD], explicitly retrieve and reference [POWER-FILE]:
@@ -117,6 +120,8 @@ If the user query involves [SYMPTOM / KEYWORD], explicitly retrieve and referenc
 | **[V6.4]** K1 kick pitfalls, kShoot autonomous chase, kVisualKick, kChangeMode abort, kRotateHead (api_id 2004), kReplayTrajectory (2028), Yahboom pan-tilt cam, Yahboom metal push kick, trailer non-holonomic, hardware capability matrix | **'4_EDGE_HARDWARE_SIM2REAL.md' §V6.4** |
 | **[V6.4]** Empirical scenarios, umschaltmomente, 74 to 33 reduction, 8s regression test, analysis.md format, Oracle ground truth, score chart, `header_k3.txt`, `rules_foul_penalty.txt` | **'6_DATA_SCHEMAS_AND_LIFECYCLE.md' §V6.4** + **'8_C3_SOCCER_KNOWLEDGE.md' §6** |
 | **[V6.4]** `start_ollama.sh`, `ORIGINAL_DIR`, path bug after `cd src`, `/tmp/r2k_ollama.log`, `prompt_utils.py`, `header_k3.txt` fragment | **'1_CORE_ARCHITECTURE_AND_SYNC.md' §V6.4** |
+| **[V6.6]** Demo mode, calibration, `--demo`, `--no-visualizer`, `calib_cli.py`, `task_input.json`, `waypoints.json`, `_demo_target_for_bot`, `_compile_demo_task`, sequence tracking, arrival detection, `hold_duration`, fast-path commands (stop/resume/restart/go home), active brake on Hold, `DEMO_LANDMARKS`, wing/corner defaults, `rules_demo.txt`, `rules_demo_core.txt`, `samples_demo.txt`, `samples_demo_compiler.txt`, 3B executor, 7B compiler, two-model architecture, `single_bot.json`, `1vs0_waypoint`, calibration cheat sheet | **'6_DATA_SCHEMAS_AND_LIFECYCLE.md' §V6.6** + **'core/docs/calibration_cheat_sheet.md'** |
+| **[V6.6]** Calibration probe results, 3B vs 7B capabilities, grid-cell rejection, time-indexed rejection, sequence approach, field orientation (left=Y+, wing in opponent half), `v66_calibration_poc.md`, `calibration_rotation_design.md` | **'8_C3_SOCCER_KNOWLEDGE.md' §V6.6** + **'core/docs/LESSONS_LEARNED.md' §v6.6** |
 
 ## 3. Mermaid Rendering Constraints
 > **CRITICAL DIRECTIVE FOR LLMs:** To prevent fatal parsing errors in our documentation renderer, all Mermaid `graph TD` diagrams MUST strictly adhere to the following syntax limitations. DO NOT use advanced brackets.

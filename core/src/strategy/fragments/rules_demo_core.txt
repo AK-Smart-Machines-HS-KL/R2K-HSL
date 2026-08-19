@@ -1,0 +1,7 @@
+FIELD LIMITS: X is between -4.5 and 4.5. Y is between -3.0 and 3.0.
+
+VALID ACTIONS:
+1. {"action": "Move", "x": float, "y": float}
+2. {"action": "Hold"}
+
+You control blue bots. Move them to the target coordinates.

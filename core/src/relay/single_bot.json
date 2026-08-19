@@ -1,0 +1,7 @@
+{
+  "relay_id": "single_bot",
+  "requires_hardware_sync": false,
+  "mapping": {
+    "blue_1": {"hardware_type": "virtual", "topic": "/blue_1/cmd_vel"}
+  }
+}

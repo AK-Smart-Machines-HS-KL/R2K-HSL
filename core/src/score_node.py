@@ -47,6 +47,10 @@ PRESSING_REFERENCE_DIST = 3.0
 MARKING_GAIN = 0.5
 MARKING_REFERENCE_DIST = 3.0
 
+# === Ball velocity tracking (deque-based) ===
+BALL_VELOCITY_WINDOW = 5  # 5 samples = 0.5s at 10Hz
+BALL_VELOCITY_MIN_SAMPLES = 2  # need at least 2 samples to compute velocity
+
 RESET_FLAG = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                           'shared_state', 'reset_flag.json')
 
@@ -62,6 +66,7 @@ class ScoreNode(Node):
         self.score_samples_count = 0
 
         self.momentum_window = deque(maxlen=MOMENTUM_WINDOW_SIZE)
+        self.ball_history = deque(maxlen=BALL_VELOCITY_WINDOW)
 
         self.match_data = {}
         self.prev_score_blue = 0
@@ -123,12 +128,31 @@ class ScoreNode(Node):
 
         return round(momentum, 2), trend
 
+    def _compute_ball_velocity(self, timestamp, ball):
+        """Compute ball velocity from position history deque.
+        Returns dict with vx, vy, speed (m/s) or zeros if insufficient samples."""
+        if ball:
+            self.ball_history.append((timestamp, ball['x'], ball['y']))
+        n = len(self.ball_history)
+        if n < BALL_VELOCITY_MIN_SAMPLES:
+            return {"vx": 0.0, "vy": 0.0, "speed": 0.0}
+        t0, x0, y0 = self.ball_history[0]
+        t1, x1, y1 = self.ball_history[-1]
+        dt = t1 - t0
+        if dt < 1e-6:
+            return {"vx": 0.0, "vy": 0.0, "speed": 0.0}
+        vx = (x1 - x0) / dt
+        vy = (y1 - y0) / dt
+        speed = math.hypot(vx, vy)
+        return {"vx": round(vx, 2), "vy": round(vy, 2), "speed": round(speed, 2)}
+
     def _check_reset(self):
         """Check for warp-and-resume reset flag. Clears all stateful metrics."""
         if os.path.exists(RESET_FLAG):
             self.total_score_sum = 0.0
             self.score_samples_count = 0
             self.momentum_window.clear()
+            self.ball_history.clear()
             self.prev_score_blue = 0
             self.prev_score_red = 0
             self.last_score = 0.0
@@ -188,13 +212,17 @@ class ScoreNode(Node):
             self.momentum_window.append((timestamp, score))
             momentum_30s, momentum_trend = self._calculate_momentum()
 
+            # Ball velocity (deque-based position history)
+            ball_vel = self._compute_ball_velocity(timestamp, ball)
+
             out_data = {
                 "current_numerical_score": round(score, 2),
                 "average_numerical_score": round(avg_score, 2),
                 "momentum_30s": momentum_30s,
                 "momentum_trend": momentum_trend,
                 "fact_label": self._fact_label(ents, ball),
-                "ball_possession_fact": self._poss_label(ents, ball)
+                "ball_possession_fact": self._poss_label(ents, ball),
+                "ball_velocity": ball_vel
             }
             out_msg = String()
             out_msg.data = json.dumps(out_data)

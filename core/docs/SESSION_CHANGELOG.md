@@ -3,6 +3,104 @@
 > For full history (2026-07-13 to 2026-08-02), see `SESSION_CHANGELOG_archive.md`.
 > Compressed on 2026-08-05. Key findings are in the power files and `LESSONS_LEARNED.md`.
 
+## 2026-08-19 — v6.6 calibration mode (demo/calibration pipeline, COMPLETE)
+
+**Goal:** Build an interactive demo/calibration mode for bot control using
+the existing LLM→evaluator→bridge pipeline, without new ROS2 nodes or
+bridge queue (weg). Reuse soccer infrastructure for non-soccer calibration.
+
+**Done:**
+- `--demo` flag in `launch_r2k.sh` + `setup_r2k.py` → mode="demo"
+- `--no-visualizer` flag (Gazebo GUI, no matplotlib visualizer)
+- Evaluator: sequence-based waypoint tracking (arrival detection,
+  `hold_duration` for pauses, target label injection into user prompt)
+- Interactive task input: `task_input.json` → 7B compiler (one-shot) →
+  `waypoints.json` → 3B executor (per-cycle string→coordinate lookup)
+- Fast-path control commands: stop/resume/restart/go home (instant, <20ms,
+  bypass compiler, write directly to `current_strategy.json`)
+- Active brake on Hold (zero Twist/RPC instead of skip — fixes coasting
+  on virtual, Yahboom, K1)
+- Waypath polyline overlay in matplotlib visualizer (cyan dotted, reads
+  `waypoints.json` mtime)
+- CLI tool (`calib_cli.py`) with `help` → numbered sample commands
+- Field orientation corrected (left=Y+, right=Y-, wing in opponent half)
+- `DEMO_LANDMARKS` with wing/corner defaults ("wing"=left, "corner"=own left)
+- Probe results: 3B 73% (19/26), 7B 85% (22/26) on 26 NL tasks
+- Soccer nodes skipped in demo mode (referee, score, reward, red evaluator)
+
+**Key design decisions:**
+- **Two-model architecture:** 3B executor (per-cycle, 2GB VRAM) +
+  7B compiler (one-shot, 5GB VRAM). Both fit on 5090 (7GB total).
+- **No weg queue:** per-cycle LLM lookup, not pre-compiled execution.
+  The LLM reads `target` + `waypoints` from the user prompt each cycle.
+- **Waypoint table in user prompt** (dynamic `min_ents["waypoints"]`),
+  not system prompt (`rules_demo.txt` is static). When the user sends
+  a new task, the compiler updates `waypoints.json` and the LLM
+  immediately sees new coordinates.
+- **No colcon build needed** — all changes are standalone Python + text
+  fragments. No tracker/world/Docker changes.
+- **No yaw in Worldstate** — deferred to v7 (bridge already has yaw from
+  `/gazebo/model_states`; design in `docs/v7/calibration_rotation_design.md`)
+- **Grid-cell symbolic approach tested and rejected** — 3B scored 0/20
+  (worse than raw coords 15/20). Only 14B handled grid (20/20).
+- **Time-indexed CSV schedule tested and rejected** — all models fail at
+  exact thresholds (5.0, 15.0, 25.0). Sequence approach (arrival
+  detection, no time) is more reliable.
+- **Sequence + raw coordinates** is the winning executor architecture:
+  evaluator tracks sequence (arrival < 0.5m → advance), injects target
+  label, LLM does string→coordinate lookup (100% with 1 sample on 3B).
+
+**Lessons learned (see LESSONS_LEARNED.md §v6.6 for full):**
+- 3B is a transducer, not a reasoner — string lookup works, numeric
+  comparison/trig/state tracking doesn't
+- "stop" needs active brake (zero velocity), not skip — coasting unsafe
+- Waypoint table must be in user prompt, not system prompt (dynamic vs cached)
+- Wing = opponent half (Y positive = left from own goal POV)
+- Determinism confirmed: temperature=0.0 stable across 20 reps (R8: 20/20)
+
+**Files touched:**
+- `launch_r2k.sh` — --demo, --no-visualizer, skip soccer nodes
+- `src/setup_r2k.py` — --demo, mode override, 7B compiler, waypoints.json
+- `src/ai_tactics/r2k_evaluator.py` — sequence tracking, compiler, fast-path
+- `src/ai_tactics/ollama_sandbox_bridge.py` — active brake on Hold
+- `src/r2k_visualizer.py` — waypath polyline overlay
+- `src/tools/dump_prompt.py` — --demo flag + package-dir lookup
+- `src/tests/test_chart_specs.py` — exclude 1vs0/2vs0 from hand-crafted
+- `src/relay/single_bot.json` (NEW) — single virtual bot relay
+- `src/relay/hardware_mirror.json` — k1_bot mirror_of → blue_1
+- `src/scenario/1vs0_waypoint/scenario.json` (NEW) — 1 bot + ball at (0,0)/(1,1)
+- `src/strategy/fragments/rules_demo.txt` (NEW) — executor prompt
+- `src/strategy/fragments/rules_demo_core.txt` (NEW) — clean non-soccer core
+- `src/strategy/fragments/samples_demo.txt` (NEW) — 1 executor example
+- `src/strategy/fragments/samples_demo_compiler.txt` (NEW) — 3 compiler examples
+- `tools/calib_cli.py` (NEW) — interactive CLI with help/number-pick
+- `docs/calibration_cheat_sheet.md` (NEW) — commands, model capabilities
+- `docs/v7/calibration_rotation_design.md` (NEW) — Option D Face action
+- `docs/SESSION_CHANGELOG.md` — this entry
+- `docs/LESSONS_LEARNED.md` — v6.6 calibration lessons
+- `docs/v66_calibration_poc.md` — marked superseded
+- `src/ros2k_knowledge/META_KNOWLEDGE_ROUTER.md` — v6.6 entries
+- `AGENTS.md` — Demo/Calibration section
+- `docs/v7/pit_of_nice_ideas.md` — calibration section
+
+**Files deleted:** None
+
+**Not yet done:**
+- Rotation/Face action (v7 — design in `docs/v7/calibration_rotation_design.md`)
+- Visual markers in Gazebo (requires colcon build — deferred)
+- Yaw in Worldstate (tracker change — v7 Task 3a)
+- K1 relay profile (`single_k1.json` not created)
+- 14B/32B model testing for calibration
+- Llama 3.2 regression test (Phase 4b — not started)
+- Phase W (watchdog — not started)
+
+**Next:**
+1. Merge v6.6 to main
+2. Start v7: TeamCaptain architecture, yaw/tracker, rotation/Face action
+3. Phase W (watchdog), Phase 4b (Llama regression)
+
+**Blockers:** None
+
 ## 2026-08-13 (cont.2) — U22 regression of U24 post-parse-fix work (COMPLETE)
 
 **Goal:** Run the full regression suite on U22 (native RTX 4080) to validate U24's post-parse-fix code: score function V7f, compact JSON samples, parse pipeline fix, 120-match benchmark KPI thresholds.
@@ -771,3 +869,76 @@ Both fixes are in commit `84b9c88` on `feature/ros2k_behavior_optimization`. The
 Phase 4b (Llama regression), Phase 5 (final KPI + code freeze v6.4)
 
 **Blockers:** None. 147 tests pass. Ollama on GPU, qwen2.5:3b warm.
+
+## 2026-08-13 (cont.4) — C3 post-v6.5 diff analysis, v6.5 code freeze + merge to main
+
+**Goal:** Determine whether v6.5/v7 work invalidated any C3 findings,
+freeze v6.5, merge to main, and prepare student review handover.
+
+**Done:**
+
+### C3 post-v6.5 diff analysis (59fe93b..HEAD)
+
+- **Fragments:** NO CHANGE since v6.5 commit 0b87b03. Current fragments
+  ARE the F0 structure (C3 Phase F optimum). No contradiction.
+- **Evaluator:** 3 post-C3 fixes (compact JSON 4b92ce8, OUTPUT marker
+  84b9c88, parse pipeline 5cd0a7a) — all JSON-mode, do NOT affect TEXT
+  mode (C3's primary mode). None invalidate C3 findings.
+- **C3 artifacts:** Preserved (c3_phase0_literature_and_plan.md,
+  c3_vocabulary_dictionary.md, c3_testcase_review.md,
+  c3_scenario_generation_playbook.md, llm_probe.py, i3_battery.py,
+  corpus.jsonl). Deleted in cleanup 59fe93b: vocab_probe.py,
+  build_corpus.py, phase1_probes/, prompt_structure/, vocab_probe_log.md
+  — findings survive in dictionary + changelog + redesign_eval_project_info.md.
+- **K3 regression identified:** header_k3.txt has KICK/SPLIT/PASS rules
+  but evaluator reads header.txt (no K3 rules). Phase F4 proved K3 rules
+  are load-bearing (F4_nok3h: 0/3+0/3 on gap diagnostics). v6.5 dynamic
+  roles may cover similar ground — needs verification before Phase W.
+
+### v6.5 code freeze + merge to main
+
+- Restored v65_rebaseline_raw.json (accidentally truncated, 31 lines).
+- Committed 2 docs: redesign_eval_project_info.md (597 lines) +
+  student_projects_autumn_fair.md (786 lines). Commit 0426d20.
+- Tests: 498 passed, 11 skipped, 0 failed (excluding 2 pre-existing
+  broken test files).
+- Merged feature/ros2k_behavior_optimization to main (--no-ff, clean,
+  no conflicts). Merge commit 417ef12.
+- Pushed main + feature branch to origin. Branch protection bypassed
+  for direct push to main.
+- Students pull main to get all 50 scenario packages + all C3 docs.
+
+### Student review handover
+
+- Wrote student review intro (17 hand-crafted scenarios, scoring
+  criteria, field orientation, controlled vocabulary).
+- Wrote Captain handover (git commands for clone/pull/branch/merge/tag).
+
+**Files touched:**
+- core/docs/redesign_eval_project_info.md (NEW, committed 0426d20)
+- core/docs/student_projects_autumn_fair.md (NEW, committed 0426d20)
+- core/docs/SESSION_CHANGELOG.md (this entry)
+- core/src/results/v65_rebaseline_raw.json (restored, already on main
+  via merge)
+
+**Files deleted:** None
+
+**Not yet done:**
+- K3 regression fix (evaluator reads header.txt not header_k3.txt)
+- Phase W (watchdog & closed-loop feedback) — not started
+- Phase 4b (Llama 3.2 regression test) — not started
+- Nemotron-3-Nano:4b baseline — discussed, not run
+- 2 broken test files (test_adaptive_horizon.py, test_i3_sweep.py) —
+  not removed
+- .gitignore broadening for 381 untracked files — not done
+
+**Next:**
+1. Fix K3 regression (1-line change: evaluator reads header_k3.txt)
+2. Phase W (watchdog design + text-test, ~76 min, no Gazebo)
+3. Optionally: Nemotron baseline, Llama 3.2 regression, broken test cleanup
+
+**Blockers:**
+- K3 regression may affect Phase W design (watchdog needs to know what
+  the LLM is supposed to output — with or without K3 rules)
+- Untracked C3 tools (llm_probe.py, i3_battery.py, corpus.jsonl) on disk
+  but not committed — risk of loss on git checkout
