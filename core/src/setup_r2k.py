@@ -4,6 +4,7 @@ import shutil
 import os
 import json
 import re
+import requests
 
 def clean_json_samples(content, explain_active):
     pattern = r'ASSISTANT:\s*'
@@ -75,6 +76,66 @@ def clean_json_samples(content, explain_active):
     output += content[last_idx:]
     return output
 
+def default_hexagonal_waypoints():
+    """Default calibration path: hexagonal loop."""
+    return [
+        {"label": "FIRST",  "x": -1.0, "y": 1.5, "hold_duration": 0},
+        {"label": "SECOND", "x":  1.0, "y": 1.5, "hold_duration": 0},
+        {"label": "THIRD",  "x":  3.0, "y": 0.0, "hold_duration": 0},
+        {"label": "FOURTH", "x":  1.0, "y": -1.5, "hold_duration": 0},
+        {"label": "FIFTH",  "x": -1.0, "y": -1.5, "hold_duration": 0},
+        {"label": "SIXTH",  "x": -3.0, "y": 0.0, "hold_duration": 0},
+    ]
+
+def compile_task_to_waypoints(task, executor_model):
+    """One-shot LLM call: translate NL task to named waypoint list.
+
+    Uses a larger model (qwen2.5:7b) for compilation — the executor model
+    (3b) is too small for reliable NL→waypoint generation.
+    """
+    compiler_model = "qwen2.5:7b"
+    if "7b" in executor_model or "14b" in executor_model:
+        compiler_model = executor_model
+
+    sys_prompt = """You are a robot path planner. Convert the task into a list of named waypoints.
+
+Output ONLY raw JSON:
+{"waypoints": [{"label": "FIRST", "x": <float>, "y": <float>}, {"label": "SECOND", ...}, ...]}
+
+Rules:
+- Label waypoints sequentially: FIRST, SECOND, THIRD, FOURTH, FIFTH, SIXTH, ...
+- Use absolute coordinates.
+- Insert a "START" waypoint at the bot's current position if needed.
+- No timing, no Hold — just the waypoint list.
+
+Example:
+Task: "move to (2, 0), then move to (2, 3)"
+Output: {"waypoints": [{"label": "FIRST", "x": 2.0, "y": 0.0}, {"label": "SECOND", "x": 2.0, "y": 3.0}]}
+"""
+
+    payload = {
+        "model": compiler_model,
+        "prompt": f"Task: {task}\n\nOutput the JSON.",
+        "system": sys_prompt,
+        "stream": False,
+        "keep_alive": "30m",
+        "options": {"temperature": 0.0, "num_predict": 400, "num_ctx": 4096, "stop": ["<|im_end|>"]},
+    }
+    try:
+        print(f"Compiling task with {compiler_model}: \"{task[:60]}...\"")
+        resp = requests.post("http://127.0.0.1:11434/api/generate", json=payload, timeout=120)
+        raw = resp.json().get("response", "").strip()
+        if raw.startswith("```"):
+            raw = raw.split("```")[1].strip("json\n")
+        data = json.loads(raw)
+        wps = data.get("waypoints", data)
+        if isinstance(wps, list) and len(wps) > 0:
+            return [{"label": w["label"], "x": float(w["x"]), "y": float(w["y"]),
+                     "hold_duration": float(w.get("hold_duration", 0))} for w in wps]
+    except Exception as e:
+        print(f"⚠️ Compiler failed ({e}), using default hexagonal path")
+    return default_hexagonal_waypoints()
+
 def main():
     parser = argparse.ArgumentParser(description="ROS2K Setup")
     parser.add_argument('--scenario', type=str, default='2vs2_default')
@@ -83,6 +144,7 @@ def main():
     parser.add_argument('--relay', type=str, default='only_sim_bots')
     parser.add_argument('--explain', action='store_true', dest='explain', default=True)
     parser.add_argument('--no-explain', action='store_false', dest='explain')
+    parser.add_argument('--demo', action='store_true', help='Demo/calibration mode — overrides mode to "demo"')
     args = parser.parse_args()
     
     os.makedirs('ai_tactics', exist_ok=True)
@@ -110,12 +172,31 @@ def main():
     with open(scene_file, 'r') as f:
         data = json.load(f)
         blue_bots = sorted([k for k in data.get('entities', {}).keys() if 'blue' in k])
-        
+
     mode = data.get('mode') or (args.scenario.split('_')[0] if '_' in args.scenario else "3vs3")
+    if args.demo:
+        mode = "demo"
+        data['mode'] = "demo"
+        with open('ai_tactics/active_scenario.json', 'w') as f:
+            json.dump(data, f, indent=2)
+
+        # Compile waypoints: if scenario has a "task" field, use the 7B compiler;
+        # otherwise use the default hexagonal path (no LLM call needed).
+        os.makedirs('shared_state', exist_ok=True)
+        task = data.get('task', '')
+        if task:
+            waypoints = compile_task_to_waypoints(task, args.model)
+        else:
+            waypoints = default_hexagonal_waypoints()
+        with open('shared_state/waypoints.json', 'w') as f:
+            json.dump({"waypoints": waypoints}, f, indent=2)
+        wp_labels = [w["label"] for w in waypoints]
+        print(f"Demo mode: {len(waypoints)} waypoints: {wp_labels}")
     clean_strat = args.strategy.replace('strat_', '')
     frag_path = "strategy/fragments"
     prompt_lines = [f"ACT_ON_BOTS: {', '.join(blue_bots)}", f"MODE: {mode}\n"]
-    files = ["header.txt", "rules_core.txt"]
+    core_file = "rules_demo_core.txt" if mode == "demo" else "rules_core.txt"
+    files = ["header.txt", core_file]
     files.append(f"rules_{clean_strat}.txt" if os.path.exists(f"{frag_path}/rules_{clean_strat}.txt") else f"rules_{mode}.txt")
     if os.path.exists(f"{frag_path}/samples_{clean_strat}.txt"):
         files.append(f"samples_{clean_strat}.txt")

@@ -1,0 +1,12 @@
+--- EXAMPLE 1: LANDMARK NAVIGATION ---
+Task: go to the left wing, pause 2 seconds, go to the right wing
+Output: {"waypoints": [{"label": "FIRST", "x": -2.0, "y": 1.5}, {"label": "SECOND", "x": -2.0, "y": 1.5, "hold_duration": 2.0}, {"label": "THIRD", "x": 2.0, "y": 1.5}, {"label": "START", "x": -3.0, "y": 0.0}]}
+
+--- EXAMPLE 2: APPROACH BALL ---
+Task: approach the ball into kicking distance
+Current world state: blue_1 at (-3.0, 0.0), soccer_ball at (1.8, 0.3)
+Output: {"waypoints": [{"label": "FIRST", "x": 1.5, "y": 0.3}, {"label": "START", "x": -3.0, "y": 0.0}]}
+
+--- EXAMPLE 3: DRAW SHAPE ---
+Task: draw a square: 2m north, 2m east, 2m south, 2m west
+Output: {"waypoints": [{"label": "FIRST", "x": -3.0, "y": 2.0}, {"label": "SECOND", "x": -1.0, "y": 2.0}, {"label": "THIRD", "x": -1.0, "y": 0.0}, {"label": "FOURTH", "x": -3.0, "y": 0.0}, {"label": "START", "x": -3.0, "y": 0.0}]}

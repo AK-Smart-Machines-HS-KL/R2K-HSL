@@ -1,0 +1,9 @@
+{
+  "scenario_name": "1vs0_waypoint",
+  "mode": "1vs0",
+  "tactical_situation": "Single bot waypath calibration — no opponents, no soccer",
+  "entities": {
+    "soccer_ball": {"x": 1.0, "y": 1.0},
+    "blue_1": {"x": 0.0, "y": 0.0}
+  }
+}

@@ -1,0 +1,11 @@
+--- EXAMPLE ---
+INPUT: {"target": "FIRST", "waypoints": {"FIRST": {"x": -1.0, "y": 1.5}, "SECOND": {"x": 1.0, "y": 1.5}}, "blue_1": {"x": -2.0, "y": 0.5}}
+ASSISTANT: {
+  "assignments": {
+    "blue_1": {
+      "action": "Move",
+      "x": -1.0,
+      "y": 1.5
+    }
+  }
+}

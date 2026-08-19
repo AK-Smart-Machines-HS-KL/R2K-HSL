@@ -36,7 +36,7 @@ from gen_score_chart import (
 
 
 def _is_handcrafted(name):
-    return not name.startswith("emp_") and not name.startswith("w")
+    return not name.startswith("emp_") and not name.startswith("w") and not name.startswith("1vs0") and not name.startswith("2vs0")
 
 
 def _is_empirical(name):
