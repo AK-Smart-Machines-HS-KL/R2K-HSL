@@ -199,6 +199,47 @@ See `META_KNOWLEDGE_ROUTER.md` §3.
   `r2k_evaluator.py` — tune there, not via flags. **[V6.3]** `R2K_EXPLAIN` env var
   (set by `launch_r2k.sh`) controls `{{EXPLAIN_INSTRUCTION}}` replacement in `header.txt`.
 
+## Demo / Calibration Mode (v6.6)
+
+Interactive bot calibration using the existing evaluator→bridge pipeline.
+See `docs/calibration_cheat_sheet.md` for the full command reference.
+
+### Launch
+```
+# Gazebo GUI, no matplotlib visualizer
+./launch_r2k.sh --demo --no-visualizer --scenario 1vs0_waypoint --relay single_bot
+
+# Interactive CLI (second terminal)
+python3 tools/calib_cli.py
+# Type "help" for numbered sample commands, type a number to send
+```
+
+### Architecture
+- **3B executor** (per-cycle): reads "target" label → looks up coordinates → outputs Move(x,y)
+- **7B compiler** (one-shot): reads NL task + world state + landmarks → outputs waypoint list
+- **Evaluator**: tracks sequence (arrival detection), injects target label, detects task changes
+- **Bridge**: unchanged (PID to x,y). Active brake on Hold (zero velocity, not skip)
+- **Fast-path commands**: stop/resume/restart/go home — instant, bypass compiler
+
+### Key files
+- `strategy/fragments/rules_demo.txt` — executor system prompt (target→coords lookup)
+- `strategy/fragments/rules_demo_core.txt` — clean non-soccer core (field bounds + Move/Hold)
+- `shared_state/waypoints.json` — compiled waypoint list (written by 7B compiler)
+- `shared_state/task_input.json` — interactive task input (written by calib_cli.py)
+- `docs/calibration_cheat_sheet.md` — user-facing command reference with model capabilities
+- `docs/v7/calibration_rotation_design.md` — v7 rotation/Face action design (Option D)
+
+### Hardware
+- `--relay single_bot` — Gazebo only
+- `--relay hardware_mirror` — Yahboom + K1 (both mirror blue_1)
+- Active brake works on all hardware types (Twist zeros / RPC 2001 zeros)
+
+### Not yet available (v7)
+- Rotation/Face commands (needs bridge Face action — design in `docs/v7/calibration_rotation_design.md`)
+- Visual markers in Gazebo (needs colcon build for world file)
+- Bot yaw in Worldstate (needs tracker change — v7 Task 3a)
+- Relative movement "forward"/"turn left" (needs yaw)
+
 ## Session continuity protocol
 
 **Before ending a session**, append an entry to `core/docs/SESSION_CHANGELOG.md`.

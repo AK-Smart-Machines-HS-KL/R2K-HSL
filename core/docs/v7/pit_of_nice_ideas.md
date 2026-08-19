@@ -123,3 +123,39 @@ Role assignment must move to CPU planner (TeamCaptain) in v7.
   Needed for before/after comparison. If lost, reconstructable from 150 logs.
 - `umschaltmomente.jsonl` — deleted in 2026-08-11 cleanup. Reconstructable
   via `tools/umschalt_extractor.py` against match traces.
+
+---
+
+## 9. Calibration (v6.6 → v7)
+
+**v6.6 implemented** (2026-08-19): `--demo` flag, interactive CLI, sequence
+tracking (arrival detection, no weg queue), 3B executor + 7B compiler
+two-model architecture. See `docs/calibration_cheat_sheet.md` for the full
+command reference and model capabilities.
+
+**v7 calibration tasks:**
+
+| Task | Description | Design doc |
+|---|---|---|
+| Rotation/Face action | `face north/south/east/west`, `turn left/right`, `rotate N degrees` — bridge reads yaw from Gazebo, no tracker/colcon change needed | `docs/v7/calibration_rotation_design.md` (Option D) |
+| Yaw in Worldstate | `tracker_node.py` adds yaw to `/world_positions` — enables compiler to know bot heading for relative commands | scrum Task 3a |
+| Visual markers in Gazebo | Static SDF markers (red gate, blue cone, yellow marker, green pylon) in world file — requires colcon build | — |
+| K1 relay profile | `relay/single_k1.json` — single K1 bot, no Gazebo sim | — |
+| 14B/32B model testing | Probe calibration commands on qwen2.5:14b (9GB) and qwen2.5:32b Q3 (14GB) — both fit on 5090 | — |
+| Dynamic entity spawning | Custom entities in scenario.json (markers, gates) — 4 code blockers (spawner, tracker, referee substring, score substring) | explore agent findings |
+| Interactive compiler latency | Async compiler call (threading) — bot keeps moving during ~1.2s compilation | — |
+
+**Probe results (2026-08-19, 26 tasks):**
+
+| Model | Overall | Landmarks | Shapes | Coords | Ball | Combos |
+|---|---|---|---|---|---|---|
+| qwen2.5:3b | 73% (19/26) | 70% | 80% | 67% | 0% | 50% |
+| qwen2.5:7b | 85% (22/26) | 90% | 100% | 100% | 100% | 50% |
+
+**Key v6.6 lessons (see `LESSONS_LEARNED.md` §v6.6):**
+- 3B is a transducer (string lookup), not a reasoner (no trig/distances/state)
+- "stop" needs active brake (zero velocity), not skip (coasting unsafe)
+- Waypoint table in user prompt (dynamic), not system prompt (cached)
+- Grid-cell symbolic approach rejected (3B scored 0/20)
+- Time-indexed CSV schedule rejected (boundary failures at thresholds)
+- Wing = opponent half (Y positive = left from own goal POV)

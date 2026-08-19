@@ -147,3 +147,58 @@ The 3B model reasons by comparison (who is closest), not arithmetic (is dist < 1
 Removing thresholds aligns the prompt with the model's capabilities. The model
 can't compute distances — telling it "within 1m" is both useless and hypocritical
 when the rules also say "do not compute exact distances."
+
+## v6.6: 3B is a transducer, not a reasoner
+
+The 3B model can: string→coordinate lookup (100% with 1 sample), NL→JSON
+for simple tasks (1-2 waypoints). It cannot: compute distances, compare
+numbers, track state, do trigonometry, or compile complex NL tasks (>4
+waypoints). Use the 7B as compiler (one-shot), 3B as executor (per-cycle).
+The 7B scored 85% on 26 NL tasks; the 3B scored 73%. The 3B's failures
+are mostly JSON parse errors on longer outputs, not geometric reasoning.
+
+## v6.6: "stop" needs active brake, not skip
+
+action=="hold" with `continue` (skip publishing) lets the bot coast on
+its last velocity. On hardware (K1 especially) this is unsafe — the K1
+keeps executing the last movement command indefinitely. Fix: publish
+zero velocity (Twist zeros / RPC 2001 with vx=0,vy=0,vyaw=0) every tick.
+
+## v6.6: Waypoint table goes in user prompt, not system prompt
+
+The system prompt (rules_demo.txt) is cached by (status, mode). When the
+user sends a new task, the compiler updates waypoints.json but the system
+prompt still has old coordinates. Fix: inject the waypoint table into
+min_ents (the user prompt) every cycle — the LLM always sees current coords.
+
+## v6.6: Grid-cell symbolic approach rejected
+
+Tested: label→grid_symbol→number two-step lookup. Result: 3B scored 0/20
+(worse than raw coords 15/20). The grid adds cognitive noise. Only the
+14B model handled grid (20/20) — not worth 10GB VRAM. Raw coordinates
+are the correct abstraction for the executor.
+
+## v6.6: Time-indexed schedule rejected
+
+Tested: elapsed→CSV row lookup. Result: all models fail at exact
+thresholds (5.0, 15.0, 25.0) — the model treats the boundary value as
+belonging to the previous interval. 1-second stop slots didn't fix this.
+The sequence approach (arrival detection, no time) is more reliable.
+
+## v6.6: Wing is in the opponent half
+
+Soccer convention: "attack over the wing" = advance along the side toward
+the opponent goal. Left wing = Y positive (from own goal POV), in
+opponent half (X > 0). Default "wing" = left, default "corner" = own left.
+Bot starts at center (0, 0). Ball spawns at (1, 1).
+
+## v6.6: Two-model architecture (3B executor + 7B compiler)
+
+The 3B (2GB VRAM) runs per-cycle as the executor: reads "target" label →
+looks up coordinates → outputs Move(x,y). The 7B (5GB VRAM) runs one-shot
+as the compiler: reads NL task + world state + landmarks → outputs
+waypoint list. Both fit on the 5090 (7GB total). The 3B is always running
+(per-cycle, ~650ms latency). The 7B is called only on task changes
+(~1.2s latency). Fast-path commands (stop/resume/restart/go home) bypass
+both models entirely — instant (<20ms), write directly to
+current_strategy.json.
