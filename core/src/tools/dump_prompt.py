@@ -100,6 +100,7 @@ def main():
     parser.add_argument('--strategy', type=str, default='strat_aggro')
     parser.add_argument('--explain', action='store_true', dest='explain', default=True)
     parser.add_argument('--no-explain', action='store_false', dest='explain')
+    parser.add_argument('--demo', action='store_true', help='Demo/calibration mode — overrides mode to "demo"')
     parser.add_argument('--fragments-dir', type=str, default=None,
                         help='Override fragments directory (default: strategy/fragments)')
     args = parser.parse_args()
@@ -110,6 +111,7 @@ def main():
 
     scene_file = None
     for candidate in [
+        os.path.join(src_dir, f"scenario/{args.scenario}/scenario.json"),
         os.path.join(src_dir, f"scenario/{args.scenario}.json"),
         os.path.join(src_dir, f"scenarios/{args.scenario}.json"),
     ]:
@@ -125,11 +127,14 @@ def main():
     blue_bots = sorted([k for k in data.get('entities', {}).keys() if 'blue' in k])
 
     mode = data.get('mode') or (args.scenario.split('_')[0] if '_' in args.scenario else "3vs3")
+    if args.demo:
+        mode = "demo"
     clean_strat = args.strategy.replace('strat_', '')
 
     prompt_lines = [f"ACT_ON_BOTS: {', '.join(blue_bots)}", f"MODE: {mode}\n"]
 
-    files = ["header.txt", "rules_core.txt"]
+    core_file = "rules_demo_core.txt" if mode == "demo" else "rules_core.txt"
+    files = ["header.txt", core_file]
     rules_strat = f"rules_{clean_strat}.txt"
     rules_mode = f"rules_{mode}.txt"
     if os.path.exists(os.path.join(frag_path, rules_strat)):

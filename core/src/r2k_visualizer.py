@@ -21,11 +21,14 @@ except ImportError:
 plt.rcParams['toolbar'] = 'None'
 BASE_DIR = os.getenv('ROS2K_WS', '.')
 STRAT_PATH = os.path.join(BASE_DIR, "shared_state", "current_strategy.json")
+WAYPOINTS_PATH = os.path.join(BASE_DIR, "shared_state", "waypoints.json")
 LOG_DIR = os.path.join(BASE_DIR, "logs")
 
 latest_world_state = {}
 latest_tactical_score = {}
 latest_match_state = {}
+last_wp_mtime = 0
+current_waypoints = []
 
 # Momentum history tracking
 momentum_history = deque(maxlen=1200)  # 120s at 10Hz
@@ -167,6 +170,12 @@ def init_figure(fig):
                                                      lw=2, ls='--', alpha=0.8))
         arr.set_visible(False)
         a['arrows'].append(arr)
+
+    # Waypath polyline (cyan dotted — demo mode calibration path)
+    a['waypath_line'], = a['ax_pitch'].plot([], [], color='#00e5ff', lw=1.5,
+                                            ls=':', alpha=0.6, marker='o',
+                                            markersize=4, markerfacecolor='#00e5ff')
+    a['waypath_line'].set_visible(False)
 
     # --- Momentum sub-panel (bottom, full width) ---
     a['ax_mom'] = fig.add_axes([0.05, 0.05, 0.92, 0.18])
@@ -390,6 +399,15 @@ def update_figure(fig, state, score_data, match_data, decision, last_strat_time)
     # Hide unused arrows
     for i in range(arrow_idx, MAX_ARROWS):
         a['arrows'][i].set_visible(False)
+
+    # --- Waypath polyline (demo mode) ---
+    if current_waypoints:
+        wp_xs = [to_plot(w['x']) for w in current_waypoints]
+        wp_ys = [to_plot(w['y']) for w in current_waypoints]
+        a['waypath_line'].set_data(wp_xs, wp_ys)
+        a['waypath_line'].set_visible(True)
+    else:
+        a['waypath_line'].set_visible(False)
 
     # --- Momentum panel ---
     # Remove old fills
@@ -927,6 +945,18 @@ def main():
                         current_decision = json.load(f)
                         last_strat_time_abs = time.time()
                         render_needed = True
+            except: pass
+
+        global last_wp_mtime, current_waypoints
+        if os.path.exists(WAYPOINTS_PATH):
+            try:
+                wp_mtime = os.path.getmtime(WAYPOINTS_PATH)
+                if wp_mtime > last_wp_mtime:
+                    last_wp_mtime = wp_mtime
+                    with open(WAYPOINTS_PATH, 'r') as f:
+                        wp_data = json.load(f)
+                    current_waypoints = wp_data.get("waypoints", [])
+                    render_needed = True
             except: pass
 
         if render_needed:

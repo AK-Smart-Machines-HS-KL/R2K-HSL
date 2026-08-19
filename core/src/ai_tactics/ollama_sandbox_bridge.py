@@ -196,7 +196,19 @@ class HalBridge(Node):
                 is_attacking = False
 
                 if action == 'hold':
-                    continue  # explicit hold: bot keeps current position
+                    # Active brake: publish zero velocity to stop the bot
+                    # (not just skip — skipping lets the bot coast on its
+                    # last velocity command, which is unsafe on hardware)
+                    if hw_type == 'k1' and HAS_BOOSTER_MSGS:
+                        rpc = RpcReqMsg()
+                        rpc.uuid = f"hold_{int(time.time()*1000)}"
+                        rpc.header = json.dumps({"api_id": 2001})
+                        rpc.body = json.dumps({"vx": 0.0, "vy": 0.0, "vyaw": 0.0})
+                        self.pubs[hw_name].publish(rpc)
+                    else:
+                        t = Twist()
+                        self.pubs[hw_name].publish(t)
+                    continue
 
                 if action == 'kick':
                     is_attacking = True
