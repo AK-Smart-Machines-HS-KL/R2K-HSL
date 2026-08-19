@@ -3,6 +3,104 @@
 > For full history (2026-07-13 to 2026-08-02), see `SESSION_CHANGELOG_archive.md`.
 > Compressed on 2026-08-05. Key findings are in the power files and `LESSONS_LEARNED.md`.
 
+## 2026-08-19 — v6.6 calibration mode (demo/calibration pipeline, COMPLETE)
+
+**Goal:** Build an interactive demo/calibration mode for bot control using
+the existing LLM→evaluator→bridge pipeline, without new ROS2 nodes or
+bridge queue (weg). Reuse soccer infrastructure for non-soccer calibration.
+
+**Done:**
+- `--demo` flag in `launch_r2k.sh` + `setup_r2k.py` → mode="demo"
+- `--no-visualizer` flag (Gazebo GUI, no matplotlib visualizer)
+- Evaluator: sequence-based waypoint tracking (arrival detection,
+  `hold_duration` for pauses, target label injection into user prompt)
+- Interactive task input: `task_input.json` → 7B compiler (one-shot) →
+  `waypoints.json` → 3B executor (per-cycle string→coordinate lookup)
+- Fast-path control commands: stop/resume/restart/go home (instant, <20ms,
+  bypass compiler, write directly to `current_strategy.json`)
+- Active brake on Hold (zero Twist/RPC instead of skip — fixes coasting
+  on virtual, Yahboom, K1)
+- Waypath polyline overlay in matplotlib visualizer (cyan dotted, reads
+  `waypoints.json` mtime)
+- CLI tool (`calib_cli.py`) with `help` → numbered sample commands
+- Field orientation corrected (left=Y+, right=Y-, wing in opponent half)
+- `DEMO_LANDMARKS` with wing/corner defaults ("wing"=left, "corner"=own left)
+- Probe results: 3B 73% (19/26), 7B 85% (22/26) on 26 NL tasks
+- Soccer nodes skipped in demo mode (referee, score, reward, red evaluator)
+
+**Key design decisions:**
+- **Two-model architecture:** 3B executor (per-cycle, 2GB VRAM) +
+  7B compiler (one-shot, 5GB VRAM). Both fit on 5090 (7GB total).
+- **No weg queue:** per-cycle LLM lookup, not pre-compiled execution.
+  The LLM reads `target` + `waypoints` from the user prompt each cycle.
+- **Waypoint table in user prompt** (dynamic `min_ents["waypoints"]`),
+  not system prompt (`rules_demo.txt` is static). When the user sends
+  a new task, the compiler updates `waypoints.json` and the LLM
+  immediately sees new coordinates.
+- **No colcon build needed** — all changes are standalone Python + text
+  fragments. No tracker/world/Docker changes.
+- **No yaw in Worldstate** — deferred to v7 (bridge already has yaw from
+  `/gazebo/model_states`; design in `docs/v7/calibration_rotation_design.md`)
+- **Grid-cell symbolic approach tested and rejected** — 3B scored 0/20
+  (worse than raw coords 15/20). Only 14B handled grid (20/20).
+- **Time-indexed CSV schedule tested and rejected** — all models fail at
+  exact thresholds (5.0, 15.0, 25.0). Sequence approach (arrival
+  detection, no time) is more reliable.
+- **Sequence + raw coordinates** is the winning executor architecture:
+  evaluator tracks sequence (arrival < 0.5m → advance), injects target
+  label, LLM does string→coordinate lookup (100% with 1 sample on 3B).
+
+**Lessons learned (see LESSONS_LEARNED.md §v6.6 for full):**
+- 3B is a transducer, not a reasoner — string lookup works, numeric
+  comparison/trig/state tracking doesn't
+- "stop" needs active brake (zero velocity), not skip — coasting unsafe
+- Waypoint table must be in user prompt, not system prompt (dynamic vs cached)
+- Wing = opponent half (Y positive = left from own goal POV)
+- Determinism confirmed: temperature=0.0 stable across 20 reps (R8: 20/20)
+
+**Files touched:**
+- `launch_r2k.sh` — --demo, --no-visualizer, skip soccer nodes
+- `src/setup_r2k.py` — --demo, mode override, 7B compiler, waypoints.json
+- `src/ai_tactics/r2k_evaluator.py` — sequence tracking, compiler, fast-path
+- `src/ai_tactics/ollama_sandbox_bridge.py` — active brake on Hold
+- `src/r2k_visualizer.py` — waypath polyline overlay
+- `src/tools/dump_prompt.py` — --demo flag + package-dir lookup
+- `src/tests/test_chart_specs.py` — exclude 1vs0/2vs0 from hand-crafted
+- `src/relay/single_bot.json` (NEW) — single virtual bot relay
+- `src/relay/hardware_mirror.json` — k1_bot mirror_of → blue_1
+- `src/scenario/1vs0_waypoint/scenario.json` (NEW) — 1 bot + ball at (0,0)/(1,1)
+- `src/strategy/fragments/rules_demo.txt` (NEW) — executor prompt
+- `src/strategy/fragments/rules_demo_core.txt` (NEW) — clean non-soccer core
+- `src/strategy/fragments/samples_demo.txt` (NEW) — 1 executor example
+- `src/strategy/fragments/samples_demo_compiler.txt` (NEW) — 3 compiler examples
+- `tools/calib_cli.py` (NEW) — interactive CLI with help/number-pick
+- `docs/calibration_cheat_sheet.md` (NEW) — commands, model capabilities
+- `docs/v7/calibration_rotation_design.md` (NEW) — Option D Face action
+- `docs/SESSION_CHANGELOG.md` — this entry
+- `docs/LESSONS_LEARNED.md` — v6.6 calibration lessons
+- `docs/v66_calibration_poc.md` — marked superseded
+- `src/ros2k_knowledge/META_KNOWLEDGE_ROUTER.md` — v6.6 entries
+- `AGENTS.md` — Demo/Calibration section
+- `docs/v7/pit_of_nice_ideas.md` — calibration section
+
+**Files deleted:** None
+
+**Not yet done:**
+- Rotation/Face action (v7 — design in `docs/v7/calibration_rotation_design.md`)
+- Visual markers in Gazebo (requires colcon build — deferred)
+- Yaw in Worldstate (tracker change — v7 Task 3a)
+- K1 relay profile (`single_k1.json` not created)
+- 14B/32B model testing for calibration
+- Llama 3.2 regression test (Phase 4b — not started)
+- Phase W (watchdog — not started)
+
+**Next:**
+1. Merge v6.6 to main
+2. Start v7: TeamCaptain architecture, yaw/tracker, rotation/Face action
+3. Phase W (watchdog), Phase 4b (Llama regression)
+
+**Blockers:** None
+
 ## 2026-08-13 (cont.2) — U22 regression of U24 post-parse-fix work (COMPLETE)
 
 **Goal:** Run the full regression suite on U22 (native RTX 4080) to validate U24's post-parse-fix code: score function V7f, compact JSON samples, parse pipeline fix, 120-match benchmark KPI thresholds.
