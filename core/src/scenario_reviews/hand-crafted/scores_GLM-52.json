@@ -1,0 +1,104 @@
+{
+  "scenario_01: 2vs2_default": {
+    "tactical_correctness": 4,
+    "position_reachability": "Yes",
+    "strategy_clarity": 4,
+    "comment": "Coherent attacking situation; red in possession with blue clustered out of shape. Positions within field bounds. Tactic implied but not explicitly described."
+  },
+  "scenario_02: 2vs2_goalie_pass": {
+    "tactical_correctness": 5,
+    "position_reachability": "Yes",
+    "strategy_clarity": 5,
+    "comment": "Goalie distribution to open blue_2 then re-kick toward uncovered red goal is optimal and clearly communicated. All coordinates reachable."
+  },
+  "scenario_03: 3vs3_attack_center": {
+    "tactical_correctness": 2,
+    "position_reachability": "Yes",
+    "strategy_clarity": 3,
+    "comment": "Described as blue attacking through center, but blue_2 and blue_3 are at x=-0.5 far behind the ball at x=2.2. Attackers not positioned to support a central attack — inconsistent with the described situation."
+  },
+  "scenario_04: 3vs3_attack_wing": {
+    "tactical_correctness": 2,
+    "position_reachability": "Yes",
+    "strategy_clarity": 3,
+    "comment": "Ball at (3.0, 2.0) for a crossing opportunity, but no blue outfield player is near the ball to deliver or receive a cross. Tactical setup contradicts the described situation."
+  },
+  "scenario_05: 3vs3_contain_delay": {
+    "tactical_correctness": 4,
+    "position_reachability": "Yes",
+    "strategy_clarity": 4,
+    "comment": "Contain-and-delay tactic is logical for blue defending deep. Slight mismatch: described as 'blue outnumbered' but it is 3v3; locally may be valid. Positions all reachable."
+  },
+  "scenario_06: 3vs3_deep_cross": {
+    "tactical_correctness": 5,
+    "position_reachability": "Yes",
+    "strategy_clarity": 5,
+    "comment": "Red delivers cross from deep right; blue brackets the goal mouth with short/long post guards. Excellent tactical framing and clear coordinate setup."
+  },
+  "scenario_07: 3vs3_def_transition": {
+    "tactical_correctness": 3,
+    "position_reachability": "Yes",
+    "strategy_clarity": 4,
+    "comment": "Counter-press after losing the ball in opponent half is sound in principle, but all blue robots are in their own half while the ball is at x=2.2 — unrealistic that no blue player is near the lost-ball zone to press."
+  },
+  "scenario_08: default": {
+    "tactical_correctness": 3,
+    "position_reachability": "Yes",
+    "strategy_clarity": 2,
+    "comment": "Symmetric kickoff default with no described tactical situation. Uses a different JSON schema (scene_type/label instead of scenario_name/mode/tactical_situation), making it inconsistent and ambiguous relative to the other entries."
+  },
+  "scenario_09: 3vs3_defensive_crisis": {
+    "tactical_correctness": 4,
+    "position_reachability": "Yes",
+    "strategy_clarity": 4,
+    "comment": "Ball deep in own zone under pressure with red_1 contesting — emergency clear is the correct response. Goalie and defenders positioned logically."
+  },
+  "scenario_10: 3vs3_fast_counter": {
+    "tactical_correctness": 5,
+    "position_reachability": "Yes",
+    "strategy_clarity": 5,
+    "comment": "Blue_1 next to the ball after winning possession with open space ahead and red pushed up — textbook transition counter. Clear and reachable."
+  },
+  "scenario_11: 3vs3_goalie_distribution": {
+    "tactical_correctness": 5,
+    "position_reachability": "Yes",
+    "strategy_clarity": 5,
+    "comment": "Goalie at the ball with blue_2 open on the wing and blue_3 marked centrally — distribution to the open wing is optimal and unambiguous."
+  },
+  "scenario_12: 3vs3_high_line": {
+    "tactical_correctness": 4,
+    "position_reachability": "Yes",
+    "strategy_clarity": 4,
+    "comment": "High defensive line with a through-ball threat from red_2 behind the line is a coherent scenario. Ball at y=2.25 is near the touchline but within bounds; decision framing is clear."
+  },
+  "scenario_13: 3vs3_long_shot": {
+    "tactical_correctness": 4,
+    "position_reachability": "Yes",
+    "strategy_clarity": 4,
+    "comment": "Ball near the box with the goalie off-center presents a valid shot-selection scenario. Red attackers well-positioned to shoot. Clear."
+  },
+  "scenario_14: 3vs3_overload": {
+    "tactical_correctness": 2,
+    "position_reachability": "No",
+    "strategy_clarity": 2,
+    "comment": "Described as blue_1 and blue_2 attacking in a 2-on-1, but blue_1 is at (-4.0, 0.0) — a goalie position far from the ball — and blue_3 occupies the identical coordinates as blue_1, an invalid overlap. Setup contradicts the described overload."
+  },
+  "scenario_15: 3vs3_possession_lost": {
+    "tactical_correctness": 3,
+    "position_reachability": "Yes",
+    "strategy_clarity": 4,
+    "comment": "Transition-to-defense concept is valid, but blue_1 at (-4.0, 0.0) and blue_3 at (-1.0, -1.0) are far from the ball at (1.0, 0.5). A team that just lost the ball in the opponent half should have players near the turnover — only blue_2 is remotely close."
+  },
+  "scenario_16: 3vs3_pressing_trap": {
+    "tactical_correctness": 4,
+    "position_reachability": "Yes",
+    "strategy_clarity": 4,
+    "comment": "Red high press with blue having no clear outlet is a well-formed pressure-breaking scenario. Blue is surrounded and positions are realistic."
+  },
+  "scenario_17: 3vs3_wing_switch": {
+    "tactical_correctness": 4,
+    "position_reachability": "Yes",
+    "strategy_clarity": 4,
+    "comment": "Stalled left-wing attack with red overloaded on that side — switching to the open right wing is the correct tactical response. blue_3 centrally placed to facilitate the switch. Clear."
+  }
+}

@@ -1,0 +1,104 @@
+{
+  "scenario_01: 2vs2_default": {
+    "tactical_correctness": 5,
+    "position_reachability": "Yes",
+    "strategy_clarity": 5,
+    "comment": "Blue's clustered position validates Red's attack strategy"
+  },
+  "scenario_02: 2vs2_goalie_pass": {
+    "tactical_correctness": 4,
+    "position_reachability": "Yes",
+    "strategy_clarity": 5,
+    "comment": "Effective distribution but slight delay in re-kick execution"
+  },
+  "scenario_03: 3vs3_attack_center": {
+    "tactical_correctness": 5,
+    "position_reachability": "Yes",
+    "strategy_clarity": 5,
+    "comment": "Perfect exploitation of central defensive gap"
+  },
+  "scenario_04: 3vs3_attack_wing": {
+    "tactical_correctness": 4,
+    "position_reachability": "Yes",
+    "strategy_clarity": 4,
+    "comment": "Valid crossing angle but supporting runners insufficient"
+  },
+  "scenario_05: 3vs3_contain_delay": {
+    "tactical_correctness": 5,
+    "position_reachability": "Yes",
+    "strategy_clarity": 5,
+    "comment": "Textbook containment against numerical disadvantage"
+  },
+  "scenario_06: 3vs3_deep_cross": {
+    "tactical_correctness": 2,
+    "position_reachability": "Yes",
+    "strategy_clarity": 3,
+    "comment": "Defenders positioned too deep for effective post coverage"
+  },
+  "scenario_07: 3vs3_def_transition": {
+    "tactical_correctness": 3,
+    "position_reachability": "Yes",
+    "strategy_clarity": 4,
+    "comment": "Recovery positioning too conservative for immediate counter-press"
+  },
+  "scenario_08: 3vs3_default": {
+    "tactical_correctness": 5,
+    "position_reachability": "Yes",
+    "strategy_clarity": 5,
+    "comment": "Symmetric baseline formation correctly implemented"
+  },
+  "scenario_09: 3vs3_defensive_crisis": {
+    "tactical_correctness": 5,
+    "position_reachability": "Yes",
+    "strategy_clarity": 5,
+    "comment": "Emergency clearance properly prioritized under pressure"
+  },
+  "scenario_10: 3vs3_fast_counter": {
+    "tactical_correctness": 5,
+    "position_reachability": "Yes",
+    "strategy_clarity": 5,
+    "comment": "Immediate transition into open space optimally executed"
+  },
+  "scenario_11: 3vs3_goalie_distribution": {
+    "tactical_correctness": 5,
+    "position_reachability": "Yes",
+    "strategy_clarity": 5,
+    "comment": "Precise identification of open passing lane"
+  },
+  "scenario_12: 3vs3_high_line": {
+    "tactical_correctness": 5,
+    "position_reachability": "Yes",
+    "strategy_clarity": 4,
+    "comment": "High line correctly set to counter through-ball threat"
+  },
+  "scenario_13: 3vs3_long_shot": {
+    "tactical_correctness": 4,
+    "position_reachability": "Yes",
+    "strategy_clarity": 4,
+    "comment": "Defensive setup adequate but minor goalkeeper positioning note"
+  },
+  "scenario_14: 3vs3_overload": {
+    "tactical_correctness": 5,
+    "position_reachability": "Yes",
+    "strategy_clarity": 5,
+    "comment": "Perfect numerical advantage execution near goal"
+  },
+  "scenario_15: 3vs3_possession_lost": {
+    "tactical_correctness": 3,
+    "position_reachability": "Yes",
+    "strategy_clarity": 4,
+    "comment": "Defensive transition too slow from advanced positions"
+  },
+  "scenario_16: 3vs3_pressing_trap": {
+    "tactical_correctness": 4,
+    "position_reachability": "Yes",
+    "strategy_clarity": 4,
+    "comment": "Viable pressure-breaking route with clear strategic intent"
+  },
+  "scenario_17: 3vs3_wing_switch": {
+    "tactical_correctness": 5,
+    "position_reachability": "Yes",
+    "strategy_clarity": 5,
+    "comment": "Ideal play switch to completely unmarked wing"
+  }
+} 
