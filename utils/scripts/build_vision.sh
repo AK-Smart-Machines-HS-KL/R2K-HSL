@@ -3,7 +3,7 @@
 # Usage: ./build_vision.sh [extra colcon args...]
 set -e
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 
 source /opt/ros/humble/setup.bash
 
