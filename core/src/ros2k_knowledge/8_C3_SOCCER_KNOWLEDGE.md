@@ -444,6 +444,56 @@ go) but bad at coordination (who kicks, who receives, when to swap roles).
 Role assignment and pass targeting must move to the CPU planner (TeamCaptain)
 in v7. The LLM's job is per-bot position output, not team coordination.
 
+### V1 Balanced Samples — goalie kick breakthrough (2026-08-22)
+
+**Problem:** The LLM never assigns `action: Kick` to the goalie during
+`status=playing`. Root cause: pattern anchoring — 4 of 7 samples show
+blue_2 as kicker, only 2 show blue_1 (goalie). The LLM pattern-matches
+"blue_2 = kicker" from the dominant sample ratio, not from the rules.
+
+**Solution (V1):** Rewrite Ex1-3 so blue_1 (goalie) is closest to the ball
+and kicks as `role: "goalie", action: "Kick"` in 4 of 7 examples (4:3
+ratio blue_1:blue_2). The LLM now assigns goalie/Kick in 73-96% of calls
+(was 0%). No bridge auto-clearance needed — the LLM decides, the bridge
+executes.
+
+**Text-probe results (6 variants × 20 scenarios × 5 reps):**
+- V0 (baseline): 0% goalie recall
+- V1 (balanced samples): 88% goalie recall (100% own-half, 67% opp-half)
+- V2 (explicit rule alone): 0% — rules don't override sample patterns
+- V3 (V1+V2): 88% — same as V1 (rule adds nothing)
+- V4 (8 examples, 3 goalie kicks): 50% — 4:3 ratio stronger than 3:3
+- V5 (no role on kicker): 0% — removing role labels breaks everything
+
+**Live Gazebo (8 matches):** Goalie kicks 0→169/match, pass completion
+46%→64%, latency 653→571ms. BUT goals dropped 1.4→0.38 B/match because
+the LLM assigns goalie/Kick in EVERY call, even when the goalie is far
+from the ball. The bridge navigates the goalie to behind-ball position,
+abandoning the goal line (tactical blending only active when
+`action != 'kick'`).
+
+**Lessons:**
+1. "Pattern anchoring is the root cause of goalie kick failure" — the LLM
+   learns from sample ratio, not rules. 4:3 ratio (blue_1:blue_2 kicks)
+   is the inflection point. 3:3 (V4) is too diluted. 4:2 (original) is
+   too blue_2-dominant.
+2. "Rules don't override samples" — V2 (explicit rule) got 0% recall.
+   The LLM ignores rules when samples show a different pattern. This
+   confirms the C3 inter-lingua finding: samples are the primary learning
+   channel for the 3B model.
+3. "Goalie Kick bypasses tactical blending" — when the LLM assigns
+   goalie/Kick, the bridge skips the goalie positioning logic (only
+   active when `action != 'kick'`). The goalie abandons the goal to
+   chase the ball. Fix: either gate goalie Kick in the prompt ("only
+   when ball is in own half") or in the bridge (ignore Kick when
+   `dist_to_ball > 1.5m`).
+4. "Removing role labels breaks everything" — V5 (no role on kicker) got
+   0% recall and 0% pass. The 3B model needs the role structure to
+   organize its output. Role labels are load-bearing for output structure,
+   not just for the bridge.
+5. "V1 samples are faster" — 82ms latency reduction because the rewritten
+   examples have simpler positions (fewer entities, shorter JSON).
+
 ### H1 user-feedback discrepancies (2026-08-03)
 
 When the human soccer expert's feedback was compared to GLM-5.2's, two
@@ -619,3 +669,108 @@ A third prompt mode (--demo) for human-driven bot control. Human types
 commands, LLM reformats to inter-lingua, same evaluator-bridge pipeline.
 Dual-use: workshop demos + calibration. JSON fallback (calibrate_bot.py)
 works when LLM is down. Demo prompt contains NO meta-knowledge.
+
+### Prompt-channel closure: SP + WIN experiments (2026-08-22/23)
+
+Two pre-registered, KV-cache-controlled probe experiments searched the prompt
+channel from both ends and both came back negative. Full reports:
+`src/results/probe_sp_report.md`, `src/results/probe_win_report.md`.
+
+- **SP (stability direction):** no prompt arm (default positioning, Hold
+  action, ball-relative samples) meets spinning-fix criteria. Goalie-Y limit
+  cycle (±0.1–0.5m alternation) is the dominant noise; physics micro-jitter
+  defeats the content-hash skip live.
+- **WIN (goal direction):** all six single levers killed by canaries —
+  kicker-anchor W1 (ff 22%), goalie-Y quantization W2 (canary 33%),
+  shoot-on-sight W3 (canary 0%), latency diet W4 (ff 89%, universal over-kick
+  — n=6 samples is below the viable pattern floor), wing sample W5 (best
+  offense: pass 25→50%, wing 0→33%, goal_area 0→100% — but ff 36% + last_man
+  88%), finishing rule W6 (canary 33%).
+
+**The coupling lesson (structural, not tunable):** attack aggression and
+goalie hygiene draw on the SAME pattern capacity in the 3B model. Every
+kick-priority rule (shoot-on-sight, finishing, closest-kicks) displaces the
+goalie-kick pattern niche; every attacking sample dose raises false-fire
+goalie kicks. V0-style blue_2 kicking and B13-level goalie gating never
+coexisted in any arm. Decoupling requires moving the decision structure to
+the CPU: v7 TeamCaptain.
+
+**TeamCaptain requirements (evidence-tagged):**
+1. Goalie-Y smoothing CPU-side: `Y = ball_y × 0.5` post-hoc override on goalie
+   Move targets — W2 proved the formula (amplitude 0.17→0.03m) but the prompt
+   delivery vehicle kills the goalie canary.
+2. Role persistence with hysteresis: kicker flapping 8–15%/step (SP) + W1
+   dose coupling — kicker identity must be sticky on the CPU side.
+3. Goalie kick gating stays at B13 level (ff 11% is the measured optimum;
+   W4/W5 prove dose sensitivity in both directions).
+4. Attack aggression enters via STAGED POSITIONS (wing runner, rebound
+   coverage — the W5 gains), never via kick rules (W3/W6/W5 all break
+   structure). LLM outputs positions; CPU decides who kicks.
+
+**n=100 payoff benchmark (2026-08-23, `src/results/b13_payoff_report.md`):
+"structure without conversion" confirmed.** B13 vs station B (C7 samples,
+only samples differ): possession 45.9→50.6%, pass 63.1→74.7%, goalie
+94.1→95.2% — but blue goals 0.73→0.20/match (z=5.5), win 26%→8%, shots on
+target −56%, cluster 23.9→34.4% (worst ever). Blue scored 0 goals in 81/100
+matches. The B13 kicker discipline structurally biases toward keeping the
+ball over shooting. Conversion is NOT recoverable through the prompt channel
+(WIN closure) — goal recovery is the v7 TeamCaptain deliverable. C7 revert
+(git HEAD 5 examples + 2026-08-20 Ex6/Ex7) = documented prompt-channel
+maximum at 0.73 B/match if a pre-v7 scoreboard matters.
+
+### TeamCaptain Slice 1 — aim-aware kicking discovery (2026-08-23, bridge)
+
+**The conversion fix was one bridge change, not a prompt change:** making the
+phantom kick aim at the LLM's computed target (goal center / pass target /
+goalie clearance line) instead of the bot's own yaw took B13 from
+0.20 → 0.67 B/match, 8% → 38% win rate (n=21, 7-scenario set). The LLM's
+kick decisions were always aimed; the legacy executor discarded the aim
+information. Aim-aware kicking is now unconditional in the bridge (v6.7
+default). Report: `src/results/tc_slice1_report.md`.
+
+**Slice-1 verdicts on the planned skill components:** behind-side execute
+gate decisively harmful in sim (starves the kick trigger, sog 12.2 vs 20.6 —
+sim2real honesty cost without sim benefit; default OFF, revisit for hardware
+body alignment). Goalie-Y smoothing + idle facing: no measurable goal gain
+(smoothing is still W2-proven for stability; facing increases cluster).
+**TeamCaptain's remaining problem:** shots on target (5.2-7.4 of 20-26 sog)
+— with 5× the historical shot volume, finishing is a positioning/timing
+problem, not a kick-mechanics problem.
+
+### S1 vocabulary-probe cross-reference (2026-08-22)
+
+The 10-term strategy vocabulary probe (last man, self-pass, through ball,
+shorten-angle, rebound, free man, midfield, goal area, wing, cover) with
+per-term verdicts and the A3 coordinate-rule generalization is canonically
+documented in `core/docs/c3_vocabulary_dictionary.md` §9. Key facts:
+`free man` is the only steering term; `last man` and `shorten the angle`
+are rejected (wrong/inverted semantics) and must be expressed as coordinate
+prescriptions; full evidence in `src/results/probe_s1_report.md`.
+
+### AKM validation + goal forensics (2026-08-24, n=200)
+
+**Aim-aware kicking validated at n=200 random-draw:** 0.94 B/match (was 0.20),
+44% win rate (was 8%), Red goals halved (0.92→0.46), SOT 2.5→7.4 (+196%),
+shots on goal 11.8→19.9 (+69%). Structure held (possession 50.6→48.0, pass
+74.7→71.1, goalie 95.2→95.1, latency 651→653ms). Blue wins every scenario.
+84 draws (40%) leave conversion on the table. Report:
+`src/results/akm_validation_report.md`. v6.7 default validated.
+
+**Goal forensics (n=200, 188 blue goals attributed):** blue_3 scores 95%
+(178/188), blue_2 5% (10), goalie 0%. 71% of goals are Umschaltmomente
+(high-press, <3s to goal); zero own-half clearance luck; zero set-piece
+goals; territory is parity (ball mean x=−0.11m). **Goalie makes literally 0
+passes in 200 matches** (all 5,090 kicks are clearances) — biggest gap in
+the passing game. blue_3's most common real pass is a BACKPASS to goalie
+(977) vs forward to blue_2 (1,261). Only productive forward lane:
+blue_2→blue_3 (539) → goal. 52% of passes backward. 8% of blue_3's kick
+assignments are wasted long chases (blue_2 closer, ~6-7/match). W7/W8 probe
+confirmed samples CANNOT fix the nearest-bot gap (prompt channel closed;
+60-67% LLM baseline ships). Verdict: real, repeatable FINISHING mechanism
+(not luck), not yet a strategic plus (build-up absent). Report:
+`src/results/goal_forensics_report.md`.
+
+**Slice 2 design consequence:** pass resolution must FEED the umschalt
+pattern (not replace it); goalie-distribution sub-rule is the missing piece
+for build-up (goalie → open buddy when unpressured — the 0-pass gap Slice
+2's `resolve_pass_target` does NOT cover).

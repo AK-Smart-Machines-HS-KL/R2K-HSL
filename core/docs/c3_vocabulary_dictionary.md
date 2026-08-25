@@ -2,8 +2,8 @@
 title: "C3 Vocabulary Dictionary (qwen2.5:3b) — Phase 1 Output"
 type: KNOWLEDGE_BASE
 tags: [c3, inter-lingua, phase-1, dictionary, controlled-vocabulary, qwen2.5-3b, probe-results]
-last_modified: 2026-08-01
-version: v6.3
+last_modified: 2026-08-23
+version: v6.7
 ---
 
 # C3 Vocabulary Dictionary — qwen2.5:3b
@@ -172,3 +172,50 @@ removing role-derived wording eliminates it.
    - "corner placement" (D4): hallucinated → referee-owned
    - "goal area" (D5): hallucinated off-field → never use, concrete coords only
    - "clear near own goal" (D6): "between ball and goal" usable; "dive" never
+
+---
+
+## 9. S1 strategy-vocabulary extension (2026-08-22, ~1000 probe calls)
+
+Probed against the full production prompt assembly (JSON mode, temp 0.0,
+KV-cache controlled). Evidence: `src/results/probe_s1_report.md`. These
+verdicts extend §1/§2 — cite them like B/D-series entries.
+
+### 9.1 Term verdicts (10 terms, A1 definitions + A3 steering)
+
+| Term | Known? | Steers? | Verdict | Notes |
+|---|---|---|---|---|
+| **free man** | Yes | **YES** | **Usable — the ONLY steering term** | Model computed blue_3's coordinates from "pass to the free man blue_3" (A3 pc_01: exact Kick target at teammate position) |
+| **self-pass (kick and run)** | Yes | No | Usable as concept, coords required | "kicking the ball back to themselves… to create space and time" |
+| **rebound** | Yes | No | Usable as concept, coords required | "position at the expected bounce point" |
+| **wing** | Yes | No | Usable as concept, coords required | Matches dictionary §2 |
+| **cover** | Yes | No | Usable as concept, coords required | Matches dictionary §1 |
+| **through ball** | Partial | No | Concept only | Gets "break defenses", misses space-behind-line-for-runner |
+| **midfield** | Partial | No | With explicit bounds only | Matched by coincidence (default center) in A3 |
+| **shorten the angle** | **Partial-INVERTED** | No | **Reject** | Model describes the ATTACKER narrowing their own angle — inverted semantics |
+| **last man** | **No** | No | **Reject** | Model thinks it's a stoppage/offside concept |
+| **goal area** | **No** | No | **Reject — reconfirms D5** | Hallucinated geometry again ("extends from penalty box outward to sideline") |
+
+### 9.2 The A3 rule (generalizes E/F/G coordinate rule)
+
+**Explicit coordinates steer 100% (10/10 concepts); tactical terms steer 20%
+(2/10).** Jargon is noise, coordinates are signal — now proven across the
+full attacking/defensive concept set, not just the original E/F/G series.
+
+### 9.3 Method lessons
+
+- `...`-placeholder schemas in bare prompts → 62% literal-echo garbage;
+  format anchoring REQUIRES one filled concrete example
+- Persona is a real dial: aggressive header = −21pp last-man holding,
+  +0.75m forward bias (A4)
+- Canary KV-cache sensitivity: byte-identical prompts flip predicate-level
+  canaries across sessions — same-session controls are MANDATORY (confirmed
+  again in SP)
+
+### 9.4 Consequence for scenario generation
+
+- "free man" may be used as the lone tactical noun in Oracle text; every
+  other concept MUST carry explicit X,Y (Layer 1 principle unchanged,
+  now with measured coverage)
+- "shorten the angle" and "last man" must be rewritten as coordinate
+  prescriptions (e.g. P-D6's ball→near-post axis phrasing)
