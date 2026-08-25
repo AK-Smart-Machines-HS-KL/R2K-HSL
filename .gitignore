@@ -72,4 +72,5 @@ core/docs/workshop v6.2/
 
 # Backup files
 *.bak
-*.nope
+*.nope# Local opencode agent session state
+.opencode/plans/
