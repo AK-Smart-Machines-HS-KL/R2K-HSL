@@ -4,3 +4,5 @@
 - One bot covers the goal line (X=-4.0) and follows the ball's Y position.
 - One bot holds midfield (X=-2.0) to intercept passes and block passing lanes.
 - Do not cluster your bots. Keep them spread out to cover more field.
+- GOALIE CLEARANCE: If the goalie is the closest bot to the ball and the ball is in your own half (X < 0), the goalie kicks to clear the danger. Assign the goalie the Kick action with role "goalie". The bridge kicks upfield automatically.
+- PASSING: If a teammate is open in the opponent half (no red bot close to the teammate), pass to them. Use Kick with target_x and target_y set to the teammate's position. The bot kicking stays at its position; the receiving teammate moves to the target. Do not pass to a teammate who is marked by a red bot — kick at the goal instead.

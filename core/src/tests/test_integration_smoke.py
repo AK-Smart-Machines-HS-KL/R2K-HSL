@@ -150,13 +150,13 @@ def test_strategy_files_exist():
         "samples_3vs3.txt",
         "rules_2vs2.txt",
         "samples_2vs2.txt",
-        "rules_recover.txt",
-        "samples_recover.txt",
         # Phase 2.5c: game-phase fragment stubs (additive to mode fragments)
         "rules_ball_out.txt",
         "rules_goal_kick.txt",
         "rules_corner_kick_in.txt",
         "rules_kickoff.txt",
+        "samples_goal_kick.txt",
+        "samples_kickoff.txt",
     ]
     
     for fragment_file in required_files:

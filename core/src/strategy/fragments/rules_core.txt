@@ -5,6 +5,7 @@ Own Goal: X=-4.5 (Never shoot this way).
 VALID ACTIONS:
 1. {"action": "Move", "x": float, "y": float}
 2. {"action": "Kick"}
+3. {"action": "Kick", "target_x": float, "target_y": float} — Pass to a teammate at the target position. The bot kicks toward target_x, target_y instead of the opponent goal. Use this when a teammate is open in the opponent half.
 
 STRICT LAWS:
 - STAY INSIDE FIELD AT ALL TIMES. Never output Move targets with X outside [-4.5, 4.5] or Y outside [-3.0, 3.0]. If the ball is near a boundary, approach from inside the field, not from outside.

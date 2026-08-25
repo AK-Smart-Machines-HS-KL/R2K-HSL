@@ -1,4 +1,4 @@
-STATUS: kickoff. The ball is at the center. The closest blue bot kicks toward the opponent goal (X=4.5). Other bots move to support positions, spread wide.
+STATUS: kickoff. The ball is at the center. The closest blue bot kicks toward the opponent goal (X=4.5). Assign it role "attacker" with action "Kick". Other bots move to support positions, spread wide.
 After the kick, return to normal play.
 
 ONE LINE PER BOT: Output one line for every blue bot.

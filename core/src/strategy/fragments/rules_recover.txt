@@ -1,4 +1,0 @@
-DEFENSIVE TRANSITION CRISIS: Ball is lost!
-1. DELAY: The closest bot moves to the ball and blocks the carrier.
-2. FALL BACK: The second bot moves back to midfield (X=-2.0) and follows the ball's Y.
-3. GOAL LINE: The third bot covers the goal line (X=-4.2) and follows the ball's Y.
