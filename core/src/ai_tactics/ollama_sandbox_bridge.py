@@ -50,6 +50,153 @@ def get_yaw(q):
     cosy_cosp = 1 - 2 * (q.y * q.y + q.z * q.z)
     return math.atan2(siny_cosp, cosy_cosp)
 
+
+# ====================================================================
+# TeamCaptain Slice 1 (v7 pre-work, 2026-08-23) -- CPU-side execution layer.
+# Activated via R2K_TEAMCAPTAIN=1 (propagated like R2K_EXPLAIN).
+# Division of labor: the LLM decides WHO kicks and the kick TARGET;
+# the kick skill computes approach + aim from the LIVE ball position at
+# every control tick (10Hz) instead of a stale LLM-call snapshot.
+# Evidence: tournament Gen0/Gen1 (no static offset aims AND triggers),
+# SP (goalie-Y limit cycle, kicker flapping), WIN (prompt channel closed).
+# ====================================================================
+TEAMCAPTAIN_ACTIVE = os.getenv("R2K_TEAMCAPTAIN", "0") == "1"
+
+# --- Kick skill state machine (all distances in meters, named constants) ---
+KICK_ENGAGE_RANGE = 1.2       # bot within this range of ball -> skill takes over
+KICK_OFFSET_FAR = 0.6         # behind-ball stand-off on engage (tournament: only working value)
+KICK_OFFSET_NEAR = 0.45       # stand-off shrinks as bot closes (bridges 0.6->0.4 trigger gap)
+KICK_SHRINK_START = 1.0       # distance-to-ball where offset shrink begins
+KICK_EXECUTE_RANGE = 0.4      # physical execute gate (kick trigger, bridge invariant)
+KICK_BEHIND_TOLERANCE = 1.2   # radians: bot must be on behind-side hemisphere of ball
+KICK_COOLDOWN_S = 2.0         # same as legacy phantom-kick cooldown
+KICK_BEHIND_GATE = os.getenv("R2K_KICK_BEHIND_GATE", "1") == "1"  # TC eval isolation sub-flag
+
+# --- Goalie-Y smoothing (W2-proven formula: cycle amplitude 0.17 -> 0.03m) ---
+GOALIE_SMOOTH_Y_GAIN = 0.5   # smoothed goalie target Y = ball_y * GAIN
+
+# --- Idle facing ("always face the ball" when standing still) ---
+IDLE_FACE_MAX_LIN = 0.01      # below this linear velocity the bot is "standing"
+IDLE_FACE_ANG_GAIN = 2.5      # proportional yaw gain toward the ball
+IDLE_FACE_ANG_MAX = 1.5       # rad/s clamp
+
+# ====================================================================
+# TeamCaptain Slice 2 (2026-08-23) -- pass-aware execution + wing staging.
+# Evidence: 71% of slice-1 goals are Umschaltmomente (ball won at median
+# x=+3.8m, goal <3s); only 7% of LLM kicks are real teammate passes; 79%
+# carry target~ball (model-native contest pattern -> effectively shots).
+# Slice 2 lets the CPU resolve degenerate kick targets:
+#   shoot-first gate (protect the proven 0.67 B/match shot volume),
+#   else redirect to the best FORWARD option (build-up passes + wings).
+# Flags: R2K_PASS_RESOLVE, R2K_WING_STAGE (both require R2K_TEAMCAPTAIN=1).
+# ====================================================================
+PASS_RESOLVE_ACTIVE = os.getenv("R2K_PASS_RESOLVE", "0") == "1"
+WING_STAGE_ACTIVE = os.getenv("R2K_WING_STAGE", "0") == "1"
+
+SHOOT_RANGE_X = 3.0           # ball beyond this X (red half) -> shot allowed
+SHOOT_LANE_HALF_WIDTH = 0.7   # no red bot within this Y band of the goal lane
+PASS_TARGET_BALL_RADIUS = 0.5 # Kick targets within this radius of ball = degenerate
+PASS_FORWARD_MIN_GAIN = 0.5   # resolved pass must advance X by at least this
+PASS_OPEN_SPACE = 1.5         # teammate counts as "open" if no red bot this close
+WING_STAGE_Y = 2.0            # wing staging target |Y|
+WING_STAGE_X = 1.5            # wing staging forward X (opponent half edge)
+WING_TRIGGER_BALL_X = 0.5     # ball beyond this X with no wide bot -> stage a wing
+
+
+def kick_skill_target(ball_x, ball_y, aim_yaw, bot_x, bot_y):
+    """Compute the live behind-ball approach point for the kick skill.
+
+    Returns (target_x, target_y, behind_ok):
+      - point behind the ball on the ball->aim axis (offset shrinks near),
+      - behind_ok: True if the BOT is on the behind hemisphere (execute gate
+        component; the bot still needs to be within KICK_EXECUTE_RANGE).
+    """
+    dx, dy = -math.cos(aim_yaw), -math.sin(aim_yaw)  # from ball toward behind point
+    dist = math.hypot(ball_x - bot_x, ball_y - bot_y)
+    if dist <= KICK_SHRINK_START:
+        t = max(0.0, (dist - KICK_EXECUTE_RANGE) / (KICK_SHRINK_START - KICK_EXECUTE_RANGE))
+        offset = KICK_EXECUTE_RANGE + t * (KICK_OFFSET_FAR - KICK_EXECUTE_RANGE)
+        offset = max(KICK_OFFSET_NEAR, min(KICK_OFFSET_FAR, offset))
+    else:
+        offset = KICK_OFFSET_FAR
+    tx, ty = ball_x + dx * offset, ball_y + dy * offset
+    # bot behind the ball: vector bot->ball roughly aligned with aim direction
+    bx, by = ball_x - bot_x, ball_y - bot_y
+    bn = math.hypot(bx, by)
+    behind_ok = False
+    if bn > 1e-6:
+         cos_a = (bx * math.cos(aim_yaw) + by * math.sin(aim_yaw)) / bn
+         behind_ok = cos_a > math.cos(KICK_BEHIND_TOLERANCE)
+    return tx, ty, behind_ok
+# v7 adapters (k1 kShoot wrapper / yahboom push) plug in here behind the
+# can_kick capability gate -- TODO when hardware-in-the-loop testing begins.
+
+
+def shoot_lane_open(ball_x, ball_y, red_bots):
+    """Shoot-first gate: ball in shooting range AND no red bot blocks the
+    straight lane to the opponent goal mouth center (X=+4.5, Y=0).
+    red_bots: iterable of (x, y)."""
+    if ball_x < SHOOT_RANGE_X:
+        return False
+    gx, gy = FIELD_HALF_LENGTH, 0.0
+    dx, dy = gx - ball_x, gy - ball_y
+    n = math.hypot(dx, dy)
+    if n < 1e-6:
+        return True
+    ux, uy = dx / n, dy / n
+    for rx, ry in red_bots:
+        px, py = rx - ball_x, ry - ball_y
+        along = px * ux + py * uy
+        if along <= 0 or along >= n:
+            continue
+        perp = abs(px * uy - py * ux)
+        if perp < SHOOT_LANE_HALF_WIDTH:
+            return False
+    return True
+
+
+def resolve_pass_target(kicker, ball_x, ball_y, blue_bots, red_bots):
+    """Resolve a degenerate Kick (target~ball) into the best FORWARD option.
+
+    blue_bots/red_bots: dicts {bot_name: (x, y)} WITHOUT the kicker.
+    Returns (target_x, target_y) or None (fall back to goal shot).
+    Priority: open teammate ahead of the ball and ahead of the kicker,
+    most open-lane first; ties by forward progress."""
+    best, best_score = None, -1.0
+    for name, (bx_, by_) in blue_bots.items():
+        # forward gain vs ball AND vs kicker (no backward passes)
+        gain_ball = bx_ - ball_x
+        gain_kicker = bx_ - blue_bots.get(kicker, (ball_x, ball_y))[0] if kicker in blue_bots else gain_ball
+        if gain_ball < PASS_FORWARD_MIN_GAIN:
+            continue
+        # openness: no red bot within PASS_OPEN_SPACE of the receiver
+        open_dist = min((math.hypot(rx - bx_, ry - by_) for rx, ry in red_bots),
+                        default=99.0)
+        if open_dist < PASS_OPEN_SPACE:
+            continue
+        # lane clearance kicker -> receiver
+        dx, dy = bx_ - ball_x, by_ - ball_y
+        n = math.hypot(dx, dy)
+        lane_clear = True
+        if n > 1e-6:
+            ux, uy = dx / n, dy / n
+            for rx, ry in red_bots:
+                px, py = rx - ball_x, ry - ball_y
+                along = px * ux + py * uy
+                if along <= 0 or along >= n:
+                    continue
+                if abs(px * uy - py * ux) < SHOOT_LANE_HALF_WIDTH:
+                    lane_clear = False
+                    break
+        if not lane_clear:
+            continue
+        # score: forward progress + openness
+        score = gain_ball + min(open_dist, 3.0)
+        if score > best_score:
+            best, best_score = (bx_, by_), score
+    return best
+
+
 class HalBridge(Node):
     def __init__(self):
         super().__init__('hal_bridge')
@@ -126,7 +273,7 @@ class HalBridge(Node):
                     t = Twist()
                     self.pubs[hw_name].publish(t)
             except Exception as e:
-                self.get_logger().error(f"Stop Error für {hw_name}: {e}")
+                self.get_logger().error(f"Stop Error fuer {hw_name}: {e}")
 
     def read_llm_strategy(self):
         if not os.path.exists(self.strategy_file): return
@@ -161,10 +308,51 @@ class HalBridge(Node):
         req.state.twist.linear.z = 1.0 
         self.set_state_client.call_async(req)
 
+    def _resolve_kick_aim(self, target, target_bot, aim_yaw):
+        """Slice 2 pass resolution: decide the effective aim for a Kick.
+
+        Rules (shoot-first gate):
+          1. Real pass targets (farther than PASS_TARGET_BALL_RADIUS from the
+             ball) stay untouched -- the LLM's intent is honored.
+          2. Degenerate targets (~ball): if a shot is on (ball beyond
+             SHOOT_RANGE_X with an open lane), shoot at goal (return goal aim).
+          3. Else resolve a forward pass to the best open teammate; fall back
+             to the goal aim when no option qualifies.
+        Returns the (possibly updated) aim_yaw.
+        """
+        ball_x, ball_y = self.ball_pos.x, self.ball_pos.y
+        goal_yaw = math.atan2(0.0 - ball_y, FIELD_HALF_LENGTH - ball_x)
+        has_target = target.get('target_x') is not None and target.get('target_y') is not None
+        if has_target:
+            try:
+                tx, ty = float(target['target_x']), float(target['target_y'])
+            except (TypeError, ValueError):
+                return aim_yaw
+            if math.hypot(tx - ball_x, ty - ball_y) > PASS_TARGET_BALL_RADIUS:
+                return aim_yaw  # real pass intent -- honor it
+        # degenerate or no target: shoot-first gate
+        red_bots = [(p.position.x, p.position.y) for name, p in self._last_bot_poses.items()
+                    if name.startswith('red')] if hasattr(self, '_last_bot_poses') else []
+        if shoot_lane_open(ball_x, ball_y, red_bots):
+            return goal_yaw
+        blue_bots = {name: (p.position.x, p.position.y)
+                     for name, p in self._last_bot_poses.items()
+                     if name.startswith('blue') and name != target_bot} if hasattr(self, '_last_bot_poses') else {}
+        pass_tgt = resolve_pass_target(target_bot, ball_x, ball_y, blue_bots, red_bots)
+        if pass_tgt is not None:
+            return math.atan2(pass_tgt[1] - ball_y, pass_tgt[0] - ball_x)
+        return goal_yaw
+
     def state_cb(self, msg):
         if self.is_paused: return
 
         try:
+            # Cache all bot poses for CPU-side strategy (Slice 2: pass
+            # resolution + wing staging need teammate/opponent positions).
+            self._last_bot_poses = {}
+            for i, name in enumerate(msg.name):
+                if name.startswith(('blue', 'red')):
+                    self._last_bot_poses[name] = msg.pose[i]
             ball_idx = next((i for i, name in enumerate(msg.name) if 'ball' in name.lower()), None)
             if ball_idx is not None:
                 self.ball_pos = msg.pose[ball_idx].position
@@ -197,7 +385,7 @@ class HalBridge(Node):
 
                 if action == 'hold':
                     # Active brake: publish zero velocity to stop the bot
-                    # (not just skip — skipping lets the bot coast on its
+                    # (not just skip -- skipping lets the bot coast on its
                     # last velocity command, which is unsafe on hardware)
                     if hw_type == 'k1' and HAS_BOOSTER_MSGS:
                         rpc = RpcReqMsg()
@@ -212,19 +400,32 @@ class HalBridge(Node):
 
                 if action == 'kick':
                     is_attacking = True
-                    # Role-aware kick direction: goalie kicks away from own goal
-                    # (upfield toward opponent half), all other bots aim at
-                    # opponent goal center (X=+4.5, Y=0).
-                    if target.get('role', '') == 'goalie':
-                        # Goalie clear: aim upfield, away from own goal (X=-4.5).
-                        # Kick toward opponent half along ball-goal axis, biased
-                        # toward nearest sideline to avoid red interceptors.
+                    # Pass-aware kick direction (priority: pass target > role > goal):
+                    # 1. If Kick has target_x/target_y, aim toward that position (pass to teammate)
+                    # 2. If role is goalie, kick upfield away from own goal (clearance)
+                    # 3. Otherwise aim at opponent goal center (X=+4.5, Y=0)
+                    if target.get('target_x') is not None and target.get('target_y') is not None:
+                        aim_yaw = math.atan2(float(target['target_y']) - self.ball_pos.y, float(target['target_x']) - self.ball_pos.x)
+                    elif target.get('role', '') == 'goalie':
                         aim_yaw = math.atan2(-self.ball_pos.y * 0.5, 4.5 - self.ball_pos.x)
                     else:
                         aim_yaw = math.atan2(0.0 - self.ball_pos.y, 4.5 - self.ball_pos.x)
-                    behind_x, behind_y = self.ball_pos.x - math.cos(aim_yaw) * 0.6, self.ball_pos.y - math.sin(aim_yaw) * 0.6
-                    dist_to_behind = math.hypot(behind_x - cx, behind_y - cy)
-                    target_x, target_y = (behind_x, behind_y) if dist_to_behind > 0.3 and dist_to_ball > 0.5 else (self.ball_pos.x, self.ball_pos.y)
+                    # Slice 2 -- pass resolution: degenerate targets (~ball) get
+                    # resolved CPU-side. Shoot-first gate protects the proven
+                    # shot volume (71% of goals are box-area Umschaltmomente).
+                    if TEAMCAPTAIN_ACTIVE and PASS_RESOLVE_ACTIVE:
+                        aim_yaw = self._resolve_kick_aim(target, target_bot, aim_yaw)
+                    if TEAMCAPTAIN_ACTIVE:
+                        # Kick skill: live behind-ball recompute each tick (10Hz),
+                        # offset shrinks on approach, execute gated on range + behind-side.
+                        target_x, target_y, behind_ok = kick_skill_target(
+                            self.ball_pos.x, self.ball_pos.y, aim_yaw, cx, cy)
+                    else:
+                        behind_x, behind_y = self.ball_pos.x - math.cos(aim_yaw) * 0.6, self.ball_pos.y - math.sin(aim_yaw) * 0.6
+                        dist_to_behind = math.hypot(behind_x - cx, behind_y - cy)
+                        target_x, target_y = (behind_x, behind_y) if dist_to_behind > 0.3 and dist_to_ball > 0.5 else (self.ball_pos.x, self.ball_pos.y)
+                    target['_aim_yaw'] = aim_yaw
+                    target['_behind_ok'] = behind_ok if TEAMCAPTAIN_ACTIVE else True
                 else:
                     target_x, target_y = target.get('x', cx), target.get('y', cy)
 
@@ -267,9 +468,38 @@ class HalBridge(Node):
                     target_x = tactical_x * GOALIE_TACTICAL_WEIGHT + target_x * GOALIE_LLM_WEIGHT
                     target_y = tactical_y * GOALIE_TACTICAL_WEIGHT + target_y * GOALIE_LLM_WEIGHT
 
+                    # TeamCaptain: goalie-Y smoothing (W2-proven formula) -- kills
+                    # the LLM's Y limit cycle (SP finding: +/-0.1-0.5m alternation).
+                    if TEAMCAPTAIN_ACTIVE:
+                        target_y = self.ball_pos.y * GOALIE_SMOOTH_Y_GAIN
+
                     # Deadband: don't issue movement if change < threshold
                     if math.hypot(target_x - cx, target_y - cy) < deadband:
                         target_x, target_y = cx, cy  # hold position
+
+                # Slice 2 -- wing staging: when blue attacks (ball forward) but
+                # no field bot is wide, stage the widest non-kicking field bot
+                # toward the open wing (W5-proven geometry, CPU-delivered).
+                if (TEAMCAPTAIN_ACTIVE and WING_STAGE_ACTIVE and action != 'kick'
+                        and not is_goalie and self.ball_pos
+                        and self.ball_pos.x > WING_TRIGGER_BALL_X):
+                    if not hasattr(self, '_last_bot_poses'):
+                        pass
+                    else:
+                        wide = [n for n, p in self._last_bot_poses.items()
+                                if n.startswith('blue') and n != 'blue_1'
+                                and abs(p.position.y) >= WING_STAGE_Y]
+                        if not wide:
+                            # pick the non-kicking field bot farthest from ball Y-side
+                            cands = [n for n, p in self._last_bot_poses.items()
+                                     if n.startswith('blue') and n != 'blue_1'
+                                     and n != target_bot]
+                            if cands:
+                                staged = cands[0]
+                                sp = self._last_bot_poses[staged].position
+                                wing_y = WING_STAGE_Y if sp.y >= 0 else -WING_STAGE_Y
+                                if abs(target_y - wing_y) > 0.5 or abs(target_x - WING_STAGE_X) > 0.5:
+                                    target_x, target_y = WING_STAGE_X, wing_y
 
                 dx, dy = target_x - cx, target_y - cy
                 distance = math.hypot(dx, dy)
@@ -280,22 +510,40 @@ class HalBridge(Node):
                 while angle_diff < -math.pi: angle_diff += 2 * math.pi
                 
                 lin_x, ang_z = 0.0, 0.0
-                if is_attacking and dist_to_ball <= 0.4:
-                    if hw_type == 'virtual': self.trigger_phantom_kick(target_bot, cyaw)
+                kick_execute = False
+                if is_attacking and dist_to_ball <= KICK_EXECUTE_RANGE:
+                    if TEAMCAPTAIN_ACTIVE and KICK_BEHIND_GATE:
+                        # Skill execute gate: physical range AND behind-side
+                        # (sim2real honesty: no teleport kicks from bad angles)
+                        kick_execute = bool(target.get('_behind_ok', True))
+                    else:
+                        kick_execute = True
+                    if kick_execute and hw_type == 'virtual':
+                        self.trigger_phantom_kick(
+                            target_bot,
+                            target.get('_aim_yaw', cyaw))
                 else:
                     if distance > 0.15:
                         ang_z = max(min(angle_diff * 3.0, 2.5), -2.5)
                         lin_x = 0.8 if abs(angle_diff) < 0.5 else 0.2
+                    elif TEAMCAPTAIN_ACTIVE and self.ball_pos:
+                        # Idle facing: standing still -> aim at the ball
+                        face_yaw = math.atan2(self.ball_pos.y - cy, self.ball_pos.x - cx)
+                        face_diff = face_yaw - cyaw
+                        while face_diff > math.pi: face_diff -= 2 * math.pi
+                        while face_diff < -math.pi: face_diff += 2 * math.pi
+                        ang_z = max(min(face_diff * IDLE_FACE_ANG_GAIN, IDLE_FACE_ANG_MAX),
+                                    -IDLE_FACE_ANG_MAX)
                 
                 if hw_type == 'k1':
                     if not HAS_BOOSTER_MSGS: continue
                     rpc = RpcReqMsg()
                     rpc.uuid = f"cmd_{int(time.time()*1000)}"
-                    if is_attacking and dist_to_ball <= 0.4:
-                        rpc.header = json.dumps({"api_id": 2000}) 
+                    if is_attacking and kick_execute:
+                        rpc.header = json.dumps({"api_id": 2000})
                         rpc.body = json.dumps({"mode": 1})
                     else:
-                        rpc.header = json.dumps({"api_id": 2001}) 
+                        rpc.header = json.dumps({"api_id": 2001})
                         rpc.body = json.dumps({"vx": round(lin_x, 3), "vy": 0.0, "vyaw": round(ang_z, 3)})
                     self.pubs[hw_name].publish(rpc)
                 else:

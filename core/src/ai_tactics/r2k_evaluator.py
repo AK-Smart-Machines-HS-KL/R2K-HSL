@@ -54,7 +54,8 @@ def _text_output_header(n_blue):
     return (
         f"Output exactly one line per blue bot in the INPUT above ({bot_names}). "
         f"Never use the same bot twice. Format: 'blue_1 move to (X, Y)', "
-        f"'blue_1 kick', 'blue_1 cover the goal line at (-4.0, Y)', or "
+        f"'blue_1 kick', 'blue_1 pass to (X, Y)', 'blue_1 clear the ball', "
+        f"'blue_1 cover the goal line at (-4.0, Y)', or "
         f"'blue_1 hold position'. Use the positions from the INPUT. "
         f"Do NOT copy example coordinates."
     )
@@ -364,7 +365,14 @@ def _text_from_assignments(assignments, explain_active, analysis_val, oracle_val
         a = assignments[bot]
         action = a.get("action", "Move")
         if str(action).lower() == "kick":
-            out.append(f"{bot} kick")
+            tx = a.get("target_x")
+            ty = a.get("target_y")
+            if tx is not None and ty is not None:
+                out.append(f"{bot} pass to ({tx}, {ty})")
+            elif a.get("role", "") == "goalie":
+                out.append(f"{bot} clear the ball")
+            else:
+                out.append(f"{bot} kick")
         elif a.get("role", "") == "goalie":
             out.append(f"{bot} cover the goal line at ({a['x']}, {a['y']})")
         else:
@@ -660,13 +668,15 @@ def fast_parse(text):
 
 TEXT_LINE_RE = re.compile(
     r'^\s*blue_(\d+)\s+(?:move to \((-?[\d.]+),\s*(-?[\d.]+)\)|'
-    r'cover the goal line at \((-?[\d.]+),\s*(-?[\d.]+)\)|(kick)|(hold position))\s*$'
+    r'cover the goal line at \((-?[\d.]+),\s*(-?[\d.]+)\)|(kick)|(hold position)|'
+    r'pass to \((-?[\d.]+),\s*(-?[\d.]+)\)|(clear the ball))\s*$'
 )
 
 def text_parse(text):
     """Parse condensed text output (Phase I text mode): one line per bot.
     Accepts: 'blue_1 move to (2.2, 0.3)', 'blue_1 cover the goal line at
-    (-4.0, 1.5)', 'blue_1 kick', 'blue_1 hold position'. Ignores
+    (-4.0, 1.5)', 'blue_1 kick', 'blue_1 pass to (3.0, -1.0)',
+    'blue_1 clear the ball', 'blue_1 hold position'. Ignores
     ANALYSIS:/ORACLE:/prose lines.
     Returns (assignments_dict, code); code 0 = all lines parsed,
     1 = partial (some lines unparseable), None if no bot line found
@@ -687,6 +697,15 @@ def text_parse(text):
             assignments[bot] = {"role": "attacker", "action": "Kick"}
         elif m.group(7):  # hold position
             assignments[bot] = {"role": "defender", "action": "Hold"}
+        elif m.group(8):  # pass to (x, y) -> Kick with target_x/target_y
+            assignments[bot] = {
+                "role": "attacker",
+                "action": "Kick",
+                "target_x": float(m.group(8)),
+                "target_y": float(m.group(9)),
+            }
+        elif m.group(10):  # clear the ball -> goalie Kick
+            assignments[bot] = {"role": "goalie", "action": "Kick"}
         elif m.group(4):  # cover the goal line at (x, y) -> role goalie
             assignments[bot] = {
                 "role": "goalie",
