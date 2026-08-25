@@ -1,5 +1,5 @@
 STATUS: goal_kick. The ball is near your goal area. Blue takes the goal kick.
-The bot closest to the ball (usually the goalie) kicks toward the opponent half (X=4.5). Other blue bots move to receive positions ahead of the ball, spread wide to avoid interception.
+The bot closest to the ball kicks toward the opponent half (X=4.5). If the closest bot is the goalie, assign it role "goalie" with action "Kick" — the bridge kicks upfield automatically. Other blue bots move to receive positions ahead of the ball, spread wide to avoid interception.
 After the kick, return to normal play.
 
 ONE LINE PER BOT: Output one line for every blue bot.

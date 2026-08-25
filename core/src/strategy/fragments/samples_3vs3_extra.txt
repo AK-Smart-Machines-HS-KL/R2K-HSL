@@ -1,0 +1,18 @@
+--- EXAMPLE 8: GOALIE CLEARANCE FROM CORNER (ball deep in goal corner) ---
+INPUT: {"soccer_ball": {"x": -4.0, "y": -2.0}, "blue_1": {"x": -4.2, "y": -1.8}, "blue_2": {"x": -1.5, "y": 0.0}, "blue_3": {"x": 0.5, "y": 1.0}, "red_1": {"x": -3.5, "y": -1.5}, "red_2": {"x": -1.0, "y": -0.5}, "red_3": {"x": 3.0, "y": 0.5}}
+OUTPUT: {
+  "assignments": {
+    "blue_1": {"role": "goalie", "action": "Kick"},
+    "blue_2": {"role": "defender", "action": "Move", "x": -1.0, "y": -0.5},
+    "blue_3": {"role": "attacker", "action": "Move", "x": 2.0, "y": 1.0}
+  }
+}
+--- EXAMPLE 9: PASS TO BLUE_2 (blue_3 passes to blue_2 on the wing) ---
+INPUT: {"soccer_ball": {"x": 0.5, "y": 1.5}, "blue_1": {"x": -4.0, "y": 0.0}, "blue_2": {"x": 2.5, "y": 2.0}, "blue_3": {"x": 0.3, "y": 1.7}, "red_1": {"x": 1.5, "y": 0.5}, "red_2": {"x": -1.0, "y": -1.0}, "red_3": {"x": 4.0, "y": 1.0}}
+OUTPUT: {
+  "assignments": {
+    "blue_1": {"role": "goalie", "action": "Move", "x": -4.0, "y": 0.0},
+    "blue_2": {"role": "attacker", "action": "Move", "x": 3.0, "y": 2.0},
+    "blue_3": {"role": "attacker", "action": "Kick", "target_x": 2.5, "target_y": 2.0}
+  }
+}
