@@ -84,6 +84,21 @@ class TestTextParse:
         assert code == 0
         assert data["assignments"]["blue_2"]["action"] == "Kick"
 
+    def test_pass_line(self):
+        data, code = ev.text_parse("blue_2 pass to (3.0, -1.0)")
+        assert code == 0
+        a = data["assignments"]["blue_2"]
+        assert a["action"] == "Kick"
+        assert a["target_x"] == 3.0
+        assert a["target_y"] == -1.0
+
+    def test_clear_ball_line(self):
+        data, code = ev.text_parse("blue_1 clear the ball")
+        assert code == 0
+        a = data["assignments"]["blue_1"]
+        assert a["action"] == "Kick"
+        assert a["role"] == "goalie"
+
     def test_goalie_line(self):
         data, code = ev.text_parse("blue_3 cover the goal line at (-4.0, 1.5)")
         assert code == 0
@@ -156,6 +171,30 @@ class TestCleanTextSamples:
         out = ev._clean_text_samples(content, explain_active=False)
         assert "blue_1 kick" in out
 
+    def test_pass_rendering(self):
+        content = (
+            "--- EXAMPLE 1 ---\n"
+            'INPUT: {"soccer_ball": {"x": 1.0, "y": 0.0}, "blue_1": {"x": -4.0, "y": 0.0}, '
+            '"blue_2": {"x": 0.8, "y": 0.2}, "blue_3": {"x": 3.0, "y": -1.0}}\n'
+            'ASSISTANT: {"assignments": {"blue_1": {"role": "goalie", "action": "Move", '
+            '"x": -4.0, "y": 0.0}, "blue_2": {"role": "attacker", "action": "Kick", '
+            '"target_x": 3.0, "target_y": -1.0}, "blue_3": {"role": "attacker", '
+            '"action": "Move", "x": 3.5, "y": -1.0}}}\n'
+        )
+        out = ev._clean_text_samples(content, explain_active=False)
+        assert "blue_2 pass to (3.0, -1.0)" in out
+
+    def test_clear_ball_rendering(self):
+        content = (
+            "--- EXAMPLE 1 ---\n"
+            'INPUT: {"soccer_ball": {"x": -3.8, "y": 0.5}, "blue_1": {"x": -4.0, "y": 0.3}, '
+            '"blue_2": {"x": -1.5, "y": 0.0}}\n'
+            'ASSISTANT: {"assignments": {"blue_1": {"role": "goalie", "action": "Kick"}, '
+            '"blue_2": {"role": "defender", "action": "Move", "x": -1.0, "y": 0.5}}}\n'
+        )
+        out = ev._clean_text_samples(content, explain_active=False)
+        assert "blue_1 clear the ball" in out
+
 
 class TestTextModePromptAssembly:
     def test_text_mode_uses_text_rules_and_samples(self, monkeypatch):
@@ -173,7 +212,12 @@ class TestTextModePromptAssembly:
         # samples_3vs3.txt uses OUTPUT: marker; _clean_text_samples accepts both
         assert "INPUT:\n" in sys_prompt
         assert "ASSISTANT:" in sys_prompt
-        assert '{"assignments"' not in sys_prompt
+        # sample bodies must be converted (no raw JSON after ASSISTANT: markers),
+        # but the header's format illustration may legitimately contain JSON
+        import re as _re
+        raw_json_after_marker = _re.search(
+            r"ASSISTANT:\s*\{\s*\"assignments\"", sys_prompt)
+        assert raw_json_after_marker is None
 
     def test_json_mode_unaffected(self):
         ev._prompt_cache.clear()
@@ -199,5 +243,7 @@ class TestTextModeMainFlow:
         from r2k_evaluator import _text_output_header, TEXT_EXPLAIN_INSTRUCTION
         header = _text_output_header(3)
         assert "move to (X, Y)" in header
+        assert "pass to (X, Y)" in header
+        assert "clear the ball" in header
         assert "hold position" in header
         assert "ANALYSIS:" in TEXT_EXPLAIN_INSTRUCTION

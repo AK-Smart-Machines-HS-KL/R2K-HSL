@@ -476,7 +476,7 @@ def update_figure(fig, state, score_data, match_data, decision, last_strat_time)
             oracle = "(invalid - JSON in oracle field)"
         if not isinstance(analysis, str):
             analysis = "(invalid - JSON in analysis field)"
-        a['ai_text'].set_text(f"### STRATEGY ###\n\n{analysis}\n\n### ORACLE ###\n\n{oracle}")
+        a['ai_text'].set_text(f"### ANALYSIS ###\n\n{analysis}\n\n### ORACLE ###\n\n{oracle}")
     else:
         a['ai_text'].set_text("FAST EXECUTION MODE\n\n(No explanation requested)")
 

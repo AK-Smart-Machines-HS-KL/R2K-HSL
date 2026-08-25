@@ -69,6 +69,15 @@ done
 # Export explain flag for the evaluator (R2K_EXPLAIN=1 → 600 tokens, analysis+oracle+assignments)
 export R2K_EXPLAIN=$([[ "$EXPLAIN_FLAG" == "--explain" ]] && echo 1 || echo 0)
 
+# TeamCaptain Slice 1 (v7 pre-work): CPU-side kick skill + goalie-Y smoothing
+# + idle facing in the bridge. Default OFF (legacy behavior). Set R2K_TEAMCAPTAIN=1
+# in the environment (or here) to activate. Propagated to the Docker bridge below.
+export R2K_TEAMCAPTAIN="${R2K_TEAMCAPTAIN:-0}"
+export R2K_KICK_BEHIND_GATE="${R2K_KICK_BEHIND_GATE:-1}"
+# TeamCaptain Slice 2: pass resolution + wing staging (require R2K_TEAMCAPTAIN=1)
+export R2K_PASS_RESOLVE="${R2K_PASS_RESOLVE:-0}"
+export R2K_WING_STAGE="${R2K_WING_STAGE:-0}"
+
 echo "=========================================================="
 echo "🚀 FAST BOOT: R2K Launch Sequence... ($SCENARIO | Relay: $RELAY)"
 echo "=========================================================="
@@ -436,7 +445,7 @@ else
         $DOCKER_BASE "$SOURCE_CMD && python3 rule_evaluator_red.py > /dev/null 2>&1"
     fi
     docker exec -d -e R2K_RUN_ID="$R2K_RUN_ID" $CONTAINER_NAME bash -c "$SOURCE_CMD && python3 state_aggregator.py > /dev/null 2>&1"
-    docker exec -d -e R2K_RUN_ID="$R2K_RUN_ID" $CONTAINER_NAME bash -c "$SOURCE_CMD && python3 ai_tactics/ollama_sandbox_bridge.py > /dev/null 2>&1"
+    docker exec -d -e R2K_TEAMCAPTAIN="$R2K_TEAMCAPTAIN" -e R2K_KICK_BEHIND_GATE="$R2K_KICK_BEHIND_GATE" -e R2K_PASS_RESOLVE="$R2K_PASS_RESOLVE" -e R2K_WING_STAGE="$R2K_WING_STAGE" -e R2K_RUN_ID="$R2K_RUN_ID" $CONTAINER_NAME bash -c "$SOURCE_CMD && python3 ai_tactics/ollama_sandbox_bridge.py > /dev/null 2>&1"
     
     echo "🧠 Starting Team Blue AI (Live Output)..."
     docker exec -d -e PYTHONUNBUFFERED=1 -e PYTHONWARNINGS="ignore" -e R2K_OLLAMA_MODEL=$MODEL -e R2K_OLLAMA_URL="${OLLAMA_DOCKER}/api/generate" -e R2K_RUN_ID="$R2K_RUN_ID" -e R2K_EXPLAIN="$R2K_EXPLAIN" $CONTAINER_NAME bash -c "$SOURCE_CMD && python3 -u ai_tactics/r2k_evaluator.py"
