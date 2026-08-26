@@ -1,7 +1,6 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "instructions": [
-    "core/docs/SESSION_CHANGELOG.md",
     "core/src/ros2k_knowledge/META_KNOWLEDGE_ROUTER.md",
     "core/src/ros2k_knowledge/agent_prompt_de.txt"
   ]

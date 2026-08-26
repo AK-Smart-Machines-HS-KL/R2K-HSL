@@ -1,0 +1,42 @@
+{
+  "m0_baseline": {
+    "label": "M0: Baseline (C7, no change)",
+    "metrics": {},
+    "stdout": "ep1 100/181 (281/543) 1.4/s ETA 187s\n  rep1 150/181 (331/543) 1.4/s ETA 152s\n  rep2 50/181 (412/543) 1.4/s ETA 94s\n  rep2 100/181 (462/543) 1.4/s ETA 58s\n  rep2 150/181 (512/543) 1.4/s ETA 22s\n  Done: 543 calls, parse_ok=543, goalie_kicks=3, passes=365, lat_p50=684ms, 390s\n\n=== Sweep complete: 543 records ===\nRaw: /home/r-zwei-kickers/R2K-HSL/core/src/tools/../results/probe_gen0_m0_baseline_raw.jsonl\nReport: /home/r-zwei-kickers/R2K-HSL/core/src/tools/../results/probe_gen0_m0_baseline_report.md\n"
+  },
+  "m1_kick_fallback": {
+    "label": "M1: Bridge kick fallback to Move when dist>1.5m",
+    "metrics": {},
+    "stdout": "1 (281/543) 1.4/s ETA 188s\n  rep1 150/181 (331/543) 1.4/s ETA 153s\n  rep2 50/181 (412/543) 1.4/s ETA 94s\n  rep2 100/181 (462/543) 1.4/s ETA 58s\n  rep2 150/181 (512/543) 1.4/s ETA 22s\n  Done: 543 calls, parse_ok=543, goalie_kicks=3, passes=365, lat_p50=686ms, 391s\n\n=== Sweep complete: 543 records ===\nRaw: /home/r-zwei-kickers/R2K-HSL/core/src/tools/../results/probe_gen0_m1_kick_fallback_raw.jsonl\nReport: /home/r-zwei-kickers/R2K-HSL/core/src/tools/../results/probe_gen0_m1_kick_fallback_report.md\n"
+  },
+  "m2_reposition": {
+    "label": "M2: Bridge dynamic repositioning (nudge parked bots)",
+    "metrics": {},
+    "stdout": "100/181 (281/543) 1.4/s ETA 188s\n  rep1 150/181 (331/543) 1.4/s ETA 153s\n  rep2 50/181 (412/543) 1.4/s ETA 94s\n  rep2 100/181 (462/543) 1.4/s ETA 58s\n  rep2 150/181 (512/543) 1.4/s ETA 22s\n  Done: 543 calls, parse_ok=543, goalie_kicks=3, passes=365, lat_p50=686ms, 390s\n\n=== Sweep complete: 543 records ===\nRaw: /home/r-zwei-kickers/R2K-HSL/core/src/tools/../results/probe_gen0_m2_reposition_raw.jsonl\nReport: /home/r-zwei-kickers/R2K-HSL/core/src/tools/../results/probe_gen0_m2_reposition_report.md\n"
+  },
+  "m3_ball_out_sample": {
+    "label": "M3: Create samples_ball_out.txt (1 example)",
+    "metrics": {},
+    "stdout": "81/543) 1.4/s ETA 185s\n  rep1 150/181 (331/543) 1.4/s ETA 150s\n  rep2 50/181 (412/543) 1.4/s ETA 93s\n  rep2 100/181 (462/543) 1.4/s ETA 57s\n  rep2 150/181 (512/543) 1.4/s ETA 22s\n  Done: 543 calls, parse_ok=543, goalie_kicks=3, passes=368, lat_p50=673ms, 383s\n\n=== Sweep complete: 543 records ===\nRaw: /home/r-zwei-kickers/R2K-HSL/core/src/tools/../results/probe_gen0_m3_ball_out_sample_raw.jsonl\nReport: /home/r-zwei-kickers/R2K-HSL/core/src/tools/../results/probe_gen0_m3_ball_out_sample_report.md\n"
+  },
+  "m4_corner_sample": {
+    "label": "M4: Create samples_corner_kick_in.txt (1 example)",
+    "metrics": {},
+    "stdout": "1 (281/543) 1.4/s ETA 183s\n  rep1 150/181 (331/543) 1.4/s ETA 149s\n  rep2 50/181 (412/543) 1.4/s ETA 92s\n  rep2 100/181 (462/543) 1.4/s ETA 57s\n  rep2 150/181 (512/543) 1.4/s ETA 22s\n  Done: 543 calls, parse_ok=543, goalie_kicks=3, passes=362, lat_p50=668ms, 381s\n\n=== Sweep complete: 543 records ===\nRaw: /home/r-zwei-kickers/R2K-HSL/core/src/tools/../results/probe_gen0_m4_corner_sample_raw.jsonl\nReport: /home/r-zwei-kickers/R2K-HSL/core/src/tools/../results/probe_gen0_m4_corner_sample_report.md\n"
+  },
+  "m5_pass_gate": {
+    "label": "M5: Pass rule gated to opponent half only",
+    "metrics": {},
+    "stdout": "1 100/181 (281/543) 1.5/s ETA 176s\n  rep1 150/181 (331/543) 1.5/s ETA 143s\n  rep2 50/181 (412/543) 1.5/s ETA 89s\n  rep2 100/181 (462/543) 1.5/s ETA 55s\n  rep2 150/181 (512/543) 1.5/s ETA 21s\n  Done: 543 calls, parse_ok=537, goalie_kicks=3, passes=318, lat_p50=663ms, 370s\n\n=== Sweep complete: 543 records ===\nRaw: /home/r-zwei-kickers/R2K-HSL/core/src/tools/../results/probe_gen0_m5_pass_gate_raw.jsonl\nReport: /home/r-zwei-kickers/R2K-HSL/core/src/tools/../results/probe_gen0_m5_pass_gate_report.md\n"
+  },
+  "m6_kick_dist": {
+    "label": "M6: Bridge kick trigger 0.4m -> 0.3m",
+    "metrics": {},
+    "stdout": "1 100/181 (281/543) 1.4/s ETA 183s\n  rep1 150/181 (331/543) 1.4/s ETA 149s\n  rep2 50/181 (412/543) 1.4/s ETA 92s\n  rep2 100/181 (462/543) 1.4/s ETA 57s\n  rep2 150/181 (512/543) 1.4/s ETA 22s\n  Done: 543 calls, parse_ok=543, goalie_kicks=3, passes=365, lat_p50=668ms, 380s\n\n=== Sweep complete: 543 records ===\nRaw: /home/r-zwei-kickers/R2K-HSL/core/src/tools/../results/probe_gen0_m6_kick_dist_raw.jsonl\nReport: /home/r-zwei-kickers/R2K-HSL/core/src/tools/../results/probe_gen0_m6_kick_dist_report.md\n"
+  },
+  "m7_no_closest_rule": {
+    "label": "M7: Remove 'closest bot kicks' rule",
+    "metrics": {},
+    "stdout": "81/543) 1.4/s ETA 186s\n  rep1 150/181 (331/543) 1.4/s ETA 152s\n  rep2 50/181 (412/543) 1.4/s ETA 95s\n  rep2 100/181 (462/543) 1.4/s ETA 58s\n  rep2 150/181 (512/543) 1.4/s ETA 22s\n  Done: 543 calls, parse_ok=540, goalie_kicks=3, passes=456, lat_p50=710ms, 395s\n\n=== Sweep complete: 543 records ===\nRaw: /home/r-zwei-kickers/R2K-HSL/core/src/tools/../results/probe_gen0_m7_no_closest_rule_raw.jsonl\nReport: /home/r-zwei-kickers/R2K-HSL/core/src/tools/../results/probe_gen0_m7_no_closest_rule_report.md\n"
+  }
+}

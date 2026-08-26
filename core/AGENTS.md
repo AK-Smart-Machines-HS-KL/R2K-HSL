@@ -154,6 +154,10 @@ opencode session via `.opencode/opencode.json → instructions`.
   named module constants at file top (e.g. `PRESSING_GAIN = 0.5`, not `if dist < 0.3:`).
   Prefer continuous/proportional functions over step thresholds where avoidable.
   Enables tuning without code archaeology and documents intent.
+- **Ask clarifying questions as plain text.** Never serialize tool invocations
+  (e.g. `question` calls) as JSON in prose — emit the real tool call or write
+  plain markdown. One malformed JSON-in-prose turn poisons the transcript and
+  gets imitated by weaker models in subsequent turns.
 
 ## Mermaid in docs
 
