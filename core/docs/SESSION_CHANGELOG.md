@@ -3445,3 +3445,10 @@ v7 chase-abort design on a hardware probe.
 
 **Blockers:** None for docs. K1 probe needs physical robot access
 (booster@10.42.0.102) and a safe test area (robot on stand for kick tests).
+
+**Addendum 2026-08-28 (PR #18 merged):** b1_loco_api.hpp now current in repo
+(kSoccer=4, kSoccerGait=5, kRotateHeadWithTime=2043, Shoot "no model-name
+gate / StateTransitionFailed" refinement, VisualKick "primary or fallback").
+Vendor audit doc updated: "older snapshot" caveat retired. PR #18 merged by
+user after accidental close + reopen; approval requirement (1 write-access
+review) satisfied.
