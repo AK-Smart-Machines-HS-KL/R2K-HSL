@@ -74,3 +74,6 @@ core/docs/workshop v6.2/
 *.bak
 *.nope# Local opencode agent session state
 .opencode/plans/
+
+# Distribution artifacts (shared individually — never in the public repo)
+core/docs/opencode-team-package.tar.gz

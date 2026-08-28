@@ -1,0 +1,27 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "opencode": {
+      "whitelist": []
+    },
+    "google": {
+      "options": {
+        "apiKey": "<YOUR_GOOGLE_KEY_HERE>"
+      },
+      "whitelist": [
+        "gemini-3.5-flash",
+        "gemini-3.6-flash",
+        "gemini-flash-latest",
+        "gemini-3.1-pro-preview"
+      ],
+      "models": {
+        "gemini-3.5-flash": {
+          "name": "fallback — Gemini 3.5 Flash — Google"
+        },
+        "gemini-flash-latest": {
+          "name": "fallback (latest) — Gemini Flash Latest — Google"
+        }
+      }
+    }
+  }
+}

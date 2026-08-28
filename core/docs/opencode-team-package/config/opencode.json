@@ -1,0 +1,155 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "ollama/qwen2.5-coder:32b",
+  "small_model": "ollama/qwen2.5:3b",
+  "agent": {
+    "title": { "model": "ollama/qwen2.5:3b" },
+    "summary": { "model": "ollama/qwen2.5:3b" },
+    "compaction": { "model": "ollama/qwen2.5:3b" },
+    "explore": { "model": "ollama/qwen2.5-coder:7b" },
+    "plan": { "model": "ollama/qwen2.5-coder:7b" }
+  },
+  "compaction": {
+    "prune": true
+  },
+  "tool_output": {
+    "max_lines": 500,
+    "max_bytes": 20480
+  },
+  "provider": {
+    "ollama": {
+      "name": "Ollama",
+      "npm": "@ai-sdk/openai-compatible",
+      "options": {
+        "baseURL": "http://127.0.0.1:11434/v1"
+      },
+      "whitelist": [
+        "glm-4.7-flash:latest",
+        "qwen2.5-coder:32b",
+        "qwen2.5-coder:7b",
+        "qwen2.5:3b"
+      ],
+      "models": {
+        "glm-4.7-flash:latest": {
+          "reasoning": true,
+          "tool_call": true,
+          "name": "deep think — GLM 4.7 Flash — Ollama"
+        },
+        "qwen2.5-coder:32b": {
+          "_launch": true,
+          "tool_call": true,
+          "name": "coding — Qwen 2.5 Coder 32B — Ollama"
+        },
+        "qwen2.5-coder:7b": {
+          "_launch": true,
+          "tool_call": true,
+          "name": "search — Qwen 2.5 Coder 7B — Ollama"
+        },
+        "qwen2.5:3b": {
+          "tool_call": true,
+          "name": "summarize, chat — Qwen 2.5 3B — Ollama"
+        }
+      }
+    },
+    "openrouter": {
+      "name": "OpenRouter",
+      "options": {
+        "apiKey": "<YOUR_OPENROUTER_KEY_HERE>",
+        "chunkTimeout": 30000
+      },
+      "whitelist": [
+        "@preset/ros2k-auto",
+        "z-ai/glm-5.3",
+        "z-ai/glm-5.3-flash",
+        "meta/muse-spark-1.2-contributor",
+        "nvidia/nemotron-3-ultra-550b-a55b:free"
+      ],
+      "models": {
+        "@preset/ros2k-auto": {
+          "name": "auto — @preset/ros2k-auto router — OpenRouter"
+        },
+        "z-ai/glm-5.3": {
+          "name": "complex coding, deep think — GLM 5.3 — OpenRouter",
+          "reasoning": true,
+          "tool_call": true
+        },
+        "z-ai/glm-5.3-flash": {
+          "name": "offer: complex coding, deep think — GLM 5.3 Flash (50% off) — OpenRouter",
+          "reasoning": true,
+          "tool_call": true
+        },
+        "meta/muse-spark-1.2-contributor": {
+          "name": "offer: coding agent — Muse Spark 1.2 Contributor — OpenRouter",
+          "reasoning": true,
+          "tool_call": true
+        },
+        "nvidia/nemotron-3-ultra-550b-a55b:free": {
+          "name": "offer: deep think (free, slow) — Nemotron 3 Ultra — OpenRouter",
+          "tool_call": true
+        }
+      }
+    },
+    "uni-mainz": {
+      "name": "Uni Mainz",
+      "npm": "@ai-sdk/openai-compatible",
+      "options": {
+        "baseURL": "https://ki-chat.uni-mainz.de/api",
+        "apiKey": "<YOUR_UNI_MAINZ_KEY_HERE>"
+      },
+      "whitelist": [
+        "Qwen3 Coder 30B",
+        "Qwen3 235B Thinking",
+        "GPT OSS 120B",
+        "qwen3.6-35b"
+      ],
+      "models": {
+        "Qwen3 Coder 30B": {
+          "name": "coding (fallback) — Qwen3 Coder 30B — Uni Mainz",
+          "tool_call": true
+        },
+        "Qwen3 235B Thinking": {
+          "name": "deep think (fallback) — Qwen3 235B Thinking — Uni Mainz",
+          "reasoning": true,
+          "tool_call": true,
+          "limit": {"context": 32768, "output": 8192}
+        },
+        "GPT OSS 120B": {
+          "name": "deep think (fallback) — GPT OSS 120B — Uni Mainz",
+          "tool_call": true
+        },
+        "qwen3.6-35b": {
+          "name": "chat (fallback) — Qwen3.6 35B — Uni Mainz",
+          "tool_call": true
+        }
+      }
+    },
+    "ollama-cloud": {
+      "name": "Ollama Cloud",
+      "npm": "@ai-sdk/openai-compatible",
+      "options": {
+        "baseURL": "https://ollama.com/v1",
+        "apiKey": "REPLACE_WITH_SHARED_OLLAMA_CLOUD_KEY"
+      },
+      "whitelist": [
+        "qwen3.5:397b",
+        "kimi-k3",
+        "gpt-oss:120b",
+        "glm-5.2"
+      ],
+      "models": {
+        "qwen3.5:397b": {
+          "name": "deep think — Qwen 3.5 397B — Ollama Cloud"
+        },
+        "kimi-k3": {
+          "name": "deep think — Kimi K3 — Ollama Cloud"
+        },
+        "gpt-oss:120b": {
+          "name": "deep think — GPT OSS 120B — Ollama Cloud"
+        },
+        "glm-5.2": {
+          "name": "deep think — GLM 5.2 — Ollama Cloud"
+        }
+      }
+    }
+  }
+}

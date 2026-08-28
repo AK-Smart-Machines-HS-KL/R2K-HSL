@@ -1,6 +1,6 @@
 # Model Selection Strategy for ROS2K Development
 
-**Version:** 1.3 | **Date:** 2026-08-25 | **Status:** Draft for review
+**Version:** 1.5 | **Date:** 2026-08-27 | **Status:** Draft for review
 
 ---
 
@@ -14,11 +14,14 @@ This is what the opencode `/models` picker will look like after rollout:
 ╠═══════════════════════════════════════════════════════════════╣
 ║                                                               ║
 ║  Favorites                                                    ║
+║  ★ offer: complex coding, deep think — GLM 5.3 Flash (50% off) — OpenRouter ║
+║  ★ offer: coding agent — Muse Spark 1.2 Contributor — OpenRouter               ║
+║  ★ offer: deep think (free, slow) — Nemotron 3 Ultra — OpenRouter               ║
+║  ★ auto — @preset/ros2k-auto router — OpenRouter  ║
 ║  ★ summarize, chat — Qwen 2.5 3B — Ollama                  ║
 ║  ★ search — Qwen 2.5 Coder 7B — Ollama                       ║
 ║  ★ coding — Qwen 2.5 Coder 32B — Ollama                      ║
 ║  ★ coding (fallback) — Qwen3 Coder 30B — Uni Mainz           ║
-║  ★ auto — @preset/ros2k-auto router — OpenRouter  ║
 ║  ★ complex coding, deep think — GLM 5.3 — OpenRouter        ║
 ║  ★ deep think — Qwen 3.5 397B — Ollama Cloud         ║
 ║  ★ deep think — Kimi K3 — Ollama Cloud               ║
@@ -39,7 +42,7 @@ This is what the opencode `/models` picker will look like after rollout:
 ╚═══════════════════════════════════════════════════════════════╝
 ```
 
-The 11 starred entries are pre-populated via `~/.local/state/opencode/model.json`
+The 14 starred entries are pre-populated via `~/.local/state/opencode/model.json`
 (XDG **state** dir — NOT `~/.local/share/opencode/`; see section 5.5).
 Team members get the same list on first launch (minus the 3 Ollama Cloud entries
 if they don't have a key — see section 2.3). Below the Favorites, all non-
@@ -450,13 +453,26 @@ tarball gives every team member the same Favorites on first launch.
 
 **Editing `model.json` by hand — two gotchas (learned 2026-08-25):**
 1. The TUI loads `state/model.json` at startup and keeps an in-memory
-   copy. Hand-edits made while a TUI session is running are silently
-   overwritten on the next model switch. Always edit with no opencode
-   TUI running, then start the TUI.
+   copy. Hand-edits made while ANY TUI session is running — including
+   edits made by that session's own agent via `bash` — are silently
+   overwritten when that session (or any concurrently running session
+   held over from before the edit) flushes on model switch or exit.
+   The editing agent's own TUI is itself the flusher.
+   Always edit with no opencode TUI running, then start the TUI.
+   For model additions, use the `/models` picker's `f` toggle
+   (TUI-native) over file surgery — TUI-native favorites survive
+   flushes correctly because the toggle updates both memory and file
+   synchronously within the running session.
 2. The `opencode models` CLI validates only provider whitelists against
    the catalog — it does NOT resolve the Favorites entries. A wrong-path
    or stale `model.json` passes every CLI check while `/models` shows a
    broken list. Verify Favorites in the TUI picker itself.
+3. A favorite pointing at a model that is NOT in the provider's
+   `whitelist` (or absent from the `models` block) is invisible in
+   the picker — its entry in `model.json` is silently ignored.
+   Before filing a "favorite not visible" bug, check that the model
+   is whitelisted and has a `models` block entry. This is not
+   validated by `opencode models`.
 
 ### 5.6 Model Picker: Annotated Names
 
@@ -487,9 +503,10 @@ recommended list.
 
 | Provider | Use `whitelist` or `blacklist`? | Why |
 |---|---|---|
-| Ollama | `whitelist` (3 models) | Only 3 models pulled; hiding the rest is correct |
+| Ollama | `whitelist` (4 models) | Only 3 models pulled in v1.1; `glm-4.7-flash:latest` added in v1.3. |
 | OpenRouter | `whitelist` (2 entries) | Hundreds of models; whitelist is essential |
 | Uni Mainz | `whitelist` (4 models) | Only 7 models exist; whitelist hides bad ones (auto, bge-m3) |
+| Ollama Cloud | `whitelist` (4 models) | v1.3 had 3 models (`qwen3.5:397b`, `kimi-k3`, `gpt-oss:120b`); `glm-5.2` added v1.4 for the new favorite. |
 | Google | `whitelist` (4 models) | v1.1 used a blacklist for deprecated 2.5 models, but the catalog exploded (veo video gen, lyria music gen, image/TTS/live/embedding models, gemma-4, gemini-3.7-flash, deep-research) — 30+ entries. Whitelisted: `gemini-3.5-flash` (Favorite), `gemini-3.6-flash`, `gemini-flash-latest`, `gemini-3.1-pro-preview`. New Google models must be added manually. |
 | opencode (Zen free) | `whitelist` (empty = hidden) | opencode's built-in free-tier provider (`big-pickle`, `muse-spark-1.2-contributor-free`, `nemotron-3-ultra-free`, ...) is not part of the strategy. An empty whitelist hides the entire provider. |
 
@@ -511,6 +528,105 @@ variant map preserved) and archiving the wrong-path file as
 the 3 Ollama model definitions (was missing — asymmetric with uni-mainz; the
 local Qwen models declare the `tools` capability in Ollama but opencode did
 not treat them as tool-capable).
+
+**Change log v1.3 → v1.4 (2026-08-25):** After the v1.3 fix, new models
+(`glm-4.7-flash:latest`, `ollama-cloud/glm-5.2`) were added to favorites via
+bash file edit while the editing session's own TUI was running. That TUI had
+loaded the pre-edit favorites at startup; on exit it flushed its stale
+in-memory copy — silently reverting favorites to the v1.3 list. The root
+cause is §5.5 gotcha #1 operating one level deeper: not just "no TUI running",
+but specifically the editing agent's own TUI is the flusher. §5.5 gotchas
+strengthened accordingly. Gotcha #3 added (whitelist prerequisite for favorites).
+Additionally: `ollama-cloud/glm-5.2` was NOT whitelisted — added to the
+ollama-cloud provider's whitelist and `models` block in `~/.config/opencode/opencode.json`.
+`/tmp/restore_favorites.py` written for cold-file restore (exit all TUIs first,
+then run). `ollama` provider whitelist count corrected to 4 in §5.8 table.
+
+**Change log v1.4 → v1.5 (2026-08-27):** 3 OpenRouter special-offer models added
+on top of the 11 existing favorites (total 14). Filtered from OpenRouter's
+live model catalog — rejected image/video/translation/finance models. 
+Each verified for tool-calling support, ROS2K task fit, and benchmark scores.
+
+New entries (prepended to favorites list, followed by the `auto` preset):
+- `z-ai/glm-5.3-flash` — 50% off ($0.075/$0.25, expiring Sep 9 16:00 UTC).
+  Programming #21, GPQA ~85%, 0.43s latency, 115 tps. Same GLM family as
+  existing glm-5.3 favorite at half the price. Was revealed as the stealth
+  "Ox Alpha" model (#1 by token volume in rankings). **Mnemonic: "offer:
+  complex coding, deep think"**
+- `meta/muse-spark-1.2-contributor` — $0.10/$0.20, 1M ctx, 105 tps, 100% uptime.
+  Reasoning + tool calling. Strong for multi-file refactors and debugging.
+  **Caveat:** prompts/outputs may be used to improve Meta's products — do not
+  send API keys or confidential data. **Mnemonic: "offer: coding agent"**
+- `nvidia/nemotron-3-ultra-550b-a55b:free` — free, 550B MoE, 1M ctx, tool calling.
+  **WARNING:** 10.36s latency, 10 tps, 79% availability — emergency deep-think
+  only when all else is rate-limited. No `response_format` support. **Mnemonic:
+  "offer: deep think (free, slow)"**
+
+Naming: the mnemonic prefix was shortened from "special offer for ..." to
+"offer: ..." per user request; `@preset/ros2k-auto` moved to directly after
+the last offer entry (position 4).
+
+Files changed: `opencode-team-package/config/opencode.json` (3 whitelist + 3 models
+block entries), `opencode-team-package/share/model.json` (3 entries prepended to
+favorite + recent), `opencode-team-package/README.md` (count 11→14, 3 table rows),
+`model_selection_strategy.md` (version 1.5, preview updated, this changelog).
+
+**v1.5 deployment lesson (2026-08-27):** Editing the team package artifacts alone
+does NOT change a running machine. Gotcha #3 (whitelist prerequisite) bit twice:
+the live config `~/.config/opencode/opencode.json` also needs the 3 whitelist +
+models entries — favorites pointing at non-whitelisted models are silently
+invisible in `/models`, even though the state file has 14 entries. The state
+file (`~/.local/state/opencode/model.json`) and the live config must BOTH be
+updated, then opencode restarted. `/tmp/restore_favorites.py` handles the state
+file; the whitelist edit is manual (or via updated team package install).
+
+### Offer-check automation (v1.5, 2026-08-27)
+
+`core/tools/offer_check.py` repeats the special-offer scan automatically.
+Trigger: bash function `opencode()` in `~/.bashrc` runs the check before
+`command opencode` — instant when checked < 24h ago, one ~2-5s fetch
+otherwise (also serves as catch-up after idle days). A cron backstop was
+installed initially but removed as redundant: the wrapper covers idle
+periods at the cost of a one-time 2-5s fetch on the first launch back.
+
+An opencode plugin hook was rejected deliberately: plugin events fire AFTER the
+TUI boots and loaded the state file — editing favorites then triggers the
+flush-revert gotcha (#1/#2). The wrapper/cron approach runs the check only when
+no TUI is running (enforced by `pgrep -x opencode` guard, always active).
+
+Behavior: fetches the OpenRouter public models API, flags free/cheap text
+models (thresholds as module constants) plus best-effort promo-badge scrape,
+diffs against whitelist AND a seen-ledger (`offer_check.json`) so each model
+is reported only once. Report: `~/.local/state/opencode/offer_report.md`.
+Console UX: silent on 24h-guard/TUI-guard skips (most launches); prints
+"looking for special offers ..." only when it actually fetches.
+`--auto-add` appends candidates to whitelist + favorites as
+"offer (auto, unreviewed)" — tool-calling must still be verified manually.
+Flags: `--force` (ignore 24h guard), `--verbose` (print skip reasons),
+`--cron` (file logging, silent skips; kept for manual use, no cron entry
+installed).
+
+**Offer maintenance (automatic, same script):** offers are the favorites
+whose config name starts with `offer:` / `offer (auto, unreviewed)`.
+Every fetch run also re-validates them against live API pricing:
+- **Expiry** — an offer whose price rises above the free/cheap thresholds
+  (e.g. glm-5.3-flash after the 50% promo ends Sep 9: $0.15/$0.50) or whose
+  model is delisted is auto-REMOVED from whitelist + models block + favorites
+  (live and team package copies).
+- **Cap** — `MAX_OFFER_ENTRIES = 3` with D1b policy: reviewed offers
+  (`offer:` prefix) are eviction-proof; auto offers evict each other FIFO
+  (oldest bottom-of-list first). Non-offer favorites are never touched.
+
+**Auto-promotion (default since 2026-08-27):** new candidates that pass the
+quality gate are added automatically as `offer (auto, unreviewed)` — no human
+step. Gate (all must pass, constants in `offer_check.py`): tool calling
+(`supported_parameters` contains `tools`), context >= 256K, no roleplay/
+translation vendor or slug (`sao10k/gryphe/anthracite-org`, `hy-mt`, `-rp-`),
+free-or-cheap pricing. Selection per D3: free models first, then cheapest
+output price. Only free offer slots are filled (cap-aware); candidates that
+don't fit stay un-seen and retry on the next check (only ADDED slugs enter
+the seen-ledger). The report file remains the full audit trail.
+Opt-out: `--no-auto-add` (report only).
 
 ## 6. Cross-Tool Applicability
 
