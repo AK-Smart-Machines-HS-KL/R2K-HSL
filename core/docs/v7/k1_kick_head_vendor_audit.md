@@ -29,7 +29,7 @@ Sources, in order of authority:
 | Source                                                                        | What it is                                                                                                                                                                          |
 | ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **docs.booster.tech** → Developer Guide → C++ SDK → Motion-Control Interfaces | Official vendor docs (K1, T1, T2). URL: `https://docs.booster.tech/docs/developer-guide/cpp/rpc/motion/`                                                                            |
-| `src/booster/b1_loco_api.hpp`                                                 | Official `B1LocoClient` SDK header — serves **K1, T1, T2** (vendor-confirmed). Our copy is an **older snapshot** (no kSoccer, no RotateHeadWithTime)                                |
+| `src/booster/b1_loco_api.hpp` | Official `B1LocoClient` SDK header — serves **K1, T1, T2** (vendor-confirmed). **Current as of PR #18 (merged 2026-08-28):** repo now carries the newest snapshot incl. `kSoccer`, `kRotateHeadWithTime = 2043`, and `b1_loco_client.hpp` / `move_controller.hpp` / `robot_shared.hpp` |
 | `src/booster/T1 Instruction Manuall Fragments.odt`                            | Official manual, title: **"K1 *and* T1 Instruction Manual"** — shared, not T1-only. Contains only `Move`, `Shoot`, `GetMode`, `LowState` descriptions + embedded team console notes |
 
 Note: `T1InstructionManual.html` is a Feishu webpage dump with **no API content** — useless for API questions.
@@ -46,7 +46,10 @@ Note: `T1InstructionManual.html` is a Feishu webpage dump with **no API content*
 requests — **no autonomy, no ball chasing, no goal aiming is documented
 anywhere.** Behavior is firmware-internal by design.
 **Contradiction 2:** "current T1 provides the intended motion" — on K1,
-`Shoot()` may simply **fail** with a state-transition error.
+`Shoot()` may simply **fail** with a state-transition error. The repo header
+(PR #18) phrases it precisely: *"Configuration-dependent. No model-name gate.
+A model without the required reachable motion returns
+kRpcStatusCodeStateTransitionFailed."*
 
 Related firmware action set (discovered, not used by us): `RobotMode::kSoccer = 4`
 (supported on K1 and T1) with `kSoccerGait`, `kSoccerLocomotion(4)`,
@@ -59,7 +62,7 @@ Related firmware action set (discovered, not used by us): `RobotMode::kSoccer = 
 | API | Models | Min firmware | Notes |
 |---|---|---|---|
 | `RotateHead(pitch, yaw)` (2004) | **K1**, T1, T2 | ≥ v1.0.0 | absolute angles, radians; body `{"pitch": float, "yaw": float}` |
-| `RotateHeadWithTime(pitch, yaw, time_ms)` | **K1**, T1, T2 | — | NOT in our hpp snapshot — newer SDK |
+| `RotateHeadWithTime(pitch, yaw, time_ms)` | **K1**, T1, T2 | — | in repo since PR #18 as `kRotateHeadWithTime = 2043` |
 | `RotateHeadWithDirection(pitch_dir, yaw_dir)` (2006) | **K1**, T1, T2 | — | jog via `-1/0/+1` |
 
 K1 joint indices: `kHeadYaw=0`, `kHeadPitch=1` (2 head DoF). **No angle limits
