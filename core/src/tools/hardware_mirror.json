@@ -1,0 +1,10 @@
+{
+  "relay_id": "hardware_mirror",
+  "requires_hardware_sync": true,
+  "mapping": {
+    "blue_1": {"hardware_type": "virtual", "topic": "/blue_1/cmd_vel"},
+    "blue_2": {"hardware_type": "virtual", "topic": "/blue_2/cmd_vel"},
+    "bot1": {"hardware_type": "yahboom", "topic": "/bot1/cmd_vel", "mirror_of": "blue_1"},
+    "k1_bot": {"hardware_type": "k1", "topic": "/Kev1n/LocoApiTopicReq", "mirror_of": "blue_1"}
+  }
+}
