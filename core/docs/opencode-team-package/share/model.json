@@ -1,0 +1,35 @@
+{
+  "favorite": [
+    {"providerID": "openrouter", "modelID": "z-ai/glm-5.3-flash"},
+    {"providerID": "openrouter", "modelID": "meta/muse-spark-1.2-contributor"},
+    {"providerID": "openrouter", "modelID": "nvidia/nemotron-3-ultra-550b-a55b:free"},
+    {"providerID": "openrouter", "modelID": "@preset/ros2k-auto"},
+    {"providerID": "ollama", "modelID": "qwen2.5:3b"},
+    {"providerID": "ollama", "modelID": "qwen2.5-coder:7b"},
+    {"providerID": "ollama", "modelID": "qwen2.5-coder:32b"},
+    {"providerID": "uni-mainz", "modelID": "Qwen3 Coder 30B"},
+    {"providerID": "openrouter", "modelID": "z-ai/glm-5.3"},
+    {"providerID": "ollama-cloud", "modelID": "qwen3.5:397b"},
+    {"providerID": "ollama-cloud", "modelID": "kimi-k3"},
+    {"providerID": "ollama-cloud", "modelID": "gpt-oss:120b"},
+    {"providerID": "uni-mainz", "modelID": "Qwen3 235B Thinking"},
+    {"providerID": "google", "modelID": "gemini-3.5-flash"}
+  ],
+  "recent": [
+    {"providerID": "openrouter", "modelID": "z-ai/glm-5.3-flash"},
+    {"providerID": "openrouter", "modelID": "meta/muse-spark-1.2-contributor"},
+    {"providerID": "openrouter", "modelID": "nvidia/nemotron-3-ultra-550b-a55b:free"},
+    {"providerID": "openrouter", "modelID": "@preset/ros2k-auto"},
+    {"providerID": "ollama", "modelID": "qwen2.5:3b"},
+    {"providerID": "ollama", "modelID": "qwen2.5-coder:7b"},
+    {"providerID": "ollama", "modelID": "qwen2.5-coder:32b"},
+    {"providerID": "uni-mainz", "modelID": "Qwen3 Coder 30B"},
+    {"providerID": "openrouter", "modelID": "z-ai/glm-5.3"},
+    {"providerID": "ollama-cloud", "modelID": "qwen3.5:397b"},
+    {"providerID": "ollama-cloud", "modelID": "kimi-k3"},
+    {"providerID": "ollama-cloud", "modelID": "gpt-oss:120b"},
+    {"providerID": "uni-mainz", "modelID": "Qwen3 235B Thinking"},
+    {"providerID": "google", "modelID": "gemini-3.5-flash"}
+  ],
+  "variant": {}
+}
