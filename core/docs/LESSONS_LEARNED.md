@@ -39,6 +39,24 @@ statistical claims. This is a spike project — accept minor measurement errors.
 the ball moves, the K1 is stuck. v7 solution: camera detects ball motion
 change → `kChangeMode` (2000) aborts the chase.
 
+> **Correction 2026-08-28:** the chase claim above is **unverified folklore**
+> — no logged hardware session and no vendor doc supports it. Vendor docs
+> (docs.booster.tech) describe kicks only as "firmware-configured" actions;
+> Shoot's intended motion is currently T1-provided (may fail on K1);
+> VisualKick needs firmware ≥ v1.5.2.1. The abort design is GATED on the
+> hardware probe: `docs/v7/k1_kick_head_vendor_audit.md`. Head control
+> (RotateHead 2004) IS vendor-confirmed for K1.
+
+## Claims without logged sessions become folklore
+
+The "K1 chases the ball forever" case (2026-08-28 audit): six KB/docs files
+repeated an autonomy claim that traces to no changelog entry, no probe
+report, and no vendor source — yet it shaped a v7 design (chase-abort) and a
+scrum user story. Rule: **hardware behavior statements must cite a session
+entry or vendor doc; anything else gets an UNVERIFIED tag at birth.** Audit
+workflow that caught it: challenge claim → grep changelog for the observing
+session → fetch vendor docs → annotate + gate the design.
+
 ## Hardware differs — per-bot capability profiles
 
 K1 (biped, fall risk, autonomous kick), Yahboom (diff-drive, metal-push

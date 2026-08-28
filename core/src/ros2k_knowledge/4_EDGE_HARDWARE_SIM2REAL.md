@@ -135,7 +135,7 @@ but ROS2K testing/demos use mixed hardware.
 
 | Capability | K1 (biped) | Yahboom (cam variant) | Yahboom (standard) | Trailer | Gazebo (sim) |
 |---|---|---|---|---|---|
-| Kick | Yes (kShoot 2024, autonomous chase) | Yes (metal push, untested, short range) | Yes (metal push, untested) | No | Yes (phantom kick) |
+| Kick | Yes (kShoot 2024, autonomous chase) — **UNVERIFIED, see V6.4 audit note** | Yes (metal push, untested, short range) | Yes (metal push, untested) | No | Yes (phantom kick) |
 | Move sideways | Yes | No (diff-drive) | No (diff-drive) | No | Yes |
 | Rotate in place | Yes | Yes | Yes | No (fixed axle) | Yes |
 | Head rotate | Yes (kRotateHead 2004) | Yes (pan-tilt servo, lousy) | No | No | Yes (if modeled) |
@@ -147,6 +147,17 @@ but ROS2K testing/demos use mixed hardware.
 | Arrival angle control | Yes (can rotate at end) | Yes | Yes | No | Yes |
 
 ### K1 kick pitfalls (critical for real matches)
+
+> [!warning] STATUS 2026-08-28 — UNVERIFIED CLAIM, GATE 0 REQUIRED
+> The "autonomous chase" description below is **KB-internal folklore**: no
+> vendor document and no logged hardware session supports it. Official vendor
+> docs (docs.booster.tech) describe `Shoot()`/`VisualKick()` only as
+> "firmware-configured" actions with no autonomy/chase semantics, and note
+> that Shoot's intended motion is currently **T1-provided** — on K1 `Shoot()`
+> may fail outright. `VisualKick` is K1-supported only from firmware
+> ≥ v1.5.2.1. **The "chase forever" behavior MUST be probed on hardware
+> before any abort design is implemented.** Full audit + probe protocol:
+> `docs/v7/k1_kick_head_vendor_audit.md`.
 
 The K1's kick skills are **autonomous** — the K1 takes over and chases the
 ball until kick distance is reached:
@@ -174,6 +185,31 @@ The K1 SDK provides `kRotateHead` (api_id 2004) with parameters:
 This is independent from body locomotion (api_id 2001). The bridge can
 publish head rotation commands without affecting cmd_vel / RPC 2001.
 Failsafe: api_id 2000 (kChangeMode) resets head to forward position.
+
+> Vendor-confirmed for K1 (docs.booster.tech, 2026-08-28): `RotateHead`
+> ≥ v1.0.0, absolute angles in **radians**; also `RotateHeadWithTime`
+> (newer SDK, absent from our hpp snapshot) and `RotateHeadWithDirection`
+> (2006, jog via -1/0/+1). K1 joints: `kHeadYaw=0`, `kHeadPitch=1`.
+> No angle limits documented — the "±180°" above and the 2000-reset claim
+> are unsourced; clamp limits must be tuned on hardware.
+
+### Official vendor documentation (audit 2026-08-28)
+
+- **docs.booster.tech** → Developer Guide → C++ SDK → Motion-Control
+  Interfaces — official for K1/T1/T2; `b1_loco_api.hpp` is its B1LocoClient
+  header (our copy = older snapshot)
+- ODT manual title: **"K1 *and* T1 Instruction Manual"** (shared, not T1-only)
+- `Shoot()` (2024): K1-listed, but *"current T1 provides the intended
+  motion"* — may fail on K1; absent from the firmware compat table
+- `VisualKick` (2038): **K1-supported, firmware ≥ v1.5.2.1**, V2 = stronger
+  force; vendor documents NO autonomy/chase/aiming behavior for either
+- **`RobotMode::kSoccer = 4`** (K1 + T1, missing from our hpp snapshot):
+  dedicated soccer mode with `kSoccerGait`, `kSoccerLocomotion/kSoccerKicking`
+  postures, actions `kShoot=9`, `kGoalie=11`, `kVisualKickV1=14`,
+  `RobocupBehaviorStatus RUNNING/SHOOTING/PASSING` — evaluate BEFORE building
+  our own kick-abort machinery
+- Current firmware line: v1.7.2; version check via `GetRobotInfo` (api 2022)
+- Full audit + probe protocol: `docs/v7/k1_kick_head_vendor_audit.md`
 
 ### K1 trajectory replay (api_id 2027/2028)
 

@@ -364,6 +364,15 @@ Details:
 **Description:**
 As a K1-Developer I need the K1's autonomous kick skill (kShoot 2024 / kVisualKick 2038) to be abortable when the ball moves away. The K1 follows the ball indefinitely during the kick skill — this is a game-stopper for real matches. A ball motion change sensor (K1 camera) detects when the ball velocity/direction changes, and the bridge (or TeamCaptain) sends kChangeMode (2000) to abort the chase.
 
+> **GATE 0 (2026-08-28):** the autonomous-chase premise is UNVERIFIED — no
+> vendor doc or logged hardware session supports it; vendor notes Shoot's
+> motion is currently T1-provided (may fail on K1) and VisualKick needs
+> firmware ≥ v1.5.2.1. Run the probe protocol in
+> `docs/v7/k1_kick_head_vendor_audit.md` FIRST. Probe outcomes re-scope this
+> story: (a) chase observed → abort design as described, (b) skills
+> self-terminate → story drops, (c) evaluate firmware Soccer mode (mode 4,
+> K1+T1) as the kick mechanism instead.
+
 Details:
 - K1 kick skills (kShoot 2024, kVisualKick 2038) are autonomous: K1 chases ball until kick distance
 - If ball moves (kicked away, opponent kicks) -> K1 follows indefinitely -> bot is stuck
