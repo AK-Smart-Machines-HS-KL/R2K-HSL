@@ -89,9 +89,9 @@ ssh -S "${SSH_SOCKET}" ${ROBOT_USER}@${ROBOT_IP} "mkdir -p ${REMOTE_DIR}"
 echo "[2/4] Copying Python relay files..."
 scp -o "ControlPath=${SSH_SOCKET}" ./internal_relay.py ./external_relay.py ${ROBOT_USER}@${ROBOT_IP}:${REMOTE_DIR}/
 
-# 3. Copy the service files to the robot's /tmp folder
-echo "[3/4] Copying systemd service files..."
-scp -o "ControlPath=${SSH_SOCKET}" ./system/internal-relay.service ./system/external-relay.service ${ROBOT_USER}@${ROBOT_IP}:/tmp/
+# 3. Copy the service files and NM dispatcher script to the robot's /tmp folder
+echo "[3/4] Copying systemd service files + NM dispatcher..."
+scp -o "ControlPath=${SSH_SOCKET}" ./system/internal-relay.service ./system/external-relay.service ./system/99-relay-restart.sh ${ROBOT_USER}@${ROBOT_IP}:/tmp/
 
 # 4. Execute remote commands to finalize setup
 echo "[4/4] Configuring systemd (Will prompt for sudo password)..."
@@ -103,6 +103,11 @@ ssh -S "${SSH_SOCKET}" -t ${ROBOT_USER}@${ROBOT_IP} "
     echo '-> Moving service files to /etc/systemd/system/...'
     sudo mv /tmp/internal-relay.service /etc/systemd/system/
     sudo mv /tmp/external-relay.service /etc/systemd/system/
+
+    echo '-> Installing NetworkManager dispatcher (auto-restart relays on maker4 join)...'
+    sudo mv /tmp/99-relay-restart.sh /etc/NetworkManager/dispatcher.d/
+    sudo chown root:root /etc/NetworkManager/dispatcher.d/99-relay-restart.sh
+    sudo chmod 755 /etc/NetworkManager/dispatcher.d/99-relay-restart.sh
 
     echo '-> Setting correct file permissions...'
     sudo chown root:root /etc/systemd/system/internal-relay.service

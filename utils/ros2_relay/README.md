@@ -57,6 +57,13 @@ Exit request sent.
 Deployment Complete! The relays are now running.
 ========================================================
 
+NOTE: deploy_relay.sh also installs a NetworkManager dispatcher script
+(/etc/NetworkManager/dispatcher.d/99-relay-restart.sh) that automatically
+restarts both relay services when wlan0 joins the maker4 network (10.42.x.x).
+This fixes the issue where topics don't leave the bot if it boots in a
+different network and joins maker4 later — FastDDS captures the interface
+list at process startup, so the relays must restart to re-bind to wlan0.
+
 ****************************
     Deploy for Testing (No Auto-Start):
     Bash
