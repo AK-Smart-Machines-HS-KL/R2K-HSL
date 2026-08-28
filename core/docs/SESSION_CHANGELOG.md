@@ -3,6 +3,431 @@
 > For full history (2026-07-13 to 2026-08-02), see `SESSION_CHANGELOG_archive.md`.
 > Compressed on 2026-08-05. Key findings are in the power files and `LESSONS_LEARNED.md`.
 
+## 2026-08-27 — GUI POC: bug triage, architecture redesign, requirements docs, opencode team package
+
+**Goal:** Fix the first-shot GUI bugs (scenario mismatch, DONE failure, GPU leak),
+then design the v6.7 GUI POC architecture with the team workshop input, produce
+requirements + implementation plan documents, and package opencode config for
+team distribution.
+
+**Done:**
+
+### Bug fixes in ws_backend.py (first-shot GUI, NOT committed yet — POC code)
+
+- **n_vs_m → 2vs2 scenario mismatch:** Root cause: `setup_r2k.py` exit(1) on
+  invalid scenario left stale `active_scenario.json` → gzserver spawned old bots.
+  Fix: `/launch` now validates scenario file on disk before any state mutation
+  and removes stale `active_scenario.json` in teardown (`ws_backend.py:260-300`).
+- **DONE not terminating:** Root cause: `handle_done` killed processes but never
+  sent `keep_alive:0` to Ollama → model stayed in VRAM for 30 min. Fix:
+  `_unload_ollama_model()` queries `/api/ps` and sends `keep_alive:0` for each
+  loaded model (`ws_backend.py:168-192`). Also kills `server.js 8080` (GZWeb
+  gzbridge) which was consuming 199% CPU and keeping GPU pipeline busy.
+- **GPU >25% after DONE:** Root cause: (1) Ollama model not unloaded (above),
+  (2) gzbridge not killed, (3) unload targeted `172.17.0.1` instead of
+  `127.0.0.1` (container uses `network_mode: host`). Fix: unload queries
+  `127.0.0.1:11434/api/ps` and unloads ALL loaded models, not just the tracked
+  one (handles demo compiler loading `qwen2.5:7b` alongside executor `3b`).
+- **Dropdown resets to 2vs2:** Root cause: `loadCatalog()` hardcoded
+  `2vs2_default` as `selected`; `location.reload()` re-ran `loadCatalog()`.
+  Fix: reactive store (in requirements doc) replaces `location.reload()`;
+  `localStorage` persists last selection. Not yet implemented — documented in
+  the POC requirements as a design decision.
+- **`_current_model` NameError:** Root cause: module-level global lost during
+  iterative edits to `ws_backend.py`. Fix: state machine with typed dataclass
+  replaces bare globals (in requirements doc, not yet implemented).
+
+**Files touched (bug fixes):** `core/src/tools/ws_backend.py` (NOT committed —
+POC code, will be replaced by `r2k_supervisor.py`), `core/launch_gzweb.sh`
+(Ollama unload in cleanup).
+
+### Architecture redesign: ws_backend.py → r2k_supervisor.py
+
+- Identified 6 systemic fragilities in the first-shot GUI (pkill race
+  conditions, stale state across layers, global variable fragility, Ollama
+  model not unloaded, gzbridge consuming GPU, browser caching).
+- Designed replacement: `r2k_supervisor.py` — single asyncio process with
+  PID-tracked ProcessManager, StateMachine (IDLE→LAUNCHING→RUNNING→
+  TEARING_DOWN), HealthMonitor, file-bus watcher. No pkill anywhere.
+- 14 design decisions locked (see requirements doc §5):
+  - 3D Scene: Keep GZWeb (PoC passed N4)
+  - Supervisor: New file (ws_backend.py stays as fallback)
+  - Frontend: Vanilla JS + reactive store, 3 files (index.html + style.css + app.js)
+  - Build sequence: Clean build, no patches
+  - opencode: Direct Ollama dialogue, opencode integration deferred
+  - System Tree: Sidebar liveness dots + detail panel (follow-up)
+  - AI Navigation: Toasts + button highlighting + assistant panel (follow-up)
+  - Reboot: One-click bring-up per dead subsystem
+  - Ruleset: KISS — minimal scope, don't build what's not needed
+  - Assistant: META-ROUTER based, one assistant (not per-submodule)
+  - Homepage: Approved (commits + health + runs + quick launch + digest)
+  - JS files: Split into 3 (index.html + style.css + app.js)
+  - Build scope: Core first (supervisor + frontend + homepage + health),
+    features later (system tree, toasts, assistant, SSE, replay)
+
+### Team workshop notes integration
+
+- Analyzed workshop notes (hackathon): three-pillar structure (Deployment/
+  Simulation/Core), dashboard as homepage, Trello, W&B, reboot management,
+  scalability, ruleset-aware filtering, system prompts per submodule.
+- User clarification: NO W&B (ADR-A03 stays rejected). Three pillars deferred
+  (focus on Simulation only). No Trello yet. Two-level nav after pillars.
+- KISS interpretation for ruleset: don't build features the ruleset/workflow
+  doesn't need. No competition/development toggle, no data suppression.
+
+### v7 use cases (UC11–UC17, to be discussed)
+
+- 7 future-oriented use cases: system prompt improvement, candidate LLM
+  evaluation, fast text probing, in-depth benchmark analysis, world model
+  extension, eye-in-the-sky calibration, video recording review.
+- 3 AI integration modes: Supervisor (passive monitoring), Copilot
+  (interactive dialogue), Analyst (offline mining). All marked "To Be
+  Discussed" in the requirements doc.
+- 6 additional v7 candidates: TeamCaptain, robot-to-robot comms, STT voice,
+  K1 image recognition, scalability, full reboot automation.
+
+### opencode team package
+
+- `docs/opencode-team-package.tar.gz` (3.9 KB) — config + model favorites
+  for team distribution. Contains:
+  - `config/opencode.json` — 4 providers (Ollama, OpenRouter, Uni Mainz,
+    Ollama Cloud). Ollama Cloud key included (shared team key). Other 3
+    keys sanitized to `<YOUR_*_KEY_HERE>`.
+  - `config/opencode.jsonc` — Google provider, key sanitized.
+  - `share/model.json` — 11 model favorites (3 local Ollama, 4 Ollama Cloud,
+    2 Uni Mainz, 1 OpenRouter, 1 Google).
+  - `project-opencode/opencode.json` — repo-root instructions pointer.
+  - `install.sh` — copies configs, checks for opencode binary, prints
+    which keys need filling + provider signup links.
+  - `README.md` — setup instructions, provider signup links, model table.
+- Verified: no leaked keys except the intentional Ollama Cloud shared key.
+
+**Files touched (docs):**
+- `docs/gui_v67_discussion.md` — annex additions (N1 feasibility, N3-N7)
+- `docs/model_selection_strategy.md` — v1.3→v1.4 change log, gotcha #3
+- `docs/SESSION_CHANGELOG.md` — this entry
+- `docs/gui_v67_poc_requirements.md` (NEW) — requirements + design decisions
+- `docs/gui_v67_poc_implementation_plan.md` (NEW) — implementation plan
+
+**New files (untracked):**
+- `docs/gui_v67_poc_requirements.md`
+- `docs/gui_v67_poc_implementation_plan.md`
+- `docs/opencode-team-package.tar.gz`
+- `docs/opencode-team-package/` (5 files: config, install.sh, README.md)
+- `launch_gzweb.sh` (GZWeb launcher — from 2026-08-26 session, untracked)
+- `src/docker-compose.gzweb.yml` (from 2026-08-26 session, untracked)
+- `src/Dockerfile.gzweb` (from 2026-08-26 session, untracked)
+- `src/tools/gui/index.html` (first-shot GUI, untracked)
+- `src/tools/ws_backend.py` (first-shot backend, untracked)
+- `src/tools/gzweb_inline_material.patch` (from 2026-08-26 session)
+- `src/tools/gzweb_probe.js` (from 2026-08-26 session)
+- `src/tools/setup_gzweb.sh` (from 2026-08-26 session)
+- `src/tools/hardware_mirror.json` (relay profile copy)
+- `docs/figures/n4_gzweb_colored.png` (from 2026-08-26 session)
+- `docs/figures/n4_gzweb_scene.png` (from 2026-08-26 session)
+
+**Files deleted:** None.
+
+**Not yet done:**
+- `r2k_supervisor.py` implementation (core build) — deferred to next session.
+  The bug fixes in `ws_backend.py` are NOT committed (POC code, will be
+  replaced). The requirements + implementation plan are ready.
+- System tree, toast notifications, assistant panel, SSE event stream,
+  replay view — all follow-up scope (documented in requirements §6).
+
+**Next:**
+1. Implement `r2k_supervisor.py` (core build, ~600 lines) per the
+   implementation plan.
+2. Implement `tools/gui/` frontend (3 files: index.html + style.css + app.js,
+   ~870 lines total).
+3. Change 1 line in `launch_gzweb.sh` to launch the supervisor.
+4. Test: 3vs3 launch, DONE, GPU unload, dropdown persistence, homepage.
+
+**Blockers:** None. The requirements and implementation plan are approved.
+The opencode team package is ready for distribution.
+
+---
+
+## 2026-08-26 — GZWeb PoC (GUI gate 1): PASSED + inline-material patch + codification
+
+**Goal:** Execute the GZWeb PoC defined in the GUI annex N4 (hardest embedding
+problem first): live Gazebo scene with moving bots visible in a browser, inside
+the existing Docker stack. On pass: codify into Dockerfile + tools.
+
+**Done:**
+- **Build (jammy, source):** gzweb NOT in apt (as the annex predicted); built
+  osrf/gzweb `93b6a6f` from source in container `core_gazebo`. Missing deps
+  found and installed: `nodejs`/`npm` (jammy 12.22/8.5), `libjansson-dev`
+  (cmake), `imagemagick` (cmake); `libgazebo-dev` already present. `deploy.sh
+  -m local` (npm install + grunt + cmake gzbridge + node-gyp + local model DB)
+  clean, ~10 min. GAZEBO_MODEL_PATH must be exported for the local model DB
+  (`/usr/share/gazebo-11/models`; sun + ground_plane only — robocup.world is
+  100% primitives).
+- **Run:** headless gzserver (robocup.world) + `json_spawner.py` with the
+  transient `active_scenario.json` (3v3: 6 bots + ball) + `gzbridge/server.js`
+  8080. Container is `network_mode: host` → port directly reachable.
+- **Acceptance evidence (all three legs):**
+  1. **Websocket data path** (`tools` probe in /opt/gzweb): `~/scene` delivers
+     all 19 models with poses; `~/pose/info` streams only moving entities
+     (blue_1 arc-drive -4.0,0 → -3.1,3.1 verified).
+  2. **Static render**: headless-Chrome (CDP-driven, `--use-angle=swiftshader`)
+     screenshot → green field 24.8% of frame, blue/red bot + goal-post clusters.
+  3. **Live motion in client scene graph**: CDP `Runtime.evaluate` — blue_2's
+     THREE.js position updates live (7m in 12s while driving).
+- **Upstream bug found + patched:** GZWeb renders inline SDF materials
+  (`<ambient>/<diffuse>/<specular>` without script names — our whole
+  robocup.world) WHITE: `parseMaterial` only reads material scripts. Patch adds
+  inline fallback (`{r,g,b,a}` objects → `[r,g,b,a]` arrays for `setMaterial`)
+  → floor renders `005b00` green. Patch: `src/tools/gzweb_inline_material.patch`,
+  applied in `gz3d/src/gziface.js`, bundle rebuilt via `grunt concat` (deployed
+  client is the unminified concat). Reverse-dry-run verified.
+- **Headless test artifact documented:** `Page.captureScreenshot`/`readPixels`
+  do NOT capture animated WebGL frames under software GL (SwiftShader) —
+  verified via forced `scene.render()` + identical captures while the scene
+  graph moved. Animation proof therefore uses the live scene-graph probe;
+  real browsers (rAF) are unaffected.
+- **Debugging detours worth recording:** (1) CDP target selection must filter
+  `type == 'page'` — `/json[0]` can be a chrome-extension background page
+  (symptom: canvasCount 0 on a loaded page). (2) `pkill -f <pattern>` kills
+  your own bash when the pattern appears in the command line (use
+  `pattern[x]`). (3) gzweb's `--timeout=N` headless flag is a MAX, not a wait —
+  screenshot fires at page load, before the websocket scene arrives.
+- **Codified:**
+
+## 2026-08-26 — GZWeb integration for demo mode
+
+**Goal:** Enable real-time GZWeb visualization during --demo calibration sessions
+
+**Done:**
+- Implemented `--gzweb` flag in `launch_r2k.sh:422-438` (starts websocket_server.py + GZWeb proxy)
+- Added Docker dependencies: `websockets` and `aiofiles` in `src/Dockerfile:17`
+- Created calibration CLI: `src/tools/calib_cli.py` (interactive demo control)
+
+**Files touched:**
+- core/docs/SESSION_CHANGELOG.md
+- core/launch_r2k.sh
+- core/src/Dockerfile
+- core/src/tools/calib_cli.py
+
+**New files (untracked):**
+- src/tools/ws_backend.py
+- src/tools/setup_gzweb.sh
+
+**Files deleted:**
+- (none)
+
+**Not yet done:**
+- Full end-to-end validation of GZWeb streaming (requires physical test)
+
+**Next:**
+- Verify websocket connection stability during 10-minute demo session
+
+**Blockers:**
+- GZWeb requires manual port forwarding in Docker compose config
+  - `src/Dockerfile` — apt deps added (nodejs npm libjansson-dev imagemagick)
+  - `src/tools/setup_gzweb.sh` (NEW) — idempotent: deps → clone → patch →
+    deploy; validated as a no-op against the live patched container
+  - `src/tools/gzweb_inline_material.patch` (NEW)
+  - `src/tools/gzweb_probe.js` (NEW) — headless websocket verification probe
+  - `launch_r2k.sh` — `--gzweb` flag: runs setup_gzweb.sh + starts server on
+    :8080 after bot spawning; curl retry loop (5×1s); teardown kills
+    `server.js 8080` before `docker compose down`; U22 guard (Docker-only).
+    End-to-end validated: `--gzweb --headless --duration 120` → build (~10min
+    first run) → `✅ GZWeb is live → http://localhost:8080` → clean teardown.
+  - Bug found: `setup_gzweb.sh` `set -euo pipefail` + `source ROS setup.bash`
+    → `AMENT_TRACE_SETUP_FILES: unbound variable` aborts deploy. Fixed: `set +u`
+    around the source, `set -u` after.
+  - `docs/gui_v67_discussion.md` — N4 marked PASSED with result table,
+    evidence screenshot, run instructions; appendix row 32
+  - `docs/figures/n4_gzweb_colored.png`, `n4_gzweb_scene.png` (NEW — evidence)
+
+**Files touched:**
+- core/launch_r2k.sh — `--gzweb` flag + teardown + U22 guard
+- core/src/Dockerfile
+- core/src/tools/setup_gzweb.sh (NEW)
+- core/src/tools/gzweb_inline_material.patch (NEW)
+- core/src/tools/gzweb_probe.js (NEW)
+- core/docs/gui_v67_discussion.md (N4 + appendix)
+- core/docs/figures/n4_gzweb_colored.png, n4_gzweb_scene.png (NEW)
+- core/docs/SESSION_CHANGELOG.md — this entry
+
+**Files deleted:** (none)
+(model_selection_strategy.md modified = pre-existing uncommitted v1.4 edits)
+
+**Not yet done:**
+- Commit of the session's work (user chose not to commit before opencode restart)
+- GUI shell build (dockview + file-bus backend) — the actual widget work, now
+  unblocked by gate 1 + the `--gzweb` flag
+- v7 TeamCaptain Slice 3 (closest-bot + goalie gating) — the other major thread
+  (user was presented the choice: GUI gate 2 vs TeamCaptain Slice 3; not yet picked)
+
+**Next:**
+1. Commit the session's work (launch_r2k.sh --gzweb, setup_gzweb.sh, patch, probe,
+   annex N4, figures, changelog) — one coherent change on a `feature/` branch
+2. User picks thread: GUI gate 2 (file-bus WebSocket backend + dockview shell)
+   OR v7 TeamCaptain Slice 3 (closest-bot + goalie gating CPU-side)
+3. If GUI: the `--gzweb` flag is the foundation; gate 2 is ~100 lines Python
+   (file-bus backend tailing Worldstate/strategy/traces → browser WebSocket)
+
+**Blockers:** None. GPU idle, no production changes (bridge/evaluator untouched;
+Dockerfile adds 4 apt packages; container /opt/gzweb is ephemeral and rebuilt by
+setup_gzweb.sh).
+
+---
+<!-- Stub generated by session_entry.sh on 2026-08-26 -->
+<!-- Branch: feature/gzweb-experimental | Modified: 4 | New: 10 | Deleted: 0 -->
+<!-- Last commits:
+  5996a91 docs: changelog archival protocol, edge-LLM K1 proposal, session entries, opencode instruction trim
+  5e786a2 chore: re-baseline kpi_targets to v6.7 final benchmark
+  034c61a data: v6.7 final benchmark raw results (n=100 random-draw)
+-->
+
+## 2026-08-26 (cont.) — GZWeb experimental container + K1 DDS diagnosis
+
+**Goal:** Two threads. (1) Diagnose why the K1 (Kev1n) topics were missing from
+the host while Yahboom worked. (2) Stop the repeated ~10-min GZWeb apt+build
+on every `--gzweb` run by isolating GZWeb into its own experimental container
+on a feature branch (no production risk).
+
+**Done:**
+- **K1 DDS root cause (diagnosis, no code change):** Kev1n's
+  `external_relay.py` runs on the robot; host only saw `/Kev1n/LocoApiTopicReq`
+  (host bridge publishes it) but not Resp/odometer_state (robot-published).
+  `ros2 topic info -v` showed `Subscription count: 0` — robot invisible to
+  host DDS. Root cause: **FastDDS picks the default-route NIC for its unicast
+  locator.** Plugging in LAN made ethernet (10.0.5.58) the default route; K1
+  (WiFi 10.42.0.122) discovered the host via multicast (host joins 239.255.0.1
+  on all NICs) but couldn't send data back to the ethernet IP. Yahboom
+  unaffected because micro-ROS XRCE-DDS is UDP **unicast** to the agent's
+  hardcoded `10.42.0.1:8888` — no multicast-routing dependency. Fix = cut LAN
+  cable + reboot (user did this; K1 connected). Permanent fix options
+  documented: FastDDS interface whitelist (profile.xml) or Discovery Server.
+  NOT an RMW/domain mismatch (both sides domain 0; relay services fine).
+- **GZWeb container isolation (the main deliverable):**
+  - **Root cause of repeated apt+build:** Docker image was stale (built
+    2026-07-25, Dockerfile edited 2026-08-26) — `npm`/`node`/`convert`/
+    `libjansson-dev`/`websockets`/`aiofiles` all MISSING from the running
+    image despite Dockerfile listing them. Plus `docker compose down`
+    (launch_r2k.sh:386, every run) wipes `/opt/gzweb` (outside the volume).
+  - **Solution: separate container `r2k_gzweb` on branch
+    `feature/gzweb-experimental`.** New files: `Dockerfile.gzweb` (production
+    Dockerfile + GZWeb apt deps + websockets/aiofiles + GZWeb cloned/patched/
+    deployed at **build** time — zero runtime apt), `docker-compose.gzweb.yml`
+    (service `gzweb_sim`, `container_name: r2k_gzweb`, network_mode:host,
+    ipc:host, named volume `gzweb_data:/opt/gzweb`), `launch_gzweb.sh`
+    (~230-line minimal launcher: real AI match with `only_sim_bots` relay +
+    gzbridge:8080 + ws_backend:8765; no hardware sync/micro-ROS/hotspot/--relay;
+    --scenario/--strategy/--model/--explain/--headless/--no-visualizer/
+    --duration/--demo pass-through).
+  - **Production `launch_r2k.sh` reverted:** the `--gzweb` block (lines 20,
+    52, 66, 268-271, 421-438) + the broken `tools/websocket_server.py`
+    reference removed. `git diff` vs main = 0 lines. Production path pristine.
+  - **ws_backend.py comment** updated (references launch_gzweb.sh, not the
+    removed --gzweb flag).
+- **Verification:** `bash -n` on both launchers (syntax OK); `docker compose
+  -f docker-compose.gzweb.yml config` (valid); fast pytest 504 passed, 20
+  failed (all in test_i3_sweep.py — confirmed identical on `main`, pre-existing
+  v7 work, NOT caused by this session).
+
+**Files touched:**
+- core/launch_r2k.sh — `--gzweb` block reverted (zero diff vs main)
+- core/launch_gzweb.sh (NEW) — minimal GZWeb experimental launcher
+- core/src/Dockerfile.gzweb (NEW) — production + GZWeb baked in at build
+- core/src/docker-compose.gzweb.yml (NEW) — r2k_gzweb service + volume
+- core/src/tools/ws_backend.py — comment updated (launch_gzweb.sh reference)
+
+**Files deleted:** (none)
+
+**Not yet done:**
+- Docker image build (`docker compose -f docker-compose.gzweb.yml up -d --build`,
+  ~15 min one-time) — not run this session (user shutting down PC).
+- End-to-end smoke test: `./launch_gzweb.sh --headless --duration 30` →
+  browser http://localhost:8080 shows scene + ws://localhost:8765 streams.
+- Gate 2 (dockview shell HTML/ES-module + panel widgets) — not started.
+- Commit of this session's work (user will commit).
+
+**Next:**
+1. Build the image: `cd core/src && docker compose -f docker-compose.gzweb.yml up -d --build` (~15 min)
+2. Smoke test: `./launch_gzweb.sh --scenario 2vs2_default --headless --duration 30`
+3. Commit on `feature/gzweb-experimental` (launch_gzweb.sh, Dockerfile.gzweb, docker-compose.gzweb.yml, ws_backend.py comment, launch_r2k.sh revert, changelog)
+
+**Blockers:** None. Ollama must be running (`OLLAMA_HOST=0.0.0.0 ollama serve`)
+for the AI match; the container reaches it via network_mode:host.
+
+## 2026-08-25 (cont.3) — HTML GUI feasibility annex (Spotify-style shell, GZWeb gate 1)
+
+**Goal:** User wants a PoC for an HTML GUI (Spotify-style docked widgets). Before
+any code: document feasibility as an annex in the GUI discussion doc. Executed on
+GLM 5.3 per model-selection strategy (complex coding mnemonic — recommended for
+this session, user confirmed via /models).
+
+**Done:**
+- **ANNEX section (N1–N7) added to `docs/gui_v67_discussion.md`** (placed between
+  EDGE and APPENDIX, per task spec — 2 file writes, no code, no Docker changes):
+  - **N1 verdict + embedding matrix** (14 widgets): ~80% of the B0–B5 wished
+    widgets are file-bus-native (zero ROS in browser); Gazebo 3D → GZWeb iframe
+    (native web client for Gazebo Classic 11); Gazebo camera → MJPEG via
+    web_video_server; visualizer re-rendered natively (NOT streamed matplotlib);
+    rqt_graph → custom simplified view or defer; RViz2 deferred (no TF today).
+  - **N2 file-bus insight:** Worldstate.json 10 Hz, current_strategy.json
+    ~1.5 Hz, trace jsonl — the decoupling axiom (agent axiom 3) already IS a
+    message bus; a small observe-only WebSocket backend (mtime + content hash,
+    the evaluator's own pattern) covers ~80% of widgets; live view and replay
+    become the same widget.
+  - **N3 hybrid three-layer architecture** with mermaid diagram (browser shell
+    dockview / file-bus backend / opt-in ROS bridges); docker-compose already
+    runs network_mode: host → bridge ports directly browser-reachable.
+  - **N4 GZWeb PoC = gate 1:** hardest embedding problem first; osrf/gzweb
+    source build (apt availability on jammy to be verified in PoC); fallbacks
+    camera-sensor MJPEG (colcon rebuild) then noVNC of gzclient on :1;
+    acceptance = live scene in browser with moving bots; est. 1-2h. Argument:
+    gzclient runs LIBGL_ALWAYS_SOFTWARE=1 — GZWeb moves rendering into the
+    browser GPU (laptop plausibly gets lighter).
+  - **N5 safety:** GUI observes only; 0.2s watchdog/teardown stays authoritative;
+    stack control via launch_r2k.sh wrapper; write paths (B1 fragment editor,
+    B5 task_input) are separate later gates.
+  - **N6 two whiteboard cards pre-answered** (evidence, not decisions): A4
+    "embed external tools" — iframes make option B concrete; "one GUI vs.
+    family" — one shell, docked modes (role sidebar switches presets).
+  - **N7 frontend choice:** no-build vanilla HTML/ES modules + dockview (MIT)
+    via CDN now; React+Vite documented as growth path.
+- **Cross-references added** from B0 (role matrix → ~80% file-bus-native) and
+  A4 (external tools → iframes make B concrete); appendix visual list row 31
+  added for the N3 mermaid.
+- **Model recommendation for the PoC coding session:** GLM 5.3 (complex coding)
+  for the annex (done, this session); the GZWeb PoC itself is Docker/build work —
+  32B coder or GLM 5.3 both viable when it starts.
+
+**Files touched:**
+- core/docs/gui_v67_discussion.md — ANNEX N1–N7 + B0/A4 cross-refs + appendix row 31
+- core/docs/SESSION_CHANGELOG.md — this entry
+
+**Files deleted:** (none)
+(model_selection_strategy.md shows as modified from the earlier /models session —
+pre-existing uncommitted v1.4 edits, not touched here.)
+
+**Not yet done:**
+- GZWeb PoC (gate 1, est. 1-2h) — first execution task when the team green-lights
+  (or earlier on explicit user go)
+- Team discussion of gui_v67_discussion.md incl. the annex (decision half of the
+  whiteboard cards stays open)
+- Widget build order after gate 1 (file-bus backend + dockview shell first)
+
+**Next:**
+1. GZWeb PoC: extend Docker image, verify jammy build path, acceptance = live
+   scene with moving bots in the browser
+
+**Blockers:** None. No code or Docker changes in this step (pure documentation).
+
+---
+<!-- Stub generated by session_entry.sh on 2026-08-25 -->
+<!-- Branch: main | Modified: 2 | New: 0 | Deleted: 0 -->
+<!-- Last commits:
+  5996a91 docs: changelog archival protocol, edge-LLM K1 proposal, session entries, opencode instruction trim
+  5e786a2 chore: re-baseline kpi_targets to v6.7 final benchmark
+  034c61a data: v6.7 final benchmark raw results (n=100 random-draw)
+-->
+
 ## 2026-08-25 (cont.2) — JSON-mode kick quality benchmark: 3B geometry blind spot confirmed live
 
 **Goal:** User reported poor 3B text output quality during an `--explain --analyze`
@@ -2786,3 +3211,237 @@ deferred to post-v6.7.
 - `docs/proposal_edge_llm_k1.md` (NEW)
 
 **Not yet done:** everything queued behind v6.7 benchmark completion + commit.
+
+## 2026-08-27 (cont.) — opencode favorites v1.5: OpenRouter special offers + automation
+
+**Goal:** Add 3 OpenRouter special-offer models to the favorites, fix the
+deployment (state file + whitelist both needed), shorten mnemonics to "offer:",
+reorder (auto after offers), and automate the periodic offer scan.
+
+**Done:**
+- 3 special offers added (checked OpenRouter catalog, benchmarks, pricing):
+  `z-ai/glm-5.3-flash` (50% off, expires Sep 9 16:00 UTC — $0.075/$0.25,
+  Programming #21), `meta/muse-spark-1.2-contributor` ($0.10/$0.20, trains on
+  data — no API keys), `nvidia/nemotron-3-ultra-550b-a55b:free` (10s latency,
+  79% uptime — emergency only). Total favorites 11 → 14.
+- Deployment fix: favorites were invisible because (a) the live state file
+  `~/.local/state/opencode/model.json` was never updated and (b) gotcha #3 —
+  the 3 models were not in the LIVE config whitelist
+  `~/.config/opencode/opencode.json`. Both fixed; `/tmp/restore_favorites.py`
+  (ephemeral) preserves the variant map on cold restore.
+- Mnemonics shortened "special offer for ..." → "offer: ...";
+  `@preset/ros2k-auto` moved to position 4 (after the 3 offers).
+- Offer-check automation: `tools/offer_check.py` (NEW) — guarded scanner
+  (pgrep TUI guard + 24h interval + seen-ledger), OpenRouter API pricing
+  (per-token → per-1M conversion), free/cheap thresholds as constants,
+  report at `~/.local/state/opencode/offer_report.md`, `--auto-add` flag.
+  Triggers: bash function `opencode()` in `~/.bashrc` (pre-launch) + cron
+  `17 9 * * *` (user crontab, logs to offer_cron.log). Plugin hook rejected:
+  fires after TUI boot → flush-revert gotcha.
+
+**Files touched:**
+- `docs/opencode-team-package/config/opencode.json` — 3 whitelist + models entries, "offer:" names
+- `docs/opencode-team-package/share/model.json` — 14 favorites, reorder
+- `docs/opencode-team-package/README.md` — count 14, 3 OpenRouter rows
+- `docs/model_selection_strategy.md` — v1.5: changelog, preview, deployment lesson, automation §
+- `tools/offer_check.py` (NEW)
+- `docs/SESSION_CHANGELOG.md` — this entry
+- Outside repo: `~/.config/opencode/opencode.json` (live whitelist/models),
+  `~/.local/state/opencode/model.json` (reorder), `~/.bashrc` (wrapper fn),
+  user crontab (daily line)
+
+**Not yet done:**
+- First-inventory review: 62 free/cheap candidates in `offer_report.md`
+  need triage (promote/ignore) — ignoring = automatic via seen-ledger
+- GLM 5.3 Flash 50% off expires Sep 9 — revisit favorites then
+- `--auto-add` adds models with unverified tool-calling — human review
+  still required before relying on auto-added favorites
+- Team tarball `opencode-team-package.tar.gz` not yet rebuilt from the
+  updated package dir
+
+**Next:**
+1. User opens a NEW shell + `opencode` → verify 14 favorites, "offer:" names,
+   auto at position 4
+2. Triage `~/.local/state/opencode/offer_report.md` (62 candidates)
+
+**Blockers:** None. Wrapper/cron active. Current session's TUI still has the
+pre-rename in-memory copy — favorites order fixes apply on next fresh launch
+(restore script re-run if needed).
+
+**Correction (same day):** cron backstop removed (was the only crontab entry,
+now empty). The ~/.bashrc wrapper alone covers idle days via catch-up fetch;
+cron's only benefit was saving 2-5s on the first launch back. Strategy doc
+automation section updated accordingly.
+
+**Addendum (same day):** offer maintenance automated in `tools/offer_check.py`:
+offers (config-name prefix `offer:`) are re-validated against live API pricing
+on every check run — expired (price above thresholds / delisted) offers are
+auto-removed from whitelist + favorites, cap `MAX_OFFER_ENTRIES = 3` evicts the
+oldest offer. Wrapper in `~/.bashrc` now shows script output ("looking for
+special offers ..." on fetch, silent on guard skips). Verified: today's 3
+offers active; simulated post-promo price + delisting correctly flagged.
+
+**Addendum 2 (same day):** auto-promotion implemented per user decision
+(D1b/D2/D3 reviewed in chat). `tools/offer_check.py`: `--auto-add` flag
+replaced by default-on auto-add (`--no-auto-add` to opt out). Quality gate:
+`tools` in supported_parameters + context >= 256K (MIN_CONTEXT_TOKENS) +
+vendor/slug blocklist (sao10k/gryphe/anthracite-org, hy-mt, -rp-) + price.
+D3 ranking: free first, then cheapest output. Slot-limited: only free offer
+slots filled; waiting candidates retry next check (seen-ledger records only
+added slugs). D1b: reviewed offers ("offer:") eviction-proof; auto offers
+FIFO-evict each other. Verified: gate 62->34 eligible on live catalog;
+temp-file cap simulation correct; TUI-guard silence intact. Current state:
+3 reviewed offers fill the cap -> nothing auto-adds today; first slot frees
+when glm-5.3-flash promo expires Sep 9 (auto-expiry).
+
+## 2026-08-27 (cont.2) — GUI v6.7 POC core build + launch-blocker fix
+
+**Goal:** Implement `gui_v67_poc_implementation_plan.md` steps 1-5 (supervisor,
+frontend, launcher) + fix the root-owned-transient-files launch blocker.
+
+**Done:**
+- Launch blocker: GUI container (root) had written `ai_tactics/*.json` + 
+  `system_prompt.txt` root-owned → native `launch_r2k.sh` crashed with
+  PermissionError at `setup_r2k.py:157`. Fix: removed root-owned files (dir is
+  user-owned → rm works without sudo) + pre-flight guard in `setup_r2k.py:155-172`
+  (unlink unwritable transient files; actionable chown hint if unlink fails).
+- `src/tools/r2k_supervisor.py` (NEW, ~700 lines): ProcessManager (PID-tracked,
+  per-child logs in /tmp/supervisor_<name>.log), Supervisor state machine
+  (IDLE/LAUNCHING/RUNNING/TEARING_DOWN), /launch (validate→clean→setup→
+  gzserver-port-poll:11345→spawn→gzbridge→ROS2 nodes→AI), /done (group-kill +
+  Ollama keep_alive:0 unload), /health (concurrent 2s-capped checks),
+  single file-watcher broadcasting to all WS clients, /catalog (mode-grouped
+  strategies), /runs, /git/commits + /session/digest (degraded: repo root NOT
+  mounted in container), static catch-all registered LAST.
+- `src/tools/gui/` — style.css (extracted + homepage grid + health cards),
+  index.html (rewrite: structure only + Home dashboard nav), app.js
+  (reactive Store, WS handler, canvas renderers ported from first-shot
+  index.html, catalog + scenario→strategy filtering, launch/done, homepage
+  renderer, localStorage selection persistence, demo-mode passthrough).
+- `launch_gzweb.sh:236` — ws_backend.py → r2k_supervisor.py (the 1-line change).
+
+**Verified (runtime, in r2k_gzweb container):**
+- py_compile OK on py3.12 (host) AND py3.10 (container); app.js parses
+  (v12-compatible after dropping `||=`; `?.`/`??` browser-only, as in old GUI)
+- Endpoints live: /health /state /runs /catalog /git/commits /session/digest,
+  static index/app.js/style.css 200
+- REAL cycle: /launch (1vs0_default, demo, qwen2.5:3b) → state=running,
+  gzserver+tracker+bridge+evaluator alive, Worldstate populated (ball+blue_1)
+  → /done → `CLEAN: no match processes left`, Ollama `{"models":[]}`,
+  host GPU 50 MiB (idle). 502 fast tests pass.
+- Bugs found+fixed during verification: (1) create_subprocess_shell defaults to
+  dash — `source` fails → executable="/bin/bash"; (2) killing `ros2 launch`/
+  `ros2 run` orphans grandchildren (gzserver traps SIGTERM) → start_new_session
+  + killpg SIGTERM→wait→SIGKILL group unconditionally; (3) no nvidia-smi in
+  container → GPU health degrades gracefully (POC limitation).
+
+**Files touched:**
+- `src/tools/r2k_supervisor.py` (NEW) | `src/tools/gui/style.css` (NEW)
+- `src/tools/gui/index.html` (REWRITE) | `src/tools/gui/app.js` (NEW)
+- `launch_gzweb.sh` (1 line) | `src/setup_r2k.py` (transient-file guard)
+- `docs/SESSION_CHANGELOG.md` (this entry)
+- ws_backend.py stays as fallback (untouched, per plan)
+
+**Not yet done:**
+- Browser acceptance (checklist #8-#11): 3vs3 GUI launch, iframe reload,
+  dropdown persistence after hard refresh, homepage cards — needs a human
+  at the browser; all backend counterparts verified
+- `ws_backend.py` still referenced by old sessions; deletion deferred
+- Known POC limitations: /git/commits + /session/digest need repo-root mount
+  (or host-dumped files in shared_state/); GPU health needs nvidia-smi in
+  container image; both need compose changes = plan §8 out of scope
+
+**Next:**
+1. User: `./launch_gzweb.sh` + browser http://localhost:8765 → checklist #8-#11
+2. Then: resume GUI LLM build task (glm-5.3-flash recommended, see above)
+
+**Blockers:** None.
+
+**Addendum 3 (same day):** browser acceptance of GUI core build confirmed by
+user ("./launch_gzweb.sh worx"). Homepage gap closed: /git/commits +
+/session/digest were "n/a" (repo root not mounted in container). Fix without
+compose changes: launch_gzweb.sh now dumps `git log --oneline -5` +
+SESSION_CHANGELOG tail to `shared_state/git_commits.txt` / `session_digest.txt`
+(host-side, ~4 lines before backend start); supervisor's existing fallback
+reads them. Current files written manually too — running GUI shows cards on
+refresh. Checklist #10 now fully green.
+
+**Addendum 4 (same day):** Follow-up pass started — Assistant panel (v7
+Copilot seed, mode B) implemented:
+- Supervisor: `/assistant/ask?q=&model=` — builds system prompt from
+  host-dumped context (`shared_state/assistant_ctx/agent_prompt_de.txt` +
+  `META_KNOWLEDGE_ROUTER.md`, NOT mounted in container) + live Worldstate/
+  strategy snapshot (8KB cap), calls Ollama via async curl (stream:false,
+  temp 0.3, num_predict 512, default model qwen2.5:7b — env
+  R2K_ASSISTANT_MODEL). Event loop stays responsive (no blocking subprocess).
+- launch_gzweb.sh: context dump extended (2 lines: mkdir + cp of the two KB
+  files); files also written manually for the running session.
+- Frontend: new nav item Know › Assistant, chat UI (Store.chat history
+  survives workflow switches, model picker from /catalog models, bubble
+  styles in style.css).
+- Verified live: qwen2.5:7b + 37KB context → grounded German answer in
+  ~10.3s; empty q → 400; /health + static unaffected. py3.10/3.12 compile,
+  app.js parse OK, launcher bash -n OK.
+- Known: 7B grounding imperfect on fine distinctions (conflated Phantom Kick
+  with thread-closures) — context tuning is v7 mode-B scope, not POC blocker.
+
+## 2026-08-28 — K1 vendor-doc audit: "autonomous chase" downgraded, GATE 0 installed
+
+**Goal:** User challenged the KB claim "kShoot = autonomous shot toward the
+goal". Audit vendor documentation, correct the ROS2K knowledge base, gate the
+v7 chase-abort design on a hardware probe.
+
+**Done:**
+- Source audit: claim exists ONLY in our KB (6 sites, v6.4 era); zero
+  changelog entries behind it. Vendor ground truth established: official docs
+  at docs.booster.tech (Motion-Control Interfaces, K1/T1/T2); local
+  `b1_loco_api.hpp` = official B1LocoClient header (older snapshot); ODT is
+  titled "K1 *and* T1 Instruction Manual" (shared, not T1-only);
+  `T1InstructionManual.html` = Feishu dump, no API content.
+- Key vendor facts: `Shoot()` — "current T1 provides the intended motion"
+  (may FAIL on K1); `VisualKick` — K1-supported, firmware ≥ v1.5.2.1, V2 =
+  stronger force; NO autonomy/chase/aiming documented for either. NEW
+  discoveries missing from our hpp: `RobotMode::kSoccer = 4` (K1+T1) with
+  built-in kicking/goalie actions, `RotateHeadWithTime`, WBC gait (K1-only),
+  firmware line v1.7.2. Head control `RotateHead` (2004) IS vendor-confirmed
+  for K1 (≥ v1.0.0, radians; joints kHeadYaw=0/kHeadPitch=1).
+- `docs/v7/k1_kick_head_vendor_audit.md` (NEW, authoritative): source audit,
+  vendor quotes, probe protocol (GetRobotInfo → on-robot SDK inspection →
+  VisualKick V1/V2/Shoot matrix incl. ball-motion chase experiment), decision
+  gates (abort design vs Soccer mode vs VisualKick-only).
+- KB annotated (UNVERIFIED/GATE 0): 4_EDGE (matrix + pitfalls + new "Official
+  vendor documentation" subsection + head-section vendor note),
+  8_C3 (matrix + chase problem), ROS2K_GEM_FAQ Q28 (German correction),
+  1_CORE (TeamCaptain kick-abort gated), LESSONS_LEARNED (correction + new
+  lesson "claims without logged sessions become folklore"),
+  scrum_tasks (GATE 0 in K1 story), ADR-A07 (gate note),
+  calibration_rotation_design (head control confirmed),
+  META_KNOWLEDGE_ROUTER (new [V7-gate] routing row, tag k1-vendor-audit,
+  last_modified bump).
+- gui_v67_discussion.md deliberately untouched (historical record).
+
+**Files touched:**
+- `docs/v7/k1_kick_head_vendor_audit.md` (NEW — authoritative)
+- `src/ros2k_knowledge/4_EDGE_HARDWARE_SIM2REAL.md`
+- `src/ros2k_knowledge/8_C3_SOCCER_KNOWLEDGE.md`
+- `src/ros2k_knowledge/ROS2K_GEM_FAQ.md`
+- `src/ros2k_knowledge/1_CORE_ARCHITECTURE_AND_SYNC.md`
+- `src/ros2k_knowledge/META_KNOWLEDGE_ROUTER.md`
+- `docs/scrum_tasks.md`, `docs/LESSONS_LEARNED.md`,
+  `docs/adr/ADR-A07-team-captain-architecture.md`,
+  `docs/v7/calibration_rotation_design.md`
+- `docs/SESSION_CHANGELOG.md` (this entry)
+
+**Not yet done:**
+- Hardware probe (GATE 0) — needs robot + changelog-logged session:
+  firmware check, on-robot SDK inspection, kick-behavior matrix
+- Kick/head/head-turn implementation stays blocked behind the probe
+- Pending from earlier today: nemotron demotion (offer queue), GUI commit
+
+**Next:**
+1. Hardware session: run `docs/v7/k1_kick_head_vendor_audit.md` §3 probe
+   protocol, log results in changelog
+2. Then: re-scope v7 kick-abort story per gate outcome
+
+**Blockers:** None for docs. K1 probe needs physical robot access
+(booster@10.42.0.102) and a safe test area (robot on stand for kick tests).
