@@ -201,7 +201,10 @@ risk, Yahboom diff-drive, trailer non-holonomic), multi-bot coordination
 (non-colliding trajectories), augmented world model (free pathways, sweet
 spots, risk zones injected into LLM's world state), watchdog (odometry
 comparison → failsafe or LLM re-prompt), kick abort (ball motion change →
-kChangeMode for K1).
+kChangeMode for K1). **[GATED 2026-08-28: the K1 autonomous-chase premise is
+unverified — vendor docs contradict it, Shoot may fail on K1. Do not implement
+the abort path before the hardware probe (see docs/v7/k1_kick_head_vendor_audit.md,
+incl. firmware Soccer-mode alternative).]**
 
 **Downward compatible:** bridge reads `optimized_path.json` when TeamCaptain
 is active; falls back to `current_strategy.json` when TeamCaptain is down.

@@ -466,4 +466,13 @@ Siehe [[7_03_CHEATPAGE_Tools_and_Utils]] §6.5 für Details.
 
 ## Q28: Der K1 folgt dem Ball endlos beim Kick — warum? (V6.4)
 
+> **Korrektur 2026-08-28:** Die "autonome Verfolgung" unten ist eine
+> **unbestätigte KB-intern Behauptung** — kein Vendor-Dokument und keine
+> protokollierte Hardware-Session belegt sie. Laut offizieller Doku
+> (docs.booster.tech) sind `Shoot()`/`VisualKick()` nur "firmware-configured"
+> Aktionen ohne dokumentierte Autonomie; Shoots Bewegung ist aktuell
+> T1-only (kann auf dem K1 fehlschlagen); `VisualKick` braucht Firmware
+> ≥ v1.5.2.1. Das Verhalten MUSS per Hardware-Probe geklärt werden, bevor
+> Abort-Code gebaut wird — siehe `docs/v7/k1_kick_head_vendor_audit.md`.
+
 **A:** Die K1-Kick-Skills `kShoot` (api_id 2024) und `kVisualKick` (2038) sind **autonom** — der K1 übernimmt und jagt den Ball bis zur Kick-Distanz. Wenn der Ball wegrollt (selbst gekickt, Gegner, Ablenker), folgt der K1 endlos. Das ist ein Showstopper für echte Spiele. **Lösung (v7):** K1-Kamera erkennt Ball-Geschwindigkeits-/Richtungsänderung → ROS2-Topic → TeamCaptain/Bridge sendet `kChangeMode` (2000) → K1 stoppt Chase. Kein Threshold, keine Hysterese — "Ball bewegt → Abbruch".

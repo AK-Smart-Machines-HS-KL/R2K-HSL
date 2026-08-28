@@ -3,6 +3,12 @@
 > **Date:** 2026-08-19
 > **Status:** Design note — not yet implemented
 > **Scope:** Demo/calibration mode only; soccer unaffected
+>
+> **Update 2026-08-28:** Head control (separate from this body-rotation
+> design) is **vendor-confirmed for K1**: `RotateHead` (2004, absolute
+> radians, ≥ v1.0.0), `RotateHeadWithTime`, `RotateHeadWithDirection` (2006).
+> See `docs/v7/k1_kick_head_vendor_audit.md` §2.2. Required RobotMode for
+> head commands is undocumented — verify on hardware.
 
 ## Problem
 
