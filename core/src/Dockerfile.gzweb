@@ -1,0 +1,43 @@
+FROM osrf/ros:humble-desktop
+ENV DEBIAN_FRONTEND=noninteractive
+
+# 1. System packages: Gazebo + ROS + GZWeb build deps
+#    (nodejs/npm/libjansson-dev/imagemagick: GZWeb build deps -- see
+#    tools/setup_gzweb.sh, GUI annex N4 in docs/gui_v67_discussion.md)
+RUN apt-get update && apt-get install -y \
+    gazebo ros-humble-gazebo-ros-pkgs python3-pip \
+    libxcb-cursor0 libgl1-mesa-glx libxkbcommon-x11-0 libegl1 python3-tk \
+    nodejs npm libjansson-dev imagemagick git \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN pip3 install --upgrade pip
+
+# 2. NumPy < 2 (Gazebo compat) + GUI backend deps (websockets, aiofiles)
+#    See AGENTS.md "Docker colcon rebuild (U24)" for the numpy header note.
+RUN pip3 install "numpy<2.0.0" "scipy==1.10.1" "matplotlib==3.7.1" PyQt6 requests "mplsoccer==1.1.12" websockets aiofiles aiohttp --force-reinstall
+
+# 3. ROS2K source + ros2_ws build
+COPY . /workspace
+WORKDIR /workspace
+RUN echo "source /opt/ros/humble/setup.bash" >> ~/.bashrc
+RUN bash -c "source /opt/ros/humble/setup.bash && cd ros2_ws && colcon build"
+
+# 4. Bake GZWeb into the image (one-time, ~10 min at build, zero at runtime).
+#    Clones osrf/gzweb, applies the ROS2K inline-material patch (ROS2K worlds
+#    use SDF <ambient>/<diffuse> without material scripts -- upstream gzweb
+#    renders those WHITE), runs deploy.sh -m local (npm install + grunt +
+#    cmake + node-gyp + local model DB).
+ENV GZWEB_DIR=/opt/gzweb
+ENV GZWEB_REPO=https://github.com/osrf/gzweb
+RUN git clone --depth 1 "$GZWEB_REPO" "$GZWEB_DIR"
+WORKDIR "$GZWEB_DIR"
+RUN patch -p1 --forward < /workspace/tools/gzweb_inline_material.patch \
+    && bash -c "set +u; source /opt/ros/humble/setup.bash; set -u; \
+                export GAZEBO_MODEL_PATH=/usr/share/gazebo-11/models; \
+                ./deploy.sh -m local" \
+    && if ! grep -q "ROS2K patch" http/client/gz3d.gui.js; then \
+        ./node_modules/.bin/grunt concat \
+        && cp gz3d/build/gz3d.gui.js http/client/gz3d.gui.js; \
+    fi
+
+WORKDIR /workspace

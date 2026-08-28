@@ -152,6 +152,24 @@ def main():
     os.makedirs('relay', exist_ok=True)
 
     # --- Relay Profil kopieren ---
+    # Transient files (active_relay.json etc.) may be root-owned when the GUI
+    # supervisor wrote them from inside the Docker container. The directory is
+    # user-owned, so deleting and rewriting is always possible — chown is not.
+    TRANSIENT_FILES = ('ai_tactics/active_relay.json', 'ai_tactics/active_scenario.json',
+                       'ai_tactics/system_prompt.txt')
+
+    def writable_or_unlink(path):
+        if os.path.exists(path) and not os.access(path, os.W_OK):
+            try:
+                os.unlink(path)
+            except OSError as e:
+                print(f"❌ {path} is not writable and could not be removed ({e}).")
+                print(f"   Fix manually:  sudo chown $(id -u):$(id -g) {path}")
+                exit(1)
+
+    for tf in TRANSIENT_FILES:
+        writable_or_unlink(tf)
+
     relay_file = f"relay/{args.relay}.json"
     if os.path.exists(relay_file):
         shutil.copy(relay_file, 'ai_tactics/active_relay.json')

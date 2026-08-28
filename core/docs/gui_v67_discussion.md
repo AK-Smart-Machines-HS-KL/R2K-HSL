@@ -25,6 +25,10 @@ Cut out the cards, cluster them on the whiteboard, photograph the result = decis
 | **Support** | Demo/calibration, K1 deployment, ROS 2 monitoring | `calib_cli.py`, `launch_r2k.sh`, rqt/RViz2 | Demo guide · K1 checklist · embedded ROS 2 views | Diagnosis assistant |
 | **Freshmen** | Onboarding | — (nothing role-specific today) | Guided tour · glossary tooltips | Proactive LLM-in-the-loop (opencode) |
 
+> **→ ANNEX (2026-08-25):** HTML feasibility checked — ~80% of the "GUI wish" widgets
+> above are file-bus-native (no ROS in the browser); Spotify-style docked panels +
+> role sidebar are feasible. Embedding matrix: see ANNEX, N1.
+
 ---
 
 ## B1 — LLM Designer
@@ -444,6 +448,10 @@ graph TD
 > **WHITEBOARD A4 — Embed external tools or build a custom graph view?**
 > **A)** references/launch buttons only · **B)** embedded (rqt/RViz2 as panels) · **C)** custom simplified graph view
 
+> **→ ANNEX:** feasibility check done — iframes make option B concrete for Gazebo
+> (GZWeb) and the camera (MJPEG); a custom simplified graph view covers rqt_graph;
+> RViz2 deferred (no TF today). Embedding matrix: see ANNEX, N1.
+
 ---
 
 ## A5 — Concept Checklist: what the GUI must reflect
@@ -473,6 +481,187 @@ graph TD
 | STT in demo mode | voice input channel in the demo guide |
 
 **Message:** plan the GUI to be extensible at these seams — the world model and the decision sources are already the natural integration points today.
+
+---
+
+# ANNEX — HTML GUI FEASIBILITY (added 2026-08-25)
+
+> **Status:** feasibility round done — answers the *technical* half of the open
+> questions (A4 embed question, one-GUI-vs-family). The *team decision* half stays
+> open. Trigger: user requirement "Spotify-style GUI with widgets" — docked panels,
+> role sidebar, everything in the browser.
+> Cross-referenced from B0 (role matrix) and A4 (external tools).
+
+## N1 — Verdict & Embedding Matrix
+
+**Verdict: feasible — and cheaper than it looks.** ~80% of the wished widgets (B0–B5)
+need **zero ROS in the browser**: they ride the tmpfs file bus. The two Gazebo views
+embed via proven web mechanisms (GZWeb iframe, MJPEG). Only rqt_graph / topic echo /
+RViz2 would need a ROS bridge — and all three have cheaper answers.
+
+| Widget (source) | Data source | Embedding | ROS in browser? |
+|---|---|---|---|
+| World model view (B2) | `Worldstate.json` 10 Hz | native canvas/SVG re-render | no |
+| LLM stream (B2) | `current_strategy.json` + `llm_trace` | native text panel | no |
+| Score/momentum timeline (B2/C3) | `world_trace` | native chart | no |
+| Prompt viewer (A1/B1) | fragments + trace `sys_prompt_hash` | native panel | no |
+| XAI panel (B1) | `llm_trace` (EXPLAIN records) | native panel | no |
+| KPI dashboard (B3) | `analyze_trace.py` / `kpi_targets.json` | native panel | no |
+| Replay + annotations (C3) | `world_trace` + `llm_trace` | native canvas + controls | no |
+| Router search / KB map (B4) | power files + router | native panel | no |
+| Demo guide (B5) | `waypoints.json`, `task_input.json` | native panel | no |
+| **Gazebo 3D sim view (A4)** | gzserver scene | **GZWeb iframe** (native web client for Gazebo Classic) | no — GZWeb brings its own WebSocket |
+| **Gazebo camera (A4)** | camera sensor topic | **MJPEG via `web_video_server`** (cheap alternative) | no — plain `<img>` tag |
+| rqt_graph (A4) | ROS graph | custom simplified view (the A4 mermaid is 90% of it) or defer | barely |
+| ros2 topic echo (A4) | any topic | `rosbridge_suite` — only if needed later | yes (that is its purpose) |
+| RViz2 (A4) | TF + markers | **defer** — ROS2K publishes no TF today (see A4 screenshot) | — |
+
+**Do NOT stream the visualizer.** Re-render natively in the browser (canvas/SVG from
+`Worldstate.json`) — streaming matplotlib frames over the network wastes exactly the
+bandwidth the visualizer already struggles with. The existing `r2k_visualizer.py`
+stays for screenshots and offline replay; the GUI re-draws, it does not re-stream.
+
+## N2 — The File-Bus Insight (~80% need zero ROS)
+
+ROS2K's decoupling axiom (agent axiom 3: LLM ↔ strategy via tmpfs file polling)
+**is already a message bus**:
+
+```
+Worldstate.json          10 Hz      (state_aggregator, atomic rename)
+current_strategy.json    ~1.5 Hz    (evaluator: assignments + latency + model)
+llm_trace_*.jsonl        per call   (prompt, response, timings)
+world_trace_*.jsonl      10 Hz      (entities + match_state + score)
+```
+
+A GUI needs only a **small WebSocket backend on the host** (Python, CPU,
+observe-only): tail the files (mtime poll + content hash — the evaluator's own
+pattern), push deltas to the browser. The GUI inherits the architecture instead of
+fighting it. Bonus: the same backend serves replay (traces are append-only JSONL) —
+live view and replay view become the same widget with different clocks.
+
+## N3 — Chosen Architecture: Hybrid, Three Layers
+
+```mermaid
+graph TD
+    subgraph Layer1_Browser_Shell
+        ROLE["role sidebar - B0 presets"]
+        DOCK["dockview panel grid - world model, LLM stream, KPI, replay, prompt"]
+        GZIF["GZWeb iframe panel"]
+        CAM["camera MJPEG img"]
+    end
+    subgraph Layer2_FileBus_Backend
+        WS["WebSocket server - small Python, host CPU, observe-only"]
+        TAIL["tmpfs watchers - Worldstate.json, current_strategy.json, traces"]
+    end
+    subgraph Layer3_ROS_Bridges
+        GZW["GZWeb server - node gzbridge, own port"]
+        WVS["web_video_server - MJPEG"]
+        RBS["rosbridge - later, topic echo only"]
+    end
+    subgraph ROS2K_Runtime
+        TMPFS["shared_state + logs on tmpfs"]
+        GZS["gzserver - headless ok"]
+    end
+    TMPFS --> TAIL
+    TAIL --> WS
+    WS -->|push 10 Hz| DOCK
+    ROLE --> DOCK
+    GZS --> GZW
+    GZW --> GZIF
+    GZS --> WVS
+    WVS --> CAM
+    RBS -.-> DOCK
+```
+
+- **Shell (browser):** custom dockview shell — Spotify-style docked panels + role
+  sidebar. One shell, docked modes (see N6).
+- **File-bus backend (host, CPU):** observes only; no ROS imports needed.
+- **ROS bridges (opt-in):** each is an iframe/embed with its own port — GZWeb, MJPEG
+  camera, rosbridge later. None sits in the shell's data path.
+- Docker note: the Gazebo container already runs `network_mode: host` — every bridge
+  port is directly reachable from the host browser, no port mapping needed.
+
+## N4 — GZWeb PoC = Gate 1 (before any widget) — **PASSED 2026-08-26**
+
+The hardest embedding problem gets validated **first**: if the 3D scene cannot reach
+the browser, the architecture shrinks to file-bus shell + MJPEG — a different product.
+Better to know after 2 hours than after 2 weeks of widget building.
+
+**PoC result (executed on U24, container `core_gazebo`, Gazebo 11.10.2):**
+
+| Check | Result |
+|---|---|
+| GZWeb build on jammy (source, osrf/gzweb `93b6a6f`) | ✅ apt: no gzweb package (as predicted); source build works — deps `nodejs`/`npm` (jammy), `libjansson-dev`, `imagemagick`; `libgazebo-dev` already in image |
+| Build time | ~10 min (npm install dominates; grunt + cmake + node-gyp all clean) |
+| gzbridge → gzserver connection | ✅ native Gazebo transport, no ROS needed |
+| Scene over websocket (`~/scene`) | ✅ all 19 models (field, lines, goals, ball, 6 bots) with poses |
+| Live poses over websocket (`~/pose/info`) | ✅ only moving entities stream; blue_1 arc-drive verified (-4.0,0)→(-3.1,3.1) |
+| Scene render in browser | ✅ headless-Chrome screenshot: green field 24.8% of frame, blue/red bots + goal posts as color clusters |
+| Moving bots in browser scene graph | ✅ blue_2 position in the client's THREE.js scene updates live (verified via CDP probe: 7m in 12s) |
+| Known upstream limitation found + fixed | GZWeb renders inline SDF materials WHITE (only material *scripts* are parsed) — **patched**: `tools/gzweb_inline_material.patch` (parseMaterial falls back to inline ambient/diffuse/specular) |
+| Known headless test artifact | `Page.captureScreenshot`/`readPixels` do not capture animated WebGL frames under software GL (SwiftShader) — animation proof uses the live scene-graph probe instead; real browsers render via rAF normally |
+
+**Codified:** Dockerfile carries the apt deps; `tools/setup_gzweb.sh` (idempotent:
+clone → patch → deploy `-m local`). Run inside the container; server start:
+`docker exec -d core_gazebo bash -c 'cd /opt/gzweb/gzbridge && ./server.js 8080'`
+→ http://localhost:8080 (host browser; container runs `network_mode: host`).
+
+![GZWeb PoC — colored scene](figures/n4_gzweb_colored.png)
+*Headless-Chrome capture of the live GZWeb client after the inline-material patch:
+green pitch, goal posts, 6 bots. (Time widget mid-update at top.)*
+
+**Fallbacks not needed:** camera-plugin MJPEG and noVNC remain documented options
+(for K1 camera views etc.) but GZWeb itself works.
+
+**PoC plan (original):**
+1. Extend the Docker image: **GZWeb** (osrf/gzweb — the native web client for Gazebo
+   Classic 11). Built from source; **apt availability on jammy to be verified in the
+   PoC**.
+2. Fallbacks, in order: (a) camera-plugin **MJPEG** — needs a world-file camera
+   sensor (colcon rebuild) + `web_video_server`; (b) **noVNC of gzclient on :1** —
+   works today via X11, clunky, zero new dependencies.
+3. **Acceptance:** live scene visible in the browser with moving bots (GZWeb's
+   native mode is headless gzserver — bonus: it also covers `--headless` matches).
+4. Est. **1–2h**.
+
+Plausibility argument: gzclient already runs with `LIBGL_ALWAYS_SOFTWARE=1` (software
+GL in the container) — GZWeb moves rendering into the *browser's* GPU and only
+streams scene updates. The laptop plausibly gets lighter, not heavier.
+
+## N5 — Safety Constraints (non-negotiable)
+
+- **The GUI observes only** (PoC and first releases): the file-bus backend reads
+  tmpfs + logs, never writes production files.
+- **Watchdog/teardown stays authoritative:** the 0.2s watchdog + kinematic freeze +
+  hard kill remain the ONLY teardown path (A5 concept 6). The GUI shows the
+  emergency state; it never bypasses teardown.
+- **Stack control goes through a `launch_r2k.sh` wrapper** (subprocess) — even if the
+  GUI later leads start/stop (whiteboard B5 B/C), the watchdog path stays intact.
+- Write paths (fragment editor B1, demo `task_input.json` B5) are separate later
+  gates with their own review — explicitly out of scope here.
+
+## N6 — Two Whiteboard Cards Pre-Answered (evidence, not decisions)
+
+> **A4 — "embed external tools or build a custom graph view?"**
+> Iframes make **option B concrete**: GZWeb runs as a docked iframe panel next to
+> custom panels. A (launch buttons) and B (embedded) stop being either/or.
+
+> **"One GUI vs. a family of GUIs"** (raised in the discussion round)
+> The dockview shell answers it architecturally: **one shell, docked modes** — the
+> role sidebar (B0) switches panel presets (freshmen get the tour layout, QA the
+> dashboard layout). Both options become the same codebase; the team only picks the
+> default layouts.
+
+*These are noted as evidence for the discussion, not as decisions.*
+
+## N7 — Frontend Choice (recorded)
+
+- **Now: no-build vanilla HTML/ES modules + dockview (MIT) via CDN.** Team-runnable
+  with zero toolchain — matches ROS2K's flat-file philosophy; every member can run
+  and modify it with a browser.
+- **Growth path: React + Vite** (documented, not started). Switch when no-build ES
+  modules start hurting — the data plumbing (file bus), not view complexity, is this
+  GUI's bottleneck, so a toolchain buys nothing at PoC size.
 
 ---
 
@@ -510,5 +699,7 @@ graph TD
 | 28 | Replay CLI | terminal screenshot | **done** — `figures/c3_replay_cli.png` |
 | 29 | Whiteboard cards (12) | print cards | text above, layout Phase 3 |
 | 30 | Workflow diagrams C1–C6 | flow diagrams | **Phase 2/3** |
+| 31 | GUI three-layer architecture (ANNEX N3) | mermaid | **done** (vertical, annex above) |
+| 32 | GZWeb PoC screenshot (ANNEX N4) | screenshot | **done** — `figures/n4_gzweb_colored.png` (gate 1 passed 2026-08-26) |
 
 > **Rendering note:** this document is taken into Obsidian — mermaid blocks render natively there; embed `docs/figures/` alongside the markdown so the relative image paths resolve; export to PDF for the print version (A4 portrait). The mermaid diagrams are vertical (`graph TD`) and compact for single-column print. All screenshots were captured live on the U24 machine (X11 `DISPLAY=:1`, 2026-08-22).

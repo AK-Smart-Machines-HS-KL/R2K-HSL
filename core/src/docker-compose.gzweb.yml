@@ -1,0 +1,24 @@
+services:
+  gzweb_sim:
+    build:
+      context: .
+      dockerfile: Dockerfile.gzweb
+    container_name: r2k_gzweb
+    network_mode: host
+    ipc: host
+    privileged: true
+    environment:
+      - DISPLAY=${DISPLAY}
+      - QT_X11_NO_MITSHM=1
+      - LIBGL_ALWAYS_SOFTWARE=1
+      - ROS_DOMAIN_ID=0
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - ./:/workspace:rw
+      - gzweb_data:/opt/gzweb
+    entrypoint: /bin/bash
+    stdin_open: true
+    tty: true
+
+volumes:
+  gzweb_data:

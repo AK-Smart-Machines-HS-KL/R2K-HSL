@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>ROS2K — Simulation GUI</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="topbar">
+  <span class="logo">ROS2K</span>
+  <span class="status" id="t-status">—</span>
+  <span class="score"><span class="blue" id="t-blue">0</span> : <span class="red" id="t-red">0</span></span>
+  <span class="possession" id="t-poss">—</span>
+  <span class="fact" id="t-fact">—</span>
+  <span class="spacer"></span>
+  <span class="runinfo" id="t-run">run: — | model: — | lat: —</span>
+  <button id="btn-done">DONE</button>
+</div>
+
+<div id="selbar">
+  <div class="sel-group"><label>Scenario</label><select id="sel-scenario"></select></div>
+  <div class="sel-group"><label>Strategy</label><select id="sel-strategy"></select></div>
+  <div class="sel-group"><label>Model</label><select id="sel-model"></select></div>
+  <div class="sel-group"><label>Explain</label><select id="sel-explain"><option value="0">no-explain (fast)</option><option value="1">explain (XAI)</option></select></div>
+  <div class="sel-group"><label>Duration</label><select id="sel-duration"><option value="0">∞ (until DONE)</option><option value="30">30s</option><option value="60">60s</option><option value="120">120s</option></select></div>
+  <button id="btn-launch">LAUNCH</button>
+</div>
+
+<div id="main">
+  <div id="sidebar">
+    <div class="nav-group" data-group="home">
+      <div class="ng-header"><span class="arrow">▼</span><span class="ng-title">Home</span></div>
+      <div class="ng-items">
+        <div class="nav-item active" data-wf="home"><div class="ni-row"><span class="icon">🏠</span>Dashboard</div><div class="sub">health · commits · runs · quick launch</div></div>
+      </div>
+    </div>
+    <div class="nav-group collapsed" data-group="play">
+      <div class="ng-header"><span class="arrow">▼</span><span class="ng-title">Play</span></div>
+      <div class="ng-items">
+        <div class="nav-item" data-wf="play-game"><div class="ni-row"><span class="icon">⚽</span>Game</div><div class="sub">live sim match · LLM blue vs red</div></div>
+        <div class="nav-item" data-wf="play-demo"><div class="ni-row"><span class="icon">🎯</span>Demo / Calibration</div><div class="sub">waypoint tasks · single bot · fairs</div></div>
+        <div class="nav-item" data-wf="play-replay"><div class="ni-row"><span class="icon">⏪</span>Replay</div><div class="sub">step through a recorded run · annotate</div></div>
+      </div>
+    </div>
+    <div class="nav-group collapsed" data-group="build">
+      <div class="ng-header"><span class="arrow">▼</span><span class="ng-title">Build</span></div>
+      <div class="ng-items">
+        <div class="nav-item" data-wf="build-prompt"><div class="ni-row"><span class="icon">📝</span>Prompt Designer</div><div class="sub">view fragments · XAI panel · latency budget</div></div>
+        <div class="nav-item" data-wf="build-probe"><div class="ni-row"><span class="icon">🔬</span>Probe</div><div class="sub">text-predicate corpus · no Gazebo · fast iterate</div></div>
+      </div>
+    </div>
+    <div class="nav-group collapsed" data-group="analyze">
+      <div class="ng-header"><span class="arrow">▼</span><span class="ng-title">Analyze</span></div>
+      <div class="ng-items">
+        <div class="nav-item" data-wf="analyze-debrief"><div class="ni-row"><span class="icon">📊</span>Match Debrief</div><div class="sub">replay + annotations + score/momentum</div></div>
+        <div class="nav-item" data-wf="analyze-kpi"><div class="ni-row"><span class="icon">🚦</span>KPI Dashboard</div><div class="sub">traffic lights vs kpi_targets.json · test pyramid</div></div>
+        <div class="nav-item" data-wf="analyze-benchmark"><div class="ni-row"><span class="icon">🏁</span>Benchmark</div><div class="sub">A/B arms · variant comparison · scientific doc</div></div>
+      </div>
+    </div>
+    <div class="nav-group collapsed" data-group="know">
+      <div class="ng-header"><span class="arrow">▼</span><span class="ng-title">Know</span></div>
+      <div class="ng-items">
+        <div class="nav-item" data-wf="know-search"><div class="ni-row"><span class="icon">🔍</span>Router Search</div><div class="sub">symptom → power file · META_KNOWLEDGE_ROUTER</div></div>
+        <div class="nav-item" data-wf="know-tour"><div class="ni-row"><span class="icon">🎓</span>Onboarding Tour</div><div class="sub">5 stations · glossary · freshmen</div></div>
+        <div class="nav-item" data-wf="know-assistant"><div class="ni-row"><span class="icon">🤖</span>Assistant</div><div class="sub">chat with repo knowledge + live match</div></div>
+      </div>
+    </div>
+    <div class="sb-sep"></div>
+    <div class="sb-conn"><span class="dot" id="ws-dot"></span><span id="ws-state">disconnected</span></div>
+    <div class="sb-conn"><span class="dot" id="gz-dot"></span>GZWeb :8080</div>
+  </div>
+
+  <div id="content">
+    <div id="wf-bar">
+      <div class="wf-title" id="wf-title">Home</div>
+      <div class="wf-desc" id="wf-desc">System overview and quick launch.</div>
+    </div>
+    <div id="dock"></div>
+    <div id="text-pane"></div>
+  </div>
+</div>
+
+<div id="overlay"><div id="ov-text">Teardown…</div></div>
+
+<script src="app.js"></script>
+</body>
+</html>

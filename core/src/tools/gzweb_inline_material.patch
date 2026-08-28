@@ -1,0 +1,62 @@
+--- a/gz3d/src/gziface.js
++++ b/gz3d/src/gziface.js
+@@ -17,6 +17,11 @@
+   this.isConnected = false;
+ 
+   this.material = [];
++  // ROS2K patch: pre-populate Gazebo material scripts for URDF bot colors.
++  this.material["Gazebo/Blue"] = {ambient:[0.0,0.0,1.0,1.0],diffuse:[0.0,0.2,0.8,1.0],specular:[0.1,0.1,0.3,1.0],opacity:1.0};
++  this.material["Gazebo/Red"]  = {ambient:[1.0,0.0,0.0,1.0],diffuse:[0.8,0.2,0.0,1.0],specular:[0.3,0.1,0.1,1.0],opacity:1.0};
++  this.material["Gazebo/Green"] = {ambient:[0.0,0.5,0.0,1.0],diffuse:[0.0,0.4,0.0,1.0],specular:[0.1,0.1,0.1,1.0],opacity:1.0};
+   this.entityMaterial = {};
+ 
+   this.connect();
+@@ -763,6 +768,20 @@
+   }
+ 
++  // ROS2K patch: force bot colors by model name (bypasses material pipeline).
++  // GZWeb's parseMaterial relies on the ~/material topic delivering Gazebo
++  // material script colors, which is unreliable. Instead, traverse the model
++  // after creation and set colors based on the model name.
++  if (modelObj.name) {
++    var color = null;
++    if (modelObj.name.indexOf("blue") >= 0) color = 0x2266cc;
++    else if (modelObj.name.indexOf("red") >= 0) color = 0xcc3322;
++    else if (modelObj.name === "soccer_ball") color = 0xffffff;
++    if (color !== null) {
++      modelObj.traverse(function(child) {
++        if (child.material) { child.material.color.setHex(color); }
++      });
++    }
++  }
+   return modelObj;
+ };
+ 
+@@ -1203,6 +1221,27 @@
+     }
+   }
+ 
++  // ROS2K patch (2026-08-26): fall back to INLINE material values from the
++  // scene message. Upstream gzweb only reads material scripts; SDF worlds
++  // that use inline <ambient>/<diffuse>/<specular> (no script names) render
++  // everything white. The scene message delivers the values as
++  // {r,g,b,a} objects -- convert to the [r,g,b,a] arrays setMaterial expects.
++  if (!ambient && material.ambient)
++  {
++    ambient = [material.ambient.r, material.ambient.g,
++               material.ambient.b, material.ambient.a];
++  }
++  if (!diffuse && material.diffuse)
++  {
++    diffuse = [material.diffuse.r, material.diffuse.g,
++               material.diffuse.b, material.diffuse.a];
++  }
++  if (!specular && material.specular)
++  {
++    specular = [material.specular.r, material.specular.g,
++                material.specular.b, material.specular.a];
++  }
++
+   // normal map
+   if (material.normal_map)
+   {

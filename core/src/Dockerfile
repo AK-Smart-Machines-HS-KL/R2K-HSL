@@ -2,9 +2,12 @@ FROM osrf/ros:humble-desktop
 ENV DEBIAN_FRONTEND=noninteractive
 
 # 1. Systempakete für Gazebo und ROS
+#    (nodejs/npm/libjansson-dev/imagemagick: GZWeb build deps -- see
+#    tools/setup_gzweb.sh, GUI annex N4 in docs/gui_v67_discussion.md)
 RUN apt-get update && apt-get install -y \
     gazebo ros-humble-gazebo-ros-pkgs python3-pip \
     libxcb-cursor0 libgl1-mesa-glx libxkbcommon-x11-0 libegl1 python3-tk \
+    nodejs npm libjansson-dev imagemagick \
     && rm -rf /var/lib/apt/lists/*
 
 RUN pip3 install --upgrade pip
@@ -16,7 +19,7 @@ RUN pip3 install --upgrade pip
 # Fix: rm -rf ros2_ws/build ros2_ws/install, then re-run colcon build. The rosidl CMake
 # fallback (python3 -c "import numpy; print(numpy.get_include())") resolves the path
 # automatically on a clean build. See AGENTS.md "Docker colcon rebuild (U24)".
-RUN pip3 install "numpy<2.0.0" "scipy==1.10.1" "matplotlib==3.7.1" PyQt6 requests "mplsoccer==1.1.12" --force-reinstall
+RUN pip3 install "numpy<2.0.0" "scipy==1.10.1" "matplotlib==3.7.1" PyQt6 requests "mplsoccer==1.1.12" websockets aiofiles --force-reinstall
 
 # 3. Code kopieren und ROS sourcen
 COPY . /workspace
