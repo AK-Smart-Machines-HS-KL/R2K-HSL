@@ -157,7 +157,7 @@ but ROS2K testing/demos use mixed hardware.
 > may fail outright. `VisualKick` is K1-supported only from firmware
 > ≥ v1.5.2.1. **The "chase forever" behavior MUST be probed on hardware
 > before any abort design is implemented.** Full audit + probe protocol:
-> `docs/v7/k1_kick_head_vendor_audit.md`.
+> `docs/plans/v68_pre_ifa/k1_kick_head_vendor_audit.md`.
 
 The K1's kick skills are **autonomous** — the K1 takes over and chases the
 ball until kick distance is reached:
@@ -209,7 +209,7 @@ Failsafe: api_id 2000 (kChangeMode) resets head to forward position.
   `RobocupBehaviorStatus RUNNING/SHOOTING/PASSING` — evaluate BEFORE building
   our own kick-abort machinery
 - Current firmware line: v1.7.2; version check via `GetRobotInfo` (api 2022)
-- Full audit + probe protocol: `docs/v7/k1_kick_head_vendor_audit.md`
+- Full audit + probe protocol: `docs/plans/v68_pre_ifa/k1_kick_head_vendor_audit.md`
 
 ### K1 trajectory replay (api_id 2027/2028)
 
@@ -249,3 +249,28 @@ bots (K1, sim). No kick, no camera, no head rotation.
 - Kick direction override: blue_1 (goalie) always kicks toward +X
 - PD gain boost: lin_x = 1.2 (was 0.8) when distance > 1.0m
 - `GOALIE_DEADBAND_PCT`: 0.022 → 0.015 (tighter Y tracking)
+
+
+### Yahboom addendum (2026-08-29 — local-resource audit)
+
+Our Yahboom = **MicroROS-Pi5 class** (ESP32 microROS board, 4x 370 encoder motors,
+MS200 2D-TOF lidar, 2MP cam on 2-DOF gimbal, diff-drive — NOT Mecanum; the
+ROSMASTER X3 sim references are Mecanum = wrong kinematics for us).
+- **Gimbal ("pro" head)**: microROS topics `<ns>/servo_s1`/`servo_s2` (Int angles),
+  confirmed at ESP32-firmware level (servo_subscriber sample)
+- **Odometry**: `<ns>/odom` published by the ESP32 (odom_publisher sample; wm.py POC
+  displays bot1+bot2 live) — odometry flows; bridge does not consume it yet
+- **Board-side PID registers** (serial config tool): MOTOR_PID (0x09), IMU_YAW_PID
+  (0x0A), SERVO_OFFSET (0x08) — rotation/distance variations may be curable board-side
+- ESP32 firmware images V1.1.3/V2.0.0/V2.1.0 exist locally; installed version via 0x51
+- **LIDAR ball detection pipeline** (v6.8 pre-IFA): LaserScan -> adaptive jump
+  segmentation -> cluster size-gate (ball diameter band) -> arc centroid -> Kalman ->
+  `vision_interface/msg/Ball.msg` schema; same node on Gazebo ray-sensor scans
+  (sim2real-identical). Team POCs: lidar_view/heatmap (QoS Best-Effort gotcha)
+- Driver/ROS source is LOCAL: `~/yahboom/ROS_Source_Code/` (yahboomcar_ws, imu_ws,
+  gmapping_ws); ESP32 samples: `~/yahboom/Samples microros/`; config tool:
+  `~/yahboom/config_robot.py`; details: `src/yahboom/YAHBOOM_KNOWLEDGE.md`
+- **UNVERIFIED third-party source**: roboticscenter.ai K1 "software guide" contradicts
+  official specs (vx ±0.5 vs 1.1 m/s, head ±90° vs ±59°, nonexistent PyPI SDK) — do not use
+- udp camera stream (udp_cam/direct_view) remains the known problem child — demos use
+  LIDAR-only perception until the rework lands
