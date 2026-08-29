@@ -627,7 +627,7 @@ Different hardware types have different kick capabilities:
 
 | Bot | Can kick? | Mechanism | Abort needed? | Range |
 |---|---|---|---|---|
-| K1 | Yes | kShoot (2024) / kVisualKick (2038) — autonomous chase **[UNVERIFIED 2026-08-28: KB-internal claim, contradicts vendor docs — see `docs/v7/k1_kick_head_vendor_audit.md`; VisualKick needs firmware ≥ v1.5.2.1, Shoot may fail on K1]** | Yes (follows ball) | Long |
+| K1 | Yes | kShoot (2024) / kVisualKick (2038) — autonomous chase **[UNVERIFIED 2026-08-28: KB-internal claim, contradicts vendor docs — see `docs/plans/v68_pre_ifa/k1_kick_head_vendor_audit.md`; VisualKick needs firmware ≥ v1.5.2.1, Shoot may fail on K1]** | Yes (follows ball) | Long |
 | Yahboom (both types) | Yes (try) | Metal front push | No | Short, untested |
 | Trailer | No | Never | N/A | N/A |
 | Gazebo sim | Yes | Phantom kick (set_entity_state) | No (instant) | Full |
@@ -642,7 +642,7 @@ forbid mixed teams in tournaments. Per-bot `can_kick` flag needed for v7.
 > (docs.booster.tech) documents kicks only as "firmware-configured" actions;
 > Shoot's intended motion is currently T1-provided (may fail on K1); VisualKick
 > requires firmware ≥ v1.5.2.1. The chase-abort design is GATED on the hardware
-> probe — see `docs/v7/k1_kick_head_vendor_audit.md` (probe protocol + decision
+> probe — see `docs/plans/v68_pre_ifa/k1_kick_head_vendor_audit.md` (probe protocol + decision
 > gates incl. firmware Soccer mode as alternative).
 
 The K1's kShoot (2024) and kVisualKick (2038) are autonomous skills — the
