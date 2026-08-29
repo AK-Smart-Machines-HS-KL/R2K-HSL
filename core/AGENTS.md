@@ -12,7 +12,7 @@ All work happens under `core/`. The repo root is a thin wrapper (README, `git_ru
 
 - `core/docs/SESSION_CHANGELOG.md` — **READ THIS FIRST after a reboot.** Append-only session log: what was done, what's next, what's blocking. Cross-session continuity.
 - `core/.github/copilot-instructions.md` — architecture axioms and agent persona rules.
-- `core/docs/` — developer-facing specs: `optimization_spec_v6.md` (v6.1 spec with phase checkpoints), `spec_taktische_evaluierung.md` (German historical design decisions), `referee_rulebook.md` (complete referee decision catalog with thresholds, field diagrams, state machine — read before changing any rule). C3 inter-lingua work: `c3_phase0_literature_and_plan.md`, `c3_vocabulary_dictionary.md`, `c3_testcase_review.md`, `c3_scenario_generation_playbook.md` (see `7_C3_INTER_LINGUA.md` §9).
+- `core/docs/` — developer-facing specs: `reference/specs/optimization_spec_v6.4.md` (v6.1 spec with phase checkpoints), `spec_taktische_evaluierung.md` (German historical design decisions), `referee_rulebook.md` (complete referee decision catalog with thresholds, field diagrams, state machine — read before changing any rule). C3 inter-lingua work: `c3_phase0_literature_and_plan.md`, `c3_vocabulary_dictionary.md`, `c3_testcase_review.md`, `c3_scenario_generation_playbook.md` (see `7_C3_INTER_LINGUA.md` §9).
 - `core/src/ros2k_knowledge/` — RAG power-files (`1_CORE_…` … `8_C3_SOCCER_KNOWLEDGE.md`) + `META_KNOWLEDGE_ROUTER.md` (inverted index of symptoms → which file has the answer). Consult the router before debugging.
 - `core/user doc/rosk2_technical_documentation/` — 40-file detailed architecture reference (human-facing).
 - `core/src/scenario/README.md` — scenario naming + v5/v6 schema rules.
@@ -231,7 +231,7 @@ python3 tools/calib_cli.py
 - `shared_state/waypoints.json` — compiled waypoint list (written by 7B compiler)
 - `shared_state/task_input.json` — interactive task input (written by calib_cli.py)
 - `docs/calibration_cheat_sheet.md` — user-facing command reference with model capabilities
-- `docs/v7/calibration_rotation_design.md` — v7 rotation/Face action design (Option D)
+- `docs/plans/v68_pre_ifa/calibration_rotation_design.md` — v7 rotation/Face action design (Option D)
 
 ### Hardware
 - `--relay single_bot` — Gazebo only
@@ -239,7 +239,7 @@ python3 tools/calib_cli.py
 - Active brake works on all hardware types (Twist zeros / RPC 2001 zeros)
 
 ### Not yet available (v7)
-- Rotation/Face commands (needs bridge Face action — design in `docs/v7/calibration_rotation_design.md`)
+- Rotation/Face commands (needs bridge Face action — design in `docs/plans/v68_pre_ifa/calibration_rotation_design.md`)
 - Visual markers in Gazebo (needs colcon build for world file)
 - Bot yaw in Worldstate (needs tracker change — v7 Task 3a)
 - Relative movement "forward"/"turn left" (needs yaw)

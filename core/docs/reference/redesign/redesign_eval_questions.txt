@@ -1,0 +1,78 @@
+1. Research Question, Hypotheses & Systemic Scope Boundaries
+
+Precision of Objective: Was the core problem defined with mathematical/architectural sharpness or formulated too diffusely?
+
+Hypothesis-Driven Approach: Were clear working and validation hypotheses established before execution (e.g., "Latency X can be kept under Z ms using Architecture Y" or "Approach A is better suited for Use Case B than Approach B")?
+
+Problem Delineation (Scope Boundary): Was it explicitly defined what was out-of-scope to prevent scope creep?
+
+ROS2K (v6.3) Boundary: Was it explicitly accounted for during problem definition that qwen2.5 exclusively processes 2D Cartesian matrices [x, y, yaw] from /gazebo/model_states (via tracker_node.py), making 3D trajectories (Z-axis) strictly out-of-scope?
+
+State of the Art / Baseline Context: Was the baseline state documented prior to execution to quantify actual performance gains?
+
+Strategic Prompt Hypotheses: Were prompts evaluated not as static text files, but as dynamic context fragments compiled at runtime by setup_r2k.py from /strategy/fragments/?
+
+2. Methodology, Experimental Design & Concurrency
+This dimension evaluates how systematically the solution space was explored.
+
+Isolability of Variables: Were individual system layers isolated during benchmarking (e.g., testing perception vs. reasoning layers independently) to assign root causes unambiguously?
+
+Reproducibility & Testbed Setup: Are build steps, execution environments, and test rigs thoroughly documented (e.g., scripts, containers, fixed random seeds) to enable reproduction without implicit domain knowledge?
+
+Evaluation Metrics (KPIs): Were quantitative, objective KPIs defined (e.g., latency in ms, token throughput, error rates, memory footprint) instead of relying on subjective assessment?
+
+Iterative Evaluation: Was progress validated incrementally through defined checkpoints after every core modification, rather than relying on a single end-stage test?
+
+Decoupled Concurrency Boundaries: Was it validated that the ROS 2 Executor loop (10Hz) and ollama_sandbox_bridge.py were never blocked by asynchronous HTTP POST requests initiated by r2k_evaluator.py to Port 11434?
+
+Memory & Storage Footprint: Was it verified that high-frequency JSON I/O cycles (Aggregated_Worldstate.json via state_aggregator.py) occurred exclusively on a RAM disk (tmpfs) in shared_state/ to eliminate storage latency and disk wear?
+
+Race Condition Mitigation: Was it validated that asynchronous reads by the evaluator never triggered JSONDecodeError crashes, verifying that file writes strictly utilized temporary handles (Worldstate.json.tmp) and POSIX atomic swaps (os.replace)?
+
+3. Setbacks, Dead-Ends & Kinematic Edge Cases
+In exploratory engineering, dead-ends constitute valuable scientific insights provided they are documented and analyzed systematically.
+
+Documentation of Dead-Ends: Were failed architectural approaches, incompatible dependencies, or unsuccessful prototype attempts logged along with the underlying causes?
+
+Root-Cause Analysis: Was deep-dive troubleshooting conducted upon encountering crashes/faults (e.g., poor match performance in gazebo, poor results when probing quen, profiling memory leaks, race conditions, system resources) rather than applying surface-level patches?
+
+Pivot Rationale: Were architectural shifts (pivots) justified using empirical metrics rather than subjective preference?
+
+Lessons Learned from Negative Results: What definitive knowledge was generated to prevent future research teams from repeating identical failed iterations?
+
+Orbital Singularities & Hysteresis: Was the system's behavior evaluated during physical collision mesh lockups at the ball boundary (e.g., validating two-phase kinematics: Phase 1 Staging 0.6m behind the ball vs. Phase 2 Strike via /gazebo/set_entity_state Phantom Kicks)?
+
+Parsing Paralysis Logging: Were failed LLM inference cycles (e.g., missing or double information in answer, hallucination of nested JSON instead of the flat schema) logged and bounded by math clamps inside the bridge?
+
+4. Decisions, Trade-Offs & Architectural Axioms
+Every architectural decision involves inherent trade-offs that must be explicitly weighed.
+
+Traceability of Architectural Decisions (ADRs): Are Architecture Decision Records available detailing why specific technologies or paradigms were selected over alternatives?
+
+Explicit Trade-Off Analysis: Were engineering compromises exposed (e.g., latency vs. spatial accuracy, maintainability vs. execution speed, native execution vs. containerization)?
+
+Boundary Conditions & Failure Modes: Was system performance analyzed under stress/edge conditions to identify structural failure thresholds?
+
+Adherence to Core Axioms: Were project invariants, constraints, and system boundaries strictly maintained throughout development?
+
+OOP HAL Abstention: Was the codebase verified to strictly abstain from Object-Oriented Hardware Abstraction Layers (e.g., BaseBotDriver), relying instead on dynamic thread closures (def task) with threading.Event() preemption?
+
+Teardown & Lifecycle Integrity: Was it verified that Kinematic Freezes (zero-velocity vectors and K1 API 2000 standby commands) were executed by the 0.2s Asynchronous Watchdog before enforcing pkill -9?
+
+User-Space Exclusivity: Was it confirmed that Ollama ran exclusively in User-Space (and never as a systemd service) to avoid socket locks on Port 11434 during watchdog teardowns?
+
+5. Quality of Results, Artifacts & Interoperability
+Evaluating the quality, stability, and usability of the final software and physical artifacts.
+
+Functional Validation: Does the delivered system meet operational requirements under real or high-fidelity simulated environments?
+
+Code & Artifact Quality: Is the codebase modular, clean, free of dead code, and structured according to defined engineering standards? are the developed tools and KPIs rerasonalbe?
+
+System Robustness & Failsafes: Does the pipeline fail gracefully under unexpected input (e.g., via watchdogs, degradation modes, time-outs) rather than unhandled crashing?
+
+Transferability & Reusability: Are artifacts (prototypes, repositories, documentation) structured so that subsequent teams can build upon them without reverse engineering?
+
+Hybrid OS Execution Parity: Was execution parity validated between native Ubuntu 22.04 (native uros_ws build bypassing FastDDS SHM blockades) and Ubuntu 24.04 (Docker containerization with network_mode: "host")?
+
+Inference Latency Diagnostics: When encountering severe latency spikes (>7000ms), was host hardware diagnosed for the Nvidia Xid 31 MMU fault (resolved via NVreg_PreserveVideoMemoryAllocations=1) before attempting unnecessary script refactoring?
+

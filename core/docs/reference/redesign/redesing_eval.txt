@@ -1,0 +1,61 @@
+list the topics -  Hypotheses, Methodology, Setbacks, Architectural Decisions, Results -  of the recent project history starting with the inter-mediate languaes. only mgt summary, we go in the details later
+
+We need a quality assurance for the recent project history: /home/r-zwei-kickers/R2K-HSL/core/docs/redesign_eval_project_info.md
+A sample questionare - you may differ from it (expand, ignore partially) - is at /home/r-zwei-kickers/R2K-HSL/core/docs/redesign_eval_questions.txt
+
+Go thru the project history, apply the questionare,  and answer the following three questions as a project manager:
+a) errornous and/or missing aspects of ROS2k now
+b) which aspects of the project should be revisited (need practical or theoretical evaluation, redesign, new approach, more experimentation etc)
+c) concrete recommend modifications to the project plan: integrate a) and b) in terms roll backs, changes, new phases, ordering of phases
+
+
+now use deep details live in c3_phase0_literature_and_plan.md, c3_vocabulary_dictionary.md, c3_scenario_generation_playbook.md, results/prompt_structure_report.md, results/k3_results.md, results/probe_*_report.md. use your context, session logs, created artefacts, what ever it takes.
+
+split your answer into 5 topics:
+
+2026-07-31 — Phase 0: Literature research + model switch
+2026-08-01 — Phase 1 + walkthroughs + prompt-structure study
+2026-08-02 — Phase F executed + K3 battery
+Cross-cutting status
+
+
+x what phase happends code cleanup
+x can we reduce or simplify the bulk of tools develop
+
+x while running gazebo manually, it seems that latency 3vs3 --no-explain reduced from 500ms -> 300ms how comes
+the 300ms is real and expected. It's the combination of TEXT mode (shorter output) + the 1-decimal quantization making the content-hash skip more aggressive. No regression, no measurement artifact — the system genuinely got faster.
+
+x the projected world state seems to make a good job when i played live. we should keep it, maybe evaluate systemsatically. did you realize, it now features an adpative time hoirzon.
+when shall we re-test it?
+
+x questions on methodology and results:
+the intermediate language developed: gathering was ok?  evaluation was ok? re-do? whats in the literature?
+same with new format of system prompt.
+
+x how can i as human soccer expert improve ROS2k? provide more reviewe scenarios? play several games and give soccer coach comments? others?
+x when (what phase) to run the "human in the loop"?
+
+x want to be able to start ollama from shell manually
+
+x stress-test unneccsary for sim mode (not a production system)
+x explain mode is user for user inspection. performance is not an issue there. So: "Roll back explain mode as a supported flag! no
+
+name independent variables to be tested in multiple combinations:
+- world-model: yaw, (adaptive) prediction, others
+- system-prompt: adding more soccer knowledge to the "static" context, others?
+- other modules?
+
+
+Investigate Gazebo deterministic seeding:
+If you need reproducible evaluation sequences for benchmarking prompts or strategies:Preset Initial Conditions: Ensure match resets invoke /reset_scenario via referee_node.py to restore entity poses to exact $X/Y$ coordinates.Fixed Random Seeds for LLM Sampling: Pass a fixed seed in the Ollama request payload inside r2k_evaluator.py (e.g., "options": {"seed": 42, "temperature": 0.0}).Headless Execution: Run simulation tests without X11 GUI rendering to minimize CPU scheduler variance across multi-threaded physics steps.
+
+Single-annotator rubric with no inter-annotator agreement (IAA).
+BLEU/ROUGE/BERTScore are standard f or evaluating LLM output qualit
+
+Inter-lingua (dictionary)	Partial — reinvents "knowledge probing," weaker extractive form, no controls	Weak — single-annotator, no IAA, n=1–3, no standard metrics	Yes, partial — re-probe ~15 load-bearing terms at n≥10, add 2nd annotator + kappa, add control probes
+Prompt format (F3/F4)	Mostly OK — comparable n to published work	Better, but gaps — n=3 too low, token-count confound, no zero-shot baseline, metric hacking risk	Yes, targeted — re-run F0-vs-F1 + 1-vs-6-sample at n≥10, add zero-shot, add CIs
+
+Any variable I missed? You mentioned "others?" for world-model and system-prompt. I've covered yaw, prediction, velocity, precision, hash, score, status (world); knowledge, samples, K3, expert/oracle, game-phase, roles, explain (prompt); goalie blending, kick power (bridge); referee/red (deferred). Is there a specific knob you were thinking of that's not in this list?
+
+
+Gazebo demoted from measurement to demo

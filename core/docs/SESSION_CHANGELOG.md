@@ -3452,3 +3452,59 @@ gate / StateTransitionFailed" refinement, VisualKick "primary or fallback").
 Vendor audit doc updated: "older snapshot" caveat retired. PR #18 merged by
 user after accidental close + reopen; approval requirement (1 write-access
 review) satisfied.
+
+## 2026-08-28/29 — v6.8 planning session: clarifications, hardware search, docs restructure, wrap-up
+
+**Goal:** execute the v6.8/demo_ifa/v7 communication plan: clarify K1 walk/kick/head,
+search hardware resources (Yahboom + K1 sims, LIDAR ball detection), write the three
+plan sets, restructure docs, extend KBs.
+
+**Done:**
+- Clarifications (evidence in plans/scratch.md): K1 walk = bridge P-loop on SIM twin
+  (open-loop on hardware); folklore #2 BUSTED ("0.4 rad/s bridge clamp" — real clamp
+  ±2.5, firmware spec 1.5 rad/s / 1.1 m/s → systematic shortfall root-caused);
+  3 stop semantics (2001-zeros brake / 2000-mode1 freeze / vendor DAMP auto); K1 "kick"
+  = 2000/mode1 placeholder today; K1 fleet = 2x Education, Professional = feasibility
+  question (AGX Orin 32GB catalog variant); head limits documented (yaw ±59°,
+  pitch -19/+49°); RoboCup demo architecture = brain-owns-chase → "chase forever"
+  folklore likely an architecture confusion (K1-PROBE still required for raw skills)
+- Hardware search (~14 sources): Yahboom identified (MicroROS-Pi5, MS200 lidar,
+  2-DOF gimbal via servo_s1/s2 topics, ESP32-native odom); K1 official URDF+meshes
+  (booster_assets), sim-3v3-simple-framework agent API; LIDAR ball pipeline specified;
+  Mecanum catch (ROSMASTER X3 sims = wrong kinematics for our diff-drive);
+  roboticscenter.ai flagged UNVERIFIED
+- LOCAL Yahboom resources integrated (~/yahboom/): driver source on laptop,
+  servo/odom/PID-register confirmations, Factory-Firmware images, team POCs
+- Docs restructure (user-approved mapping): docs/plans/{v68_pre_ifa, v68_after_ifa,
+  v7, root}, reference/{benchmarks, experiments, gui, specs, c3, redesign},
+  outdated/; junk (8 autosave files) + 4 PDF duplicates deleted; pit_of_nice_ideas
+  pruned (W-decision report exists, 150-match superseded, trailer in v6.8,
+  rotation/face → v6.8 task a); link-update pass 14 files (AGENTS, router, KB,
+  ADR, scrum, cheat sheet)
+- Plans written: plan_v68.md (V1-V11 detailed), plan_demo_ifa.md (A/B/D + lab-gate
+  agenda); mgt_demo_ifa Demos section (LIDAR pre-IFA per user, Soccer Agent OUT,
+  trailer FAKE in IFA set); mgt_v68 firmware policy (no upgrade pre-IFA, probe
+  decides in-session); student_projects_autumn_fair.md → plans/ (Trello source)
+- KB/persistence: src/yahboom/YAHBOOM_KNOWLEDGE.md (NEW), src/booster/ASSETS.md (NEW),
+  proposal_edge_llm_k1.md hardware addendum, 4_EDGE Yahboom addendum, META_ROUTER
+  V6.8 row + moved-path fixes
+
+**Files touched:** docs/plans/** (NEW structure), docs/reference/**, docs/outdated/**,
+deleted junk+PDFs, AGENTS.md, src/ros2k_knowledge/{4_EDGE, META_KNOWLEDGE_ROUTER}.md,
+src/yahboom/YAHBOOM_KNOWLEDGE.md (NEW), src/booster/ASSETS.md (NEW), this changelog.
+13 tracked moves + 8 deletes + new files committed on feature/gzweb-experimental
+(plans stay laptop+Trello per In-list; KB/src committed).
+
+**Not yet done:**
+- Mgt summaries: content complete, HUMAN REVIEW pending → then Trello + dissemination
+- plan_v68 V1-V6 + demo plan A/B/D: execution (pre-IFA work itself)
+- Changelog archival (209 KB, trigger 100 KB) — deferred as own session
+- User-docs pass (40-file technical reference) — deferred, scope undecided
+- udp-cam rework; Yahboom MS200 driver location verification (lab)
+
+**Next:**
+1. User reviews mgt_v68/mgt_demo_ifa/mgt_v7 → Trello + team dissemination
+2. Schedule the lab session (plan_demo_ifa gate agenda)
+3. Start V1 (clamp alignment) — pure code, no hardware needed
+
+**Blockers:** None. IFA date + lab session slot to be confirmed by user.

@@ -44,7 +44,7 @@ change → `kChangeMode` (2000) aborts the chase.
 > (docs.booster.tech) describe kicks only as "firmware-configured" actions;
 > Shoot's intended motion is currently T1-provided (may fail on K1);
 > VisualKick needs firmware ≥ v1.5.2.1. The abort design is GATED on the
-> hardware probe: `docs/v7/k1_kick_head_vendor_audit.md`. Head control
+> hardware probe: `docs/plans/v68_pre_ifa/k1_kick_head_vendor_audit.md`. Head control
 > (RotateHead 2004) IS vendor-confirmed for K1.
 
 ## Claims without logged sessions become folklore

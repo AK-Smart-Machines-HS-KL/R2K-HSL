@@ -172,7 +172,7 @@ Two models work together:
 | `face north` / `face south` | Bridge has no `Face` action | Option D: bridge reads yaw from Gazebo |
 | `turn left` / `turn right` | Same — needs rotation command | Option D: relative angle in bridge |
 | `rotate 90` | Same | Option D: degrees → radians |
-| `face opponent goal` | Same | See `docs/v7/calibration_rotation_design.md` |
+| `face opponent goal` | Same | See `docs/plans/v68_pre_ifa/calibration_rotation_design.md` |
 
 ## Tips
 
