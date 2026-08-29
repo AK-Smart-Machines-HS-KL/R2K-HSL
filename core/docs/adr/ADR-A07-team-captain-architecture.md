@@ -42,7 +42,7 @@ These are all **motion planning** concerns crammed into a **command parser**. Th
 2. **Goalie gets stuck** — the PD controller can't drive the goalie back to X=-4.0 after it's pushed to X=-2.6 by physics. The goalie blending (goal-line mode) is a workaround, not a solution.
 
 3. **K1 kick is autonomous** — `kShoot` (2024) and `kVisualKick` (2038) take over the K1. If the ball moves, the K1 chases indefinitely. No abort mechanism exists.
-   > **GATE 0 (2026-08-28):** this premise is UNVERIFIED — no vendor doc or logged hardware session supports the chase claim; vendor notes Shoot's motion is currently T1-provided (may fail on K1) and VisualKick needs firmware ≥ v1.5.2.1. The kick-abort responsibility in this ADR is blocked on the probe in `docs/v7/k1_kick_head_vendor_audit.md` (incl. the firmware Soccer-mode alternative, `RobotMode::kSoccer=4`).
+   > **GATE 0 (2026-08-28):** this premise is UNVERIFIED — no vendor doc or logged hardware session supports the chase claim; vendor notes Shoot's motion is currently T1-provided (may fail on K1) and VisualKick needs firmware ≥ v1.5.2.1. The kick-abort responsibility in this ADR is blocked on the probe in `docs/plans/v68_pre_ifa/k1_kick_head_vendor_audit.md` (incl. the firmware Soccer-mode alternative, `RobotMode::kSoccer=4`).
 
 4. **No arrival angle** — the PD controller drives the bot to (X, Y) but doesn't care about the final heading. The bot arrives facing whatever direction it was driving, requiring post-arrival rotation.
 

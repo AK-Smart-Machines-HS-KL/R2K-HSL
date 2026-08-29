@@ -368,7 +368,7 @@ As a K1-Developer I need the K1's autonomous kick skill (kShoot 2024 / kVisualKi
 > vendor doc or logged hardware session supports it; vendor notes Shoot's
 > motion is currently T1-provided (may fail on K1) and VisualKick needs
 > firmware ≥ v1.5.2.1. Run the probe protocol in
-> `docs/v7/k1_kick_head_vendor_audit.md` FIRST. Probe outcomes re-scope this
+> `docs/plans/v68_pre_ifa/k1_kick_head_vendor_audit.md` FIRST. Probe outcomes re-scope this
 > story: (a) chase observed → abort design as described, (b) skills
 > self-terminate → story drops, (c) evaluate firmware Soccer mode (mode 4,
 > K1+T1) as the kick mechanism instead.

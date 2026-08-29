@@ -1,0 +1,144 @@
+;; This buffer is for text that is not saved, and for Lisp evaluation.
+;; To create a file, visit it with C-x C-f and enter text in its buffer.
+
+
+when did we patch the "b" press in visualizer that did not work? i issued an undo cmd (intended to undo the rules_core test), but you undid the patch as well
+
+python3 r2k_visualizer.py --replay 3vs3_attack_center_strat_aggro_20260728_155711 --speed 1
+f gives full screen, b does nothing. thats the state we have been before
+
+ubuntu 24: where is my ollama cloud api key for opencode located
+
+python3 r2k_visualizer.py --replay 3vs3_attack_center_strat_aggro_20260728_155711 --speed 1
+f gives full screen, b does nothing. thats the state we have been before
+
+first some scientific thoughts, i want you to retrieve (here in docs/papers/) and read relevant papers.
+3B model has a hard time in tactical analysis (oracle), strategy development (expert) and spatial steering (waypoints json output). what experiences and best-practices in AI and robotics exist for
+- world prediction (ie python-based projection of world state bridging the latency gap)
+- our discussed c3 approach
+
+
+c3: intents, rule-based wrapper for
+- Field bounds clamping (no OOB — the mapper enforces ±4.5/±3.0)
+- Collision avoidance (don't target a position occupied by another bot)
+- Kick range check (only kick if within 0.5m of ball)
+- Goalie logic (the blending block moves here, or is removed entirely since the mapper handles defend_goal)
+
+a) check ROS2 for libraries (path planning, usefull other things), so our code is lightweigtht
+
+vectors
+
+later. a pre-thought for planning a new architecture: right yet, the 3B performs tactical analysis (oracle), strategy development (expert) and spatial steering (waypoints json output) as ONE computation step. can we split theses tasks into three (or two, if we follow c3) sub-tasks, easier and more precise to develop the prompts, using different few-shot-samples for each tasks? What will happen wiht latency? can ollama server cope with that, eg running multiple prompts as sequence? I want you to retrieve (here in docs/papers/) and read relevant papers, before you answer. extra question. to be answered separately: might we transform the problem space (2d spatial and vectorial optimization) into another space (say, bots are mirrors, the ball is a blitz) to ease understanding.
+
+Embodied Chain-of-Thought (ECoT)
+splitting into 3 sequential LLM calls on a 3B model will likely hurt due to error accumulation
+structuring the representation (not splitting the calls) is what helps.
+
+1. ECoT within one call (recommended): keep --explain structure but make it leaner. Shorten the analysis/oracle to 1-2 sentences each (not verbose paragraphs). The model outputs {"analysis": "1 sentence", "oracle": "1 sentence", "assignments": {...}} in one call. Latency ~900ms. Each sub-task gets its own few-shot examples in the prompt (different samples for analysis vs oracle vs waypoints).
+
+Replaces natural-language CoT with UML-style object hierarchies
+atomic cinematographic movements
+but soccer is continuous and adversarial.
+asking the 3B model to "think about tactics" in prose won't help if it can't ground the reasoning in the spatial state
+
+4. 1 call with different few-shot samples for analysis/strategy/waypoints (your original idea): This is different from CoT — it's not asking the model to reason step-by-step, but providing better examples for each sub-task. The B-study showed the model copies one pattern. If the single sample teaches the full chain (analysis → strategy → waypoints) as one pattern, the model would copy it. This is the most promising direction — but it's about sample design, not call splitting. The sample would need to contain the reasoning chain as a template the model copies, not as a separate inference step.
+.
+
+vla
+With OLLAMA_NUM_PARALLEL=3  interleaing
+
+if we go  3c w, but delay the rule-based mapper?
+
+. The sample-design path: shall I design a single few-shot sample that embeds the analysis→strategy→waypoints chain as a template (one call, one sample, the model copies the full pattern)? This is the cheapest test of your idea and aligns with the B-study finding (model copies patterns).
+
+export R2K_ENRICH_STATE=1
+bash tools/run_c_series.sh C1_v2 C1_v2 5 3vs3_attack_center
+export R2K_GOALIE_TACTICAL_WEIGHT=0.0
+Tracker rebuilt with yaw extraction (colcon rebuild done)
+Env var passthrough added to launch_r2k.
+
+Sample-design experiment (analysis→strategy→waypoints in one sample, n=10, ~20min)
+3C architecture design (LLM for intent + rule-based mapper for waypoints)
+no: Gazebo deterministic seeding investigation
+
+The env var is a toggle so C1 ca: not as env var put into
+freeze
+
+before we go to 3c and the Sample-design experiment, I want to find low hanging fruits: feeding a future worldmodell to the LMM seems one candidate? confirmed?
+
+Composite reweighting:
+The shot conversion problem
+
+
+Next steps
+1. C1+C9 combined (enrichment + prediction, n=10, ~20min) — test whether the complementary effects combine
+2. Sample-design experiment (analysis→strategy→waypoints chain in sample, n=10, ~20min)
+3. 3C architecture design (LLM for intent + rule-based mapper for waypoints)
+4. Gazebo deterministic seeding investigation — the #1 blocker for statistical confidence
+
+
+Code changes (all uncommitted)
+- r2k_evaluator.py: content-hash fix (include status), C1 enrichment, C4 temporal context, C9 future world model, format:json revert, import math, C1/C9 isolation guard
+- ollama_sandbox_bridge.py: env-var goalie weights
+- tracker_node.py: yaw extraction (needs colcon rebuild — done)
+- launch_r2k.sh: env var passthrough (R2K_ENRICH_STATE, R2K_HISTORY_DEPTH, R2K_GOALIE_TACTICAL_WEIGHT, R2K_GOALIE_LLM_WEIGHT, R2K_PREDICT_HORIZON_MS)
+- analyze_trace.py: --stats flag (Mann-Whitney U, CI, significance)
+- run_c_series.sh: C-series experiment runner (NEW)
+- optimization_spec_v6.3.md: 3 KPI threshold corrections, Phase 2.5 status
+- 9 kpi_targets.json recalibrated
+
+is predictive active? overlay predicted positions to live positions (should converge), so user can visually detect prediction errors
+
+reduce:
+has_yaw=True, has_vx=True, has_score=True 
+R2K_ENRICH_STATE
+min_ent
+prev_ents
+
+New Approach: ros2k must optimize this chain of implications
+a) sensing: getting a reliable world model (w/o prediction)
+b) analysis: understanding soccer game world state incl. apropriate data (yaw?), rules (see auto referee) and limitations (borders)
+c) expert (oracle): suggesting a winning strategy, based upon experience, w/o role assignments
+d) team-captain (the forthcomming c3 module): mapping strategy to actions (eg move, kick) 
+
+we need to define and optimize the communication between the layers, and provide information (data in context)
+
+a) will be harder in the real world; so setting gazebo to "deterministic" gives us nothing in the end
+b)->c) base is 3B LLM knowledge + general system prompt + active scenario (eg 3vs3) + few-shot-samples + auto ref rules . input: refere code base
+c) -> d): base is active strategy and referee decision
+
+a -> b
+- you (glm 5.2) and me (human) evaluate and correct the 10 ros2k test cases and transform the texts
+- taking care of consistent, condensed wordings (soccer tech speech)
+- removing explanatory  statements (which belong in the common world knowledge)
+- we tentatively formulate system prompts (c3 style) for analysis and expert
+
+Acceptance Criteria:
+- soccer tech speech is brief (it is input to 3B model), specialized wordings 
+- soccer tech speech is suited to trigger patterns in 3B model eg
+  "even formation => whoever controls the center controls the game.
+  "striker => the bot closest to the ball"
+  "wing play => stretches the defense and creates gaps in the centre"
+  "cross reception => Crossing requires timing the Move targets."
+  "zone-defend => don't chase the ball, block passing lanes"
+  "defensive shadowing => position bots between ball and own goal" 
+
+
+
+b -> c:
+- qwen (3b) is asked for tasks b) and c) for the 10 test data sets. if  the 3B model outputs differ semantically,
+  we try to adjust the prompt, and repeat. Time consuming gazebo runs not necessery
+
+- net outcome: you (GLM 5,2) create  a new ros2k knowledge base  md ("soccer knowledge") which contains all lessons learned.
+  after that, you (GLM) is capable to evaluate the 3B models output qualitatively directly (no more human in the loop, no gazebo runs
+
+c -> d:
+
+- we develop an intermediate language, maybe the same soccer tech
+ speech, to express strategic intent briefly and clearly
+understandable
+Acceptance Criteria:
+
+
+
+correct (vector, predictions, history frames) -> 

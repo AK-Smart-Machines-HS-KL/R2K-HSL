@@ -199,3 +199,15 @@ Mehrere Arme (Modell-/Prompt-Varianten) in derselben Sitzung mit kontrolliertem
 Cache-Zustand vergleichen. Notwendig, weil `temperature=0.0` nicht
 bit-exakt-deterministisch ist (gemessener Effekt 2026-08-01: Versionsabhaengige
 Tokensequenzen trotz identischer Parameter).
+
+---
+
+## Addendum 2026-08-29 — hardware resolution
+
+The proposal's target hardware is a **standard catalog variant**: the K1 ships in
+three variants (Geek: ARM-only / Education: Jetson Orin NX 8GB / **Professional:
+Jetson AGX Orin 32GB, 200 TOPS**). Our fleet = 2x Education (confirmed 2026-08-28);
+a Professional is a candidate acquisition whose feasibility THIS document explores
+(Stage 0 quality + Stage 1 latency on the 5090 provide the evidence first).
+The 2 Education units meanwhile cover hardware-team play; onboard vision (TRT
+engines from the RoboCup stack) is plausible on the Orin NX 8GB class.
