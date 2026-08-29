@@ -1,0 +1,8 @@
+src/logs/
+src/results/
+*.log
+.opencode/
+src/logs/
+src/results/
+*.log
+.opencode/
