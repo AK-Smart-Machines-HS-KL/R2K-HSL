@@ -220,3 +220,31 @@ waypoint list. Both fit on the 5090 (7GB total). The 3B is always running
 (~1.2s latency). Fast-path commands (stop/resume/restart/go home) bypass
 both models entirely — instant (<20ms), write directly to
 current_strategy.json.
+## Session 2026-08-29/30 — debugging misconceptions, in order (Yahboom fleet forensics)
+
+1. **Missed the wrong ROS domain ID.** The pro bot carried `ROS_DOMAIN_ID=20`
+   (planted by a stale config script); every graph query ran in domain 0. Two
+   sessions of DDS-graph theories before a 5-second register read-back via USB
+   revealed it. The comparison read-back of yahboom #1 (domain 0, otherwise
+   identical) settled it in one table.
+2. **Suspected the DDS/SHM blockade (again).** Blamed the Dockerized agent's
+   SHM transport, proposed IPC tricks and an interception layer — while the
+   same topology had worked for months and worked again in every clean window.
+3. **Forgot the U24 machine has no native ROS 2.** Quoted
+   `source /opt/ros/humble/setup.bash` for a host that has only Jazzy in
+   /opt and runs ROS exclusively in Docker — the launch script even has two
+   agent branches (native U22 / Docker U24) and BoosterMaker takes the Docker
+   branch (24.04).
+4. **Read a stale config file.** Built a whole "Fritzbox era" reconstruction
+   from `config_robot.py` (old copy: 26-char PSK + Fritzbox agent IP) while
+   `config_robot2.py` was the live reference. The user corrected it twice.
+5. **Misattributed bot identities.** Assigned `/bot1` to the pro because of
+   the servo topics — both kits have 2-DOF gimbals. And BOTH bots had been
+   configured as `/bot1`: that was the original "ambiguous topic list".
+6. **Theoretical fixes before config forensics.** Proposed transport-level
+   fixes (FastDDS profiles, /dev/shm sharing) while the root cause was one
+   register — and while the hotspot radio reset every few minutes anyway.
+
+**Rule (added to the discipline):** when hardware state contradicts
+expectations, rank suspects: (1) device config registers, (2) process/env
+state, (3) network topology, (4) code — in that order. Never skip 1.

@@ -274,3 +274,32 @@ ROSMASTER X3 sim references are Mecanum = wrong kinematics for us).
   official specs (vx ±0.5 vs 1.1 m/s, head ±90° vs ±59°, nonexistent PyPI SDK) — do not use
 - udp camera stream (udp_cam/direct_view) remains the known problem child — demos use
   LIDAR-only perception until the rework lands
+
+### micro-ROS fleet: domains, naming, radio (2026-08-30 — USB-verified)
+
+**Fleet table (after the 1→1/2→2 rename):**
+| Bot | ESP32 namespace | Domain | Role |
+|---|---|---|---|
+| yahboom #1 | **/blue_1** (was /bot1) | 0 | drive |
+| yahboom #2 ("vision", 2-DOF cam) | **/blue_2** (was /bot1 — collided!) | 0 (was 20) | camera |
+Both fw 2.1.0, maker4/nao12345, agent 10.42.0.1:8888, CAR_TYPE_COMPUTER.
+
+- **XRCE domain is NOT inert:** the client's domain rides the
+  create-participant payload; the agent creates entities in the CLIENT's
+  domain. A domain-20 bot is invisible to every domain-0 query — and to the
+  launch's hardware wait. Fix = one register write (config tool, USB).
+- **Namespace-aligned mirroring:** with /blue_N matching the sim twin names,
+  `/blue_N/cmd_vel` is consumed by BOTH the Gazebo plugin and the ESP32 —
+  implicit mirroring, no bridge mirror thread for Yahbooms. K1 keeps
+  `mirror_of: blue_1`. Sim bots are never renamed (scenario naming fixed).
+- **Radio instability (desk):** the host's Intel Wi-Fi 7 BE200-class card
+  resets in AP mode every ~5-15 min (journal: supplicant-failed → device
+  removed); NM then falls back to the Fritzbox. Lab sessions were stable.
+  Mitigations: `connection.autoconnect no` on ALL competing wifi profiles,
+  re-raise the hotspot, or a dedicated USB wifi dongle for AP duty.
+- **Diagnostic order when "no topics" from a bot:** (1) hotspot up?
+  `ip -4 -br addr` (2) agent running? `docker ps | grep uros_agent` (3) client
+  session in `docker logs uros_agent`? (4) domain match? (5) graph theories —
+  never skip 1-3 (each failed here before the register read).
+- Config tool references: `~/yahboom/config_robot2.py` (bot #2/current) —
+  the older `config_robot.py` is a STALE copy (26-char PSK, Fritzbox IP).
