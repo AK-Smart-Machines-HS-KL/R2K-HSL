@@ -3,7 +3,7 @@
 **Status:** ACTIVE — pre-IFA items are the IFA-gating set | **Owner:** Prof-Adrian-Mueller | **Date:** 2026-08-28/29
 **Evidence base:** pre-ambles in `mgt_v68.md` (Walk, Kick), `mgt_demo_ifa.md` (Face/Yaw, Calibration), `scratch.md`
 
-## Pre-IFA (must happen before IFA)
+## Pre-IFA
 
 | # | Task | Files | Acceptance | Effort |
 |---|---|---|---|---|
