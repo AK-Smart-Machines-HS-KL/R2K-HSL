@@ -25,10 +25,12 @@ OLLAMA_LOCAL="http://127.0.0.1:11434"
 
 # ---- Parse args ----
 CHECK_ONLY=false
+ENSURE=false
 WARMUP_MODEL=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --check-only) CHECK_ONLY=true; shift ;;
+        --ensure) ENSURE=true; shift ;;
         --model) WARMUP_MODEL="$2"; shift 2 ;;
         *) echo "Unknown arg: $1"; exit 1 ;;
     esac
@@ -36,6 +38,11 @@ done
 
 # ---- Preflight ----
 if ! command -v ollama >/dev/null 2>&1; then
+    if [[ "$ENSURE" == "true" ]]; then
+        echo "❌ 'ollama' is not installed — cannot auto-start. Cloud models remain usable." >&2
+        echo "   Install: curl -fsSL https://ollama.com/install.sh | sh" >&2
+        exit 0
+    fi
     echo "❌ 'ollama' is not installed or not in PATH."
     echo "   Install: curl -fsSL https://ollama.com/install.sh | sh"
     exit 1
@@ -43,9 +50,23 @@ fi
 
 # ---- Check if already running ----
 if curl -s "${OLLAMA_LOCAL}/api/tags" > /dev/null 2>&1; then
+    # Bridge health: reachable from Docker containers (172.17.0.1)?
+    BRIDGE_OK=false
+    if curl -s --max-time 2 "http://172.17.0.1:11434/api/tags" > /dev/null 2>&1; then
+        BRIDGE_OK=true
+    fi
+    if [[ "$ENSURE" == "true" ]]; then
+        # Silent fast path for shell wrappers — only surface actionable problems.
+        if [[ "$BRIDGE_OK" == "true" ]]; then
+            exit 0
+        fi
+        echo "⚠️  Ollama is running but NOT reachable on 172.17.0.1 (Docker bridge) — containers cannot reach it." >&2
+        echo "   Fix: kill the current ollama process and re-run this script, or:" >&2
+        echo "   sudo systemctl edit ollama → [Service] → Environment=\"OLLAMA_HOST=0.0.0.0\"" >&2
+        exit 0
+    fi
     echo "✅ Ollama is already online at ${OLLAMA_LOCAL}"
-    # Verify bind address is 0.0.0.0 (not loopback-only)
-    if ! curl -s --max-time 2 "http://172.17.0.1:11434/api/tags" > /dev/null 2>&1; then
+    if [[ "$BRIDGE_OK" != "true" ]]; then
         echo "⚠️  WARNING: Ollama is reachable on 127.0.0.1 but NOT on 172.17.0.1 (Docker bridge)."
         echo "   Docker containers will not be able to reach it."
         echo "   Fix: kill the current ollama process and re-run this script, or:"
@@ -66,12 +87,14 @@ if [[ "$CHECK_ONLY" == "true" ]]; then
 fi
 
 # ---- Start Ollama ----
-echo "🚀 Starting Ollama..."
-echo "   OLLAMA_HOST=$OLLAMA_HOST"
-echo "   OLLAMA_FLASH_ATTENTION=$OLLAMA_FLASH_ATTENTION"
-echo "   OLLAMA_KV_CACHE_TYPE=$OLLAMA_KV_CACHE_TYPE"
-echo "   OLLAMA_KEEP_ALIVE=$OLLAMA_KEEP_ALIVE"
-echo "   OLLAMA_MODELS=$OLLAMA_MODELS"
+if [[ "$ENSURE" != "true" ]]; then
+    echo "🚀 Starting Ollama..."
+    echo "   OLLAMA_HOST=$OLLAMA_HOST"
+    echo "   OLLAMA_FLASH_ATTENTION=$OLLAMA_FLASH_ATTENTION"
+    echo "   OLLAMA_KV_CACHE_TYPE=$OLLAMA_KV_CACHE_TYPE"
+    echo "   OLLAMA_KEEP_ALIVE=$OLLAMA_KEEP_ALIVE"
+    echo "   OLLAMA_MODELS=$OLLAMA_MODELS"
+fi
 
 # Determine log file path — use /tmp to avoid path resolution issues
 LOG_FILE="/tmp/r2k_ollama.log"
@@ -80,26 +103,41 @@ nohup ollama serve > "$LOG_FILE" 2>&1 &
 disown $!
 
 # ---- Wait for bind ----
-echo "⏳ Waiting for Ollama to bind..."
+if [[ "$ENSURE" != "true" ]]; then
+    echo "⏳ Waiting for Ollama to bind..."
+fi
 for i in $(seq 1 10); do
     if curl -s "${OLLAMA_LOCAL}/api/tags" > /dev/null 2>&1; then
-        echo "✅ Ollama is online at ${OLLAMA_LOCAL}"
+        if [[ "$ENSURE" == "true" ]]; then
+            echo "⚠️  Ollama was down — started (ROS2K procedure, log: $LOG_FILE)"
+            if ! curl -s --max-time 2 "http://172.17.0.1:11434/api/tags" > /dev/null 2>&1; then
+                echo "⚠️  WARNING: not reachable on 172.17.0.1 (Docker bridge) — containers cannot reach it." >&2
+            fi
+        else
+            echo "✅ Ollama is online at ${OLLAMA_LOCAL}"
+        fi
         break
     fi
     sleep 1
     if [[ $i -eq 10 ]]; then
+        if [[ "$ENSURE" == "true" ]]; then
+            echo "❌ Ollama failed to start within 10s (log: $LOG_FILE). Cloud models remain usable." >&2
+            exit 0
+        fi
         echo "❌ Ollama failed to start within 10s. Check $LOG_FILE"
         exit 1
     fi
 done
 
 # ---- Verify Docker bridge reachability ----
-if ! curl -s --max-time 2 "http://172.17.0.1:11434/api/tags" > /dev/null 2>&1; then
-    echo "⚠️  WARNING: Ollama is reachable on 127.0.0.1 but NOT on 172.17.0.1 (Docker bridge)."
-    echo "   This is expected if OLLAMA_HOST was not set to 0.0.0.0."
-    echo "   Current OLLAMA_HOST=$OLLAMA_HOST"
-else
-    echo "✅ Ollama reachable on Docker bridge (172.17.0.1:11434)"
+if [[ "$ENSURE" != "true" ]]; then
+    if ! curl -s --max-time 2 "http://172.17.0.1:11434/api/tags" > /dev/null 2>&1; then
+        echo "⚠️  WARNING: Ollama is reachable on 127.0.0.1 but NOT on 172.17.0.1 (Docker bridge)."
+        echo "   This is expected if OLLAMA_HOST was not set to 0.0.0.0."
+        echo "   Current OLLAMA_HOST=$OLLAMA_HOST"
+    else
+        echo "✅ Ollama reachable on Docker bridge (172.17.0.1:11434)"
+    fi
 fi
 
 # ---- Optional warm-up ----
