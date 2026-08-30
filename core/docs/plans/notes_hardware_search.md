@@ -10,7 +10,7 @@
 **Kit identification:** Amazon B0D5QTST2N = "Yahboom MicroROS Robot Car" (ROS2-Humble,
 microROS ESP32 board, TOF lidar, encoder motors). Our class = **MicroROS-Pi5**:
 ESP32 microROS expansion board, 4× 370 encoder motors, **MS200 2D-TOF lidar**,
-2MP camera on **2-DOF gimbal (the "pro" pan-tilt)**, 7.4V 2000mAh, aluminum frame.
+2MP camera on **2-DOF gimbal (the "vision" bot's pan-tilt)**, 7.4V 2000mAh, aluminum frame.
 
 **CORRECTION (Mecanum):** the recommended third-party sim `automaticaddison/yahboom_rosmaster`
 targets the ROSMASTER X3 = **Mecanum wheels** (omnidirectional) — our chassis is a
@@ -41,7 +41,7 @@ Canonical diff-drive+lidar plugin reference: TurtleBot3-class sims (Gazebo class
 **Interfaces (course documentation confirms):**
 | Capability | Interface |
 |---|---|
-| Gimbal pan-tilt ("pro" head) | **PWM servo topics on the microROS ESP32 board** (course: "Subscribe PWM servo topics") — topic-driven, exists |
+| Gimbal pan-tilt ("vision" head) | **PWM servo topics on the microROS ESP32 board** (course: "Subscribe PWM servo topics") — topic-driven, exists |
 | LIDAR | MS200 2D TOF, ROS2 `/scan` via driver in car image |
 | Odometry | encoder-based, published by microROS driver (quality TBD in lab) |
 | Multi-machine sync | advertised feature (matches our multi-bot use) |

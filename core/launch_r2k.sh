@@ -95,6 +95,10 @@ REQUIRES_HARDWARE_SYNC=$(jq -r '.requires_hardware_sync' "$RELAY_FILE")
 YAHBOOM_TOPIC=$(jq -r '[.mapping[] | select(.hardware_type=="yahboom") | .topic][0] // ""' "$RELAY_FILE")
 K1_TOPIC=$(jq -r '[.mapping[] | select(.hardware_type=="k1") | .topic][0] // ""' "$RELAY_FILE")
 YAHBOOM_NS=$(echo "$YAHBOOM_TOPIC" | sed 's|/cmd_vel||')
+YAHBOOM_TOPIC2=$(jq -r '[.mapping[] | select(.hardware_type=="yahboom") | .topic][1] // ""' "$RELAY_FILE")
+YAHBOOM_NS2=$(echo "$YAHBOOM_TOPIC2" | sed 's|/cmd_vel||')
+YAHBOOM_NUM=$(echo "$YAHBOOM_NS" | grep -oE '[0-9]+$')
+YAHBOOM_NUM2=$(echo "$YAHBOOM_NS2" | grep -oE '[0-9]+$')
 K1_NS=$(echo "$K1_TOPIC" | sed 's|/LocoApiTopicReq||')
 
 echo "🤖 Relay bots ($RELAY):"
@@ -298,13 +302,20 @@ if [ "$UBUNTU_VERSION" == "22.04" ]; then
         echo "=========================================="
         echo "🚨 BITTE SCHALTE DEN YAHBOOM & K1 JETZT EIN 🚨"
         echo "=========================================="
-        YAHBOOM_READY=false; K1_READY=false; WAIT_TIME=0
+        YAHBOOM1_READY=false; YAHBOOM2_READY=false; K1_READY=false; WAIT_TIME=0
+        [ -z "$YAHBOOM_NS2" ] && YAHBOOM2_READY=true
         while [ $WAIT_TIME -lt 10 ]; do
-            if [ "$YAHBOOM_READY" = false ] && ros2 topic list 2>/dev/null | grep -q "${YAHBOOM_NS}/battery"; then
-                echo "🔋 Yahboom Topic erkannt! Führe DDS Warm-Up durch..."
+            if [ "$YAHBOOM1_READY" = false ] && ros2 topic list 2>/dev/null | grep -q "${YAHBOOM_NS}/battery"; then
+                echo "🔋 Yahboom #${YAHBOOM_NUM} (${YAHBOOM_NS}) erkannt! Führe DDS Warm-Up durch..."
                 ros2 topic echo --once --qos-reliability best_effort ${YAHBOOM_NS}/battery > /dev/null 2>&1 &
-                echo "✅ YAHBOOM BEREIT!"
-                YAHBOOM_READY=true
+                echo "✅ YAHBOOM #1 (${YAHBOOM_NS}) BEREIT!"
+                YAHBOOM1_READY=true
+            fi
+            if [ "$YAHBOOM2_READY" = false ] && [ -n "$YAHBOOM_NS2" ] && ros2 topic list 2>/dev/null | grep -q "${YAHBOOM_NS2}/battery"; then
+                echo "🔋 Yahboom #${YAHBOOM_NUM2} (${YAHBOOM_NS2}) erkannt! Führe DDS Warm-Up durch..."
+                ros2 topic echo --once --qos-reliability best_effort ${YAHBOOM_NS2}/battery > /dev/null 2>&1 &
+                echo "✅ YAHBOOM #2 (${YAHBOOM_NS2}) BEREIT!"
+                YAHBOOM2_READY=true
             fi
             if [ "$K1_READY" = false ] && ros2 topic list 2>/dev/null | grep -q "${K1_NS}/odometer_state"; then
                 echo "⚙️ K1-INTERFACE ERKANNT! Führe DDS Warm-Up durch..."
@@ -312,12 +323,15 @@ if [ "$UBUNTU_VERSION" == "22.04" ]; then
                 echo "✅ K1 BEREIT!"
                 K1_READY=true
             fi
-            if [ "$YAHBOOM_READY" = true ] && [ "$K1_READY" = true ]; then break; fi
+            if [ "$YAHBOOM1_READY" = true ] && [ "$YAHBOOM2_READY" = true ] && [ "$K1_READY" = true ]; then break; fi
             sleep 1; ((WAIT_TIME++))
         done
         
-        if [ "$YAHBOOM_READY" = false ] || [ "$K1_READY" = false ]; then
+        if [ "$YAHBOOM1_READY" = false ] || [ "$YAHBOOM2_READY" = false ] || [ "$K1_READY" = false ]; then
             echo "⚠️ WARNUNG: Timeout erreicht. Hardware nicht vollständig erkannt. Starte trotzdem..."
+            [ "$YAHBOOM1_READY" = false ] && echo "   - Yahboom #${YAHBOOM_NUM} (${YAHBOOM_NS}): nicht erkannt"
+            [ -n "$YAHBOOM_NS2" ] && [ "$YAHBOOM2_READY" = false ] && echo "   - Yahboom #${YAHBOOM_NUM2} (${YAHBOOM_NS2}): nicht erkannt"
+            [ "$K1_READY" = false ] && echo "   - K1 (${K1_NS}): nicht erkannt"
         fi
     fi
 
@@ -413,13 +427,20 @@ else
         echo "=========================================="
         echo "🚨 BITTE SCHALTE DEN YAHBOOM & K1 JETZT EIN 🚨"
         echo "=========================================="
-        YAHBOOM_READY=false; K1_READY=false; WAIT_TIME=0
+        YAHBOOM1_READY=false; YAHBOOM2_READY=false; K1_READY=false; WAIT_TIME=0
+        [ -z "$YAHBOOM_NS2" ] && YAHBOOM2_READY=true
         while [ $WAIT_TIME -lt 10 ]; do
-            if [ "$YAHBOOM_READY" = false ] && docker exec $CONTAINER_NAME bash -c "$SOURCE_CMD && ros2 topic list 2>/dev/null" | grep -q "${YAHBOOM_NS}/battery"; then
-                echo "🔋 Yahboom Topic erkannt! Führe DDS Warm-Up durch..."
+            if [ "$YAHBOOM1_READY" = false ] && docker exec $CONTAINER_NAME bash -c "$SOURCE_CMD && ros2 topic list 2>/dev/null" | grep -q "${YAHBOOM_NS}/battery"; then
+                echo "🔋 Yahboom #${YAHBOOM_NUM} (${YAHBOOM_NS}) erkannt! Führe DDS Warm-Up durch..."
                 docker exec -i $CONTAINER_NAME bash -c "$SOURCE_CMD && ros2 topic echo --once --qos-reliability best_effort ${YAHBOOM_NS}/battery > /dev/null 2>&1" &
-                echo "✅ YAHBOOM BEREIT!"
-                YAHBOOM_READY=true
+                echo "✅ YAHBOOM #1 (${YAHBOOM_NS}) BEREIT!"
+                YAHBOOM1_READY=true
+            fi
+            if [ "$YAHBOOM2_READY" = false ] && [ -n "$YAHBOOM_NS2" ] && docker exec $CONTAINER_NAME bash -c "$SOURCE_CMD && ros2 topic list 2>/dev/null" | grep -q "${YAHBOOM_NS2}/battery"; then
+                echo "🔋 Yahboom #${YAHBOOM_NUM2} (${YAHBOOM_NS2}) erkannt! Führe DDS Warm-Up durch..."
+                docker exec -i $CONTAINER_NAME bash -c "$SOURCE_CMD && ros2 topic echo --once --qos-reliability best_effort ${YAHBOOM_NS2}/battery > /dev/null 2>&1" &
+                echo "✅ YAHBOOM #2 (${YAHBOOM_NS2}) BEREIT!"
+                YAHBOOM2_READY=true
             fi
             if [ "$K1_READY" = false ] && docker exec $CONTAINER_NAME bash -c "$SOURCE_CMD && ros2 topic list 2>/dev/null" | grep -q "${K1_NS}/odometer_state"; then
                 echo "⚙️ K1-INTERFACE ERKANNT! Führe DDS Warm-Up durch..."
@@ -427,12 +448,15 @@ else
                 echo "✅ K1 BEREIT!"
                 K1_READY=true
             fi
-            if [ "$YAHBOOM_READY" = true ] && [ "$K1_READY" = true ]; then break; fi
+            if [ "$YAHBOOM1_READY" = true ] && [ "$YAHBOOM2_READY" = true ] && [ "$K1_READY" = true ]; then break; fi
             sleep 1; ((WAIT_TIME++))
         done
         
-        if [ "$YAHBOOM_READY" = false ] || [ "$K1_READY" = false ]; then
+        if [ "$YAHBOOM1_READY" = false ] || [ "$YAHBOOM2_READY" = false ] || [ "$K1_READY" = false ]; then
             echo "⚠️ WARNUNG: Timeout erreicht. Hardware nicht vollständig erkannt. Starte trotzdem..."
+            [ "$YAHBOOM1_READY" = false ] && echo "   - Yahboom #${YAHBOOM_NUM} (${YAHBOOM_NS}): nicht erkannt"
+            [ -n "$YAHBOOM_NS2" ] && [ "$YAHBOOM2_READY" = false ] && echo "   - Yahboom #${YAHBOOM_NUM2} (${YAHBOOM_NS2}): nicht erkannt"
+            [ "$K1_READY" = false ] && echo "   - K1 (${K1_NS}): nicht erkannt"
         fi
     fi
 
