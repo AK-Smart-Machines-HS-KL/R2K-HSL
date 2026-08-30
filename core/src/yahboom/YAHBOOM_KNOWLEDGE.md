@@ -7,7 +7,7 @@
 | Bot | ESP32 namespace | Role | Sim twin |
 |---|---|---|---|
 | yahboom #1 (standard) | **/blue_1** (was /bot1) | main | blue_1 |
-| yahboom #2 (pro, 2-DOF cam) | **/blue_2** (was /bot1 — collided with #1!) | camera | blue_2 |
+| yahboom #2 (vision, 2-DOF cam) | **/blue_2** (was /bot1 — collided with #1!) | camera | blue_2 |
 Both were configured as /bot1 (the "ambiguous topic list" root cause). With name
 alignment, `/blue_N/cmd_vel` is SHARED by sim twin + physical bot (implicit mirror
 — no bridge mirror thread for Yahbooms). K1 stays `mirror_of: blue_1`.

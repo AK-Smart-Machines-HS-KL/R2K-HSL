@@ -36,6 +36,17 @@
 6. [15', optional] VisualKick probe V1/V2 + ball-motion experiment — ONLY if fw ≥ 1.5.2.1 and all green
 7. [5'] Changelog entry with all measured numbers
 
+## A2bot - Two-bot demo support (prereq for D1 with both bots)
+
+The v6.6 demo flow is single-bot (waypoints target blue_1 only). For the IFA
+two-bot choreography (blue_1 kick + blue_2 vision/trailer simultaneously):
+1. Scenario `2vs0_demo` CREATED (blue_1 + blue_2 entities, mode 1vs0 fragments)
+2. Evaluator: per-bot waypoint targets — calib_cli prefix syntax
+   (`blue_2 go to (2,0)`; unprefixed = blue_1, backward compatible)
+3. Bridge: works as-is once targets[blue_2] + sim blue_2 pose exist
+   (mapping entries blue_1/blue_2 already yahboom-typed)
+Effort: ~0.5 d. Blocks: D1 two-bot choreography (not the single-bot dry-runs).
+
 ## Post-IFA
 c-real (RoboCup vision / goto-ball-and-kick / camera color tracking), d-real refinement (free-pose maneuver library on top of the pre-IFA LIDAR detection), kVisualKick integration (fw-gated), udp-cam rework (separate track).
 

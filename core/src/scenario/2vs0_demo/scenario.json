@@ -1,0 +1,10 @@
+{
+  "scenario_name": "2vs0_demo",
+  "mode": "1vs0",
+  "tactical_situation": "Two-bot hardware demo — blue_1 + blue_2 twins, no opponents (IFA: kick + trailer choreography)",
+  "entities": {
+    "soccer_ball": {"x": 1.0, "y": 1.0},
+    "blue_1": {"x": 0.0, "y": 0.0},
+    "blue_2": {"x": 0.0, "y": 1.0}
+  }
+}
