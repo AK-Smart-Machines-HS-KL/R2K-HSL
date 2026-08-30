@@ -1,6 +1,7 @@
 # Lab Session Runbook — single pre-IFA session (90-120 min)
 
 **Print or open on tablet. Everything below is executed ONCE, in order, changelog-logged.**
+**Detailed step-by-step execution (Trello cards): [LAB_SESSION_cards.md](../LAB_SESSION_cards.md)**
 Companion docs: [plan_demo_ifa.md](plan_demo_ifa.md) (demo designs) ·
 [k1_kick_head_vendor_audit.md](k1_kick_head_vendor_audit.md) (K1-PROBE protocol, section 'Hardware probe protocol') ·
 [mgt_demo_ifa.md](mgt_demo_ifa.md) (calibration cure ladder).
@@ -44,7 +45,7 @@ Goal: does `kRotateHead` (2004) execute while the K1 stands in kWALKING (zero ve
 ## 3 - Dry-runs
 Per demo: set up → run once → note failures → run again. Sim twin visible side-by-side
 (hardware_mirror). Record: worked / issue / fix-needed.
-- a: "look left" → "say yes" on K1 + Yahboom gimbal (servo_s1/s2)
+- a: "look left" → "say yes" on K1 + Yahboom gimbal (servo_s1/s2; namespaces now /blue_1 + /blue_2)
 - b-FAKE: "kick ball" → both bots push simultaneously (mirror)
 - b-LIDAR: ball anywhere in front semicircle → detection drives the approach
 - d: fork entry 0° push → 45° rotation (choreography only; detection verified in 4)

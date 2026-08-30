@@ -3569,3 +3569,52 @@ src/yahboom/YAHBOOM_KNOWLEDGE.md (NEW), src/booster/ASSETS.md (NEW), this change
   e7f1b86 docs: v6.8 wrap-up content — plans, yahboom/booster knowledge, KB addenda, link pass
   e3ad6d2 docs: v6.8 planning wrap-up — docs restructure + plans + KB extension
 -->
+
+## 2026-08-30 — Yahboom fleet: pro visibility root-caused (domain register), 1→1/2→2 rename sync
+
+**Goal:** pro (yahboom #2) invisible to ROS2K after the /blue_2 rename; find root cause;
+sync the ROS2K side to the new fleet naming (user decision: hardware mirrors 1→1, 2→2).
+
+**Done:**
+- **Root cause (multi-layer forensics, all layers documented):**
+  1. Pro's ESP32 carried **ROS domain 20** (set by a stale config_robot variant) —
+     XRCE create-participant carries the client's domain; the agent created the pro's
+     entities in domain 20, blind to domain-0 queries. FIXED via USB:
+     `set_ros_domain_id(0)` — read-back verified.
+  2. Renames executed + verified on both bots (config_robot2.py, /dev/ttyUSB0):
+     pro → **/blue_2** (already done), yahboom #1 → **/blue_1** (namespace-only write;
+     full read-back captured FIRST: #1 = fw 2.1.0, domain 0, maker4, 10.42.0.1:8888 —
+     the comparison proving #1-vs-pro differed ONLY in the domain register).
+  3. Environment: host WiFi card = Intel Wi-Fi 7 BE200-class — AP-mode (hotspot)
+     radio resets every ~5-15 min on this desk (journal: supplicant-failed → device
+     removed), and NetworkManager flapped to the Fritzbox repeatedly mid-probe
+     (autoconnect). All earlier "invisible topic" observations were contaminated by
+     this; yahboom #1 proven healthy in a clean window (battery 1.000 Hz, servo
+     subscription live).
+  4. Launch failure for the pro explained: launch wait greps `<ns>/battery` from the
+     relay mapping — relay still said bot1 → timeout by design after the rename.
+- **ROS2K sync (build):** `relay/hardware_mirror.json` → yahboom entries keyed/namespaced
+  **blue_1 + blue_2** (topics shared with sim twins — implicit mirroring, no mirror
+  thread; virtual duplicates removed; blue_2 listed first so the launch wait pollin the
+  pro), `triple_mirror.py` `/bot1/cmd_vel` → `/blue_1/cmd_vel`, `active_relay.json`
+  refreshed; doc sweep (YAHBOOM_KNOWLEDGE fleet table + XRCE-domain lesson + radio note;
+  lab runbook/cards namespace refs). 502 fast tests pass; JSONs valid.
+
+**Files touched:** src/relay/hardware_mirror.json, src/ai_tactics/triple_mirror.py,
+src/ai_tactics/active_relay.json, src/yahboom/YAHBOOM_KNOWLEDGE.md,
+docs/plans/v68_pre_ifa/LAB_SESSION.md, docs/plans/LAB_SESSION_cards.md, this changelog.
+NOT in repo (user-local): ~/yahboom/config_robot*.py (the write tools).
+
+**Not yet done:**
+- Launch test with both bots (needs lab window / stable radio): expect
+  `✅ YAHBOOM BEREIT` (now greps /blue_2/battery)
+- #1 + pro reboot after the writes (user hardware action)
+- 2-bot demo scenario (spawn sim blue_2) for trailer choreography (d-FAKE)
+- Radio hardening (BE200 AP-mode): optional — dmesg/powersave/dedicated USB dongle
+- The pro firmware matches #1 (2.1.0) — no flash needed
+
+**Next:**
+1. Reboot both bots; launch test `./launch_r2k.sh --scenario 1vs0_default --demo --relay hardware_mirror` → expect `🔋 Yahboom Topic erkannt! ✅ YAHBOOM BEREIT` (and ⚙️ K1 if powered)
+2. Dry-run demos a/b with both yahbooms
+
+**Blockers:** None. Radio resets on the desk remain the risk; lab environment was stable for months.
