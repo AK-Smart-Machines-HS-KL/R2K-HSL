@@ -3618,3 +3618,14 @@ NOT in repo (user-local): ~/yahboom/config_robot*.py (the write tools).
 2. Dry-run demos a/b with both yahbooms
 
 **Blockers:** None. Radio resets on the desk remain the risk; lab environment was stable for months.
+
+## 2026-08-30 (cont.) — session close: lessons, KB distillation, fleet verification prep
+
+**Session close per protocol.** Misconceptions list → LESSONS_LEARNED.md
+(wrong domain ID missed → DDS/SHM suspect again → forgot U24 has no native
+ROS 2 → stale config file → bot identity misattribution). KB distillation →
+4_EDGE (fleet table, XRCE-domain lesson, radio note, diagnostic order) +
+router row keywords. Overview: A2bot row added. Launch: per-bot wait + correct
+bot-number labels (lab-validated: both bots detected; vision bot moves via
+direct cmd_vel). 2vs0_demo scenario created. NOT committed in earlier pass —
+see commit below. Full detail: LESSONS_LEARNED + 4_EDGE Yahboom addendum.
