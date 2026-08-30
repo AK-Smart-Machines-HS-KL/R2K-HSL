@@ -2,7 +2,7 @@
 
 **Status:** ✅ done · 🔶 in progress · ⬜ to do · **🧪 Lab** = physical hardware required | **Date:** 2026-08-29
 **Detail docs:** [plan_v68.md](v68_pre_ifa/plan_v68.md) · [plan_demo_ifa.md](v68_pre_ifa/plan_demo_ifa.md) · [plan_v7_coarse.md](v7/plan_v7_coarse.md) · [mgt_v68](v68_pre_ifa/mgt_v68.md) · [mgt_demo_ifa](v68_pre_ifa/mgt_demo_ifa.md) · [mgt_v7](v7/mgt_v7.md)
-**Note:** section links use Obsidian heading anchors (exact heading text).
+**Note:** section links use Obsidian heading anchors (exact heading text). · **Lab sessions:** [LAB_SESSION.md runbook](v68_pre_ifa/LAB_SESSION.md) — every 🧪 badge links to its section.
 
 | # | Ver | Item | Status | Lab |
 |---|---|---|---|---|
@@ -22,14 +22,14 @@
 | 13 | 6.8 | **B2/V4** LIDAR ball-detection node (sim + MS200 identical code) — [plan_v68 › Pre-IFA](v68_pre_ifa/plan_v68.md#Pre-IFA) | ⬜ 1-2 d | — |
 | 14 | 6.8 | **V5** calib_cli `--odom` watch (commanded-vs-reported CSV) — [plan_v68 › Pre-IFA](v68_pre_ifa/plan_v68.md#Pre-IFA) | ⬜ 0.5 d | — |
 | 15 | 6.8 | **D1** Trailer-FAKE choreography (fork entry, 0° push, 45° rotation) — [plan_demo_ifa › Task D](v68_pre_ifa/plan_demo_ifa.md#Task-D---Trailer) | ⬜ 1 d | — |
-| 16 | 6.8 | **D2** Trailer-LIDAR frame/pose detection (pre-IFA; LIDAR-only, decoupled from udp-cam; 2-post fit + known geometry) — [plan_demo_ifa › Task D](v68_pre_ifa/plan_demo_ifa.md#Task-D---Trailer) | ⬜ 1-1.5 d | 🧪 |
-| 17 | 6.8 | **Lab-session gate**: fw probe, 2004-in-WALKING, dry-runs 10-16 (incl. trailer with detection), ball pick (3 sizes) — [plan_demo_ifa › Lab session gate](v68_pre_ifa/plan_demo_ifa.md#Lab-session-gate) | ⬜ 90-120 min | 🧪 |
+| 16 | 6.8 | **D2** Trailer-LIDAR frame/pose detection (pre-IFA; LIDAR-only, decoupled from udp-cam; 2-post fit + known geometry) — [plan_demo_ifa › Task D](v68_pre_ifa/plan_demo_ifa.md#Task-D---Trailer) | ⬜ 1-1.5 d | [🧪](v68_pre_ifa/LAB_SESSION.md#3---dry-runs-a-b-fake-b-lidar-d) |
+| 17 | 6.8 | **Lab-session gate**: fw probe, 2004-in-WALKING, dry-runs 10-16 (incl. trailer with detection), ball pick (3 sizes) — [plan_demo_ifa › Lab session gate](v68_pre_ifa/plan_demo_ifa.md#Lab-session-gate) · **[🧪 runbook](v68_pre_ifa/LAB_SESSION.md#gate-agenda)** | ⬜ 90-120 min | [🧪](v68_pre_ifa/LAB_SESSION.md#gate-agenda) |
 | — | **6.8 post-IFA** | *gated: K1-PROBE results + fw ≥ 1.5.2.1 — [plan_v68 › After IFA](v68_pre_ifa/plan_v68.md#After-IFA)* | | |
-| 18 | 6.8 | **V7/V8** kVisualKick bridge action (kV1/kV2) + Soccer-mode (4) evaluation | ⬜ | 🧪 |
-| 19 | 6.8 | **V9-V11** Odom-closed control · board-side PID cure · `vy` exploitation | ⬜ | 🧪 |
-| 20 | 6.8 | **c-real** camera color tracking + RoboCup vision / goto-ball-and-kick | ⬜ | 🧪 |
-| 21 | 6.8 | **d-real** free (x, y, yaw) maneuver library (on top of the pre-IFA LIDAR detection) | ⬜ | 🧪 |
-| 22 | 6.8 | udp-cam rework (separate track) | ⬜ | 🧪 |
+| 18 | 6.8 | **V7/V8** kVisualKick bridge action (kV1/kV2) + Soccer-mode (4) evaluation | ⬜ | [🧪](v68_pre_ifa/LAB_SESSION.md#6---visualkick-probe-conditional-only-if-fw--1.5.2.1-and-items-1-5-green) |
+| 19 | 6.8 | **V9-V11** Odom-closed control · board-side PID cure · `vy` exploitation | ⬜ | [🧪](v68_pre_ifa/LAB_SESSION.md#5---calibration-patterns) |
+| 20 | 6.8 | **c-real** camera color tracking + RoboCup vision / goto-ball-and-kick | ⬜ | [🧪](v68_pre_ifa/LAB_SESSION.md#4---ball-pick-3-sizes) |
+| 21 | 6.8 | **d-real** free (x, y, yaw) maneuver library (on top of the pre-IFA LIDAR detection) | ⬜ | [🧪](v68_pre_ifa/LAB_SESSION.md#3---dry-runs-a-b-fake-b-lidar-d) |
+| 22 | 6.8 | udp-cam rework (separate track) | ⬜ | [🧪](v68_pre_ifa/LAB_SESSION.md) |
 | — | **v7** | *entry: v6.8 exit* — [plan_v7_coarse.md](v7/plan_v7_coarse.md) · [pit_of_nice_ideas.md](v7/pit_of_nice_ideas.md) · [phase_w_decision_report.md](v7/phase_w_decision_report.md) · [proposal_edge_llm_k1.md](v7/proposal_edge_llm_k1.md) | | |
 | 23 | 7 | TeamCaptain core: path executor, world model, W1-W6 watchdog decision, role assignment → CPU — [plan_v7_coarse › Phase 1](v7/plan_v7_coarse.md#Phase-1---TeamCaptain-core-(WS-1+2)) | ⬜ | — |
 | 24 | 7 | K1 integration: vision stack in match mode, head control, odom loop — [plan_v7_coarse › Phase 2](v7/plan_v7_coarse.md#Phase-2---K1-integration-(WS-3,-parallel)) | ⬜ | 🧪 |
