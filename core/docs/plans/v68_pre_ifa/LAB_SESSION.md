@@ -28,12 +28,12 @@ always. PREP ≥ 5 s before WALK. Nothing touches a running robot except the han
 | 6 | VisualKick probe (conditional) | 15 min |
 | 7 | Changelog logging | 5 min |
 
-## 1 - Firmware probe (both K1)
+## 1 - Firmware probe
 `ssh booster@<robot-ip>` then `booster-cli version` → expect `Firmware: 1.x, SDK: 1.3.x`.
 Record per robot. Gates: fw ≥ 1.5.2.1 → VisualKick available; fw ≥ 1.6 → RoboCup modules
 possible post-IFA. Log both numbers in the changelog.
 
-## 2 - Head smoke test (2004 in WALKING)
+## 2 - Head smoke test
 Goal: does `kRotateHead` (2004) execute while the K1 stands in kWALKING (zero velocity)?
 - Sequence: PREP → WALK → send 2004 `{pitch:0, yaw:+0.5}` (≈29°) → observe → 2004 center.
 - Via calib_cli if demo task a is already implemented, else direct:
@@ -41,7 +41,7 @@ Goal: does `kRotateHead` (2004) execute while the K1 stands in kWALKING (zero ve
 - If no motion in WALKING → repeat in PREP (fallback demo path confirmed). Record which.
 - Limits sanity: yaw ±59° (1.03 rad), pitch −19°/+49°. Stop at half-range first.
 
-## 3 - Dry-runs (a, b-FAKE, b-LIDAR, d)
+## 3 - Dry-runs
 Per demo: set up → run once → note failures → run again. Sim twin visible side-by-side
 (hardware_mirror). Record: worked / issue / fix-needed.
 - a: "look left" → "say yes" on K1 + Yahboom gimbal (servo_s1/s2)
@@ -49,7 +49,7 @@ Per demo: set up → run once → note failures → run again. Sim twin visible 
 - b-LIDAR: ball anywhere in front semicircle → detection drives the approach
 - d: fork entry 0° push → 45° rotation (choreography only; detection verified in 4)
 
-## 4 - Ball pick (3 sizes)
+## 4 - Ball pick
 Place each ball at 1 m / 2 m / 3 m in front of the Yahboom → `/scan` returns a cluster?
 Record: smallest reliably-detected size + detected diameter vs true diameter (size-gate
 calibration). Same for the K1 vision path if the camera stream is up.
@@ -61,7 +61,8 @@ calibration). Same for the K1 vision path if the camera stream is up.
 - With `calib_cli --odom` (if implemented): CSV per run; else manual table:
   commanded (m, rad) vs odom vs tape-measured — 3 columns per run.
 
-## 6 - VisualKick probe (CONDITIONAL — only if fw ≥ 1.5.2.1 AND items 1-5 green)
+## 6 - VisualKick probe
+_CONDITIONAL — only if fw ≥ 1.5.2.1 AND items 1-5 green._
 K1 on stand, ball fixed ~0.5 m ahead.
 1. `kVisualKick start=true version=0 (V1)` → motion? termination?
 2. `version=1 (V2)` → force difference?
