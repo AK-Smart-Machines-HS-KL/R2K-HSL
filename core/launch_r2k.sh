@@ -308,13 +308,13 @@ if [ "$UBUNTU_VERSION" == "22.04" ]; then
             if [ "$YAHBOOM1_READY" = false ] && ros2 topic list 2>/dev/null | grep -q "${YAHBOOM_NS}/battery"; then
                 echo "🔋 Yahboom #${YAHBOOM_NUM} (${YAHBOOM_NS}) erkannt! Führe DDS Warm-Up durch..."
                 ros2 topic echo --once --qos-reliability best_effort ${YAHBOOM_NS}/battery > /dev/null 2>&1 &
-                echo "✅ YAHBOOM #1 (${YAHBOOM_NS}) BEREIT!"
+                echo "✅ YAHBOOM #${YAHBOOM_NUM} (${YAHBOOM_NS}) BEREIT!"
                 YAHBOOM1_READY=true
             fi
             if [ "$YAHBOOM2_READY" = false ] && [ -n "$YAHBOOM_NS2" ] && ros2 topic list 2>/dev/null | grep -q "${YAHBOOM_NS2}/battery"; then
                 echo "🔋 Yahboom #${YAHBOOM_NUM2} (${YAHBOOM_NS2}) erkannt! Führe DDS Warm-Up durch..."
                 ros2 topic echo --once --qos-reliability best_effort ${YAHBOOM_NS2}/battery > /dev/null 2>&1 &
-                echo "✅ YAHBOOM #2 (${YAHBOOM_NS2}) BEREIT!"
+                echo "✅ YAHBOOM #${YAHBOOM_NUM2} (${YAHBOOM_NS2}) BEREIT!"
                 YAHBOOM2_READY=true
             fi
             if [ "$K1_READY" = false ] && ros2 topic list 2>/dev/null | grep -q "${K1_NS}/odometer_state"; then
@@ -433,13 +433,13 @@ else
             if [ "$YAHBOOM1_READY" = false ] && docker exec $CONTAINER_NAME bash -c "$SOURCE_CMD && ros2 topic list 2>/dev/null" | grep -q "${YAHBOOM_NS}/battery"; then
                 echo "🔋 Yahboom #${YAHBOOM_NUM} (${YAHBOOM_NS}) erkannt! Führe DDS Warm-Up durch..."
                 docker exec -i $CONTAINER_NAME bash -c "$SOURCE_CMD && ros2 topic echo --once --qos-reliability best_effort ${YAHBOOM_NS}/battery > /dev/null 2>&1" &
-                echo "✅ YAHBOOM #1 (${YAHBOOM_NS}) BEREIT!"
+                echo "✅ YAHBOOM #${YAHBOOM_NUM} (${YAHBOOM_NS}) BEREIT!"
                 YAHBOOM1_READY=true
             fi
             if [ "$YAHBOOM2_READY" = false ] && [ -n "$YAHBOOM_NS2" ] && docker exec $CONTAINER_NAME bash -c "$SOURCE_CMD && ros2 topic list 2>/dev/null" | grep -q "${YAHBOOM_NS2}/battery"; then
                 echo "🔋 Yahboom #${YAHBOOM_NUM2} (${YAHBOOM_NS2}) erkannt! Führe DDS Warm-Up durch..."
                 docker exec -i $CONTAINER_NAME bash -c "$SOURCE_CMD && ros2 topic echo --once --qos-reliability best_effort ${YAHBOOM_NS2}/battery > /dev/null 2>&1" &
-                echo "✅ YAHBOOM #2 (${YAHBOOM_NS2}) BEREIT!"
+                echo "✅ YAHBOOM #${YAHBOOM_NUM2} (${YAHBOOM_NS2}) BEREIT!"
                 YAHBOOM2_READY=true
             fi
             if [ "$K1_READY" = false ] && docker exec $CONTAINER_NAME bash -c "$SOURCE_CMD && ros2 topic list 2>/dev/null" | grep -q "${K1_NS}/odometer_state"; then

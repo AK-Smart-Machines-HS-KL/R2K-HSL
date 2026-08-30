@@ -47,6 +47,22 @@ two-bot choreography (blue_1 kick + blue_2 vision/trailer simultaneously):
    (mapping entries blue_1/blue_2 already yahboom-typed)
 Effort: ~0.5 d. Blocks: D1 two-bot choreography (not the single-bot dry-runs).
 
+Implementation spec (from the 2026-08-30 code reading, r2k_evaluator.py):
+- The single-bot assumption lives in module globals: `_demo_waypoints`,
+  `_demo_target_idx`, `_demo_arrival_time`, `_demo_start_pos`,
+  `_demo_stopped_idx` — convert to per-bot dicts keyed by bot name.
+- `_write_move_strategy(x, y)` / `_write_hold_strategy()` hardcode
+  `"blue_1"` in the strategy assignments — add a `bot="blue_1"` parameter.
+- `_demo_target_for_bot(bx, by)` already takes the bot position — add the
+  bot key and call it per bot in the per-tick loop (call site ~line 856).
+- `_check_task_input`: parse an optional leading bot name in the task text
+  (`"blue_2 go to (2,0)"`) → route to that bot's state; unprefixed = blue_1.
+- calib_cli.py: pass the task text through unchanged (the evaluator parses).
+- Bridge: NO changes — `targets[blue_2]` + sim blue_2 pose (2vs0_demo) are
+  sufficient; mapping entries already yahboom-typed.
+- Lab verification: `blue_2 go to (2,0)` moves the vision bot while blue_1
+  holds; `blue_1 look...`/head commands unaffected.
+
 ## Post-IFA
 c-real (RoboCup vision / goto-ball-and-kick / camera color tracking), d-real refinement (free-pose maneuver library on top of the pre-IFA LIDAR detection), kVisualKick integration (fw-gated), udp-cam rework (separate track).
 

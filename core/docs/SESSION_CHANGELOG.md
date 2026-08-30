@@ -3629,3 +3629,14 @@ router row keywords. Overview: A2bot row added. Launch: per-bot wait + correct
 bot-number labels (lab-validated: both bots detected; vision bot moves via
 direct cmd_vel). 2vs0_demo scenario created. NOT committed in earlier pass —
 see commit below. Full detail: LESSONS_LEARNED + 4_EDGE Yahboom addendum.
+
+**Addendum (lab verification + close-out):** two-bot launch test: BOTH bots
+detected (blue_1 + blue_2 batteries in domain 0 — the domain fix verified in
+the launch context). blue_2 detected but NOT moving in the demo flow = the
+A2bot gap (single-bot demo design: targets[blue_2] never exists; sim blue_2
+not spawned in 1vs0) — implementation spec now in plan_demo_ifa A2bot (per-bot
+globals, bot-param strategy writers, task-text bot prefix). Launch label bug
+fixed: the BEREIT lines had hardcoded "#1" (the first label-fix pass missed
+the uppercase variants) — all four lines now derive the bot number from the
+namespace. Verified: blue_2 moves via direct /blue_2/cmd_vel publish (user
+lab test). Rule absorbed: never start launches/bots without asking first.
