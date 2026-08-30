@@ -2,6 +2,25 @@
 
 **Created:** 2026-08-29 | **Maintainer:** Prof-Adrian-Mueller
 **Scope:** our two Yahboom diff-drive bots (MicroROS-Pi5 class) — interfaces, resources, POCs.
+
+## Fleet naming (2026-08-30, 1→1/2→2 alignment)
+| Bot | ESP32 namespace | Role | Sim twin |
+|---|---|---|---|
+| yahboom #1 (standard) | **/blue_1** (was /bot1) | main | blue_1 |
+| yahboom #2 (pro, 2-DOF cam) | **/blue_2** (was /bot1 — collided with #1!) | camera | blue_2 |
+Both were configured as /bot1 (the "ambiguous topic list" root cause). With name
+alignment, `/blue_N/cmd_vel` is SHARED by sim twin + physical bot (implicit mirror
+— no bridge mirror thread for Yahbooms). K1 stays `mirror_of: blue_1`.
+
+**LESSON (XRCE domain):** the ESP32 domain register is NOT inert — the XRCE
+create-participant payload carries it, and the agent creates entities in that
+domain. The pro was set to domain 20 by a stale config script; every domain-0
+query was blind to it. #1 (domain 0) always worked. Rule: fleet = domain 0.
+
+**Radio note:** the host laptop (Intel Wi-Fi 7 BE200-class) resets in AP mode
+every few minutes on this desk (journal: supplicant-failed → device removed).
+Lab launches were stable. If in doubt about "no topics", FIRST check
+`ip -4 -br addr` for a flapping hotspot, THEN suspect the graph.
 **Sources of truth:** local `~/yahboom/` resources, ESP32 microROS samples, vendor docs
 (`yahboom.net/study/MicroROS-Pi5`, `category.yahboom.net/products/microros-pi5`).
 Avoid: Amazon listings for technical facts. See also `src/booster/ASSETS.md` (K1 side).
