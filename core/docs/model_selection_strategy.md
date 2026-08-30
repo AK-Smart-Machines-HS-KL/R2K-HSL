@@ -1,6 +1,6 @@
 # Model Selection Strategy for ROS2K Development
 
-**Version:** 1.5 | **Date:** 2026-08-27 | **Status:** Draft for review
+**Version:** 1.6 | **Date:** 2026-08-29 | **Status:** Draft for review
 
 ---
 
@@ -579,6 +579,19 @@ invisible in `/models`, even though the state file has 14 entries. The state
 file (`~/.local/state/opencode/model.json`) and the live config must BOTH be
 updated, then opencode restarted. `/tmp/restore_favorites.py` handles the state
 file; the whitelist edit is manual (or via updated team package install).
+
+**Change log v1.5 → v1.6 (2026-08-29):** outage lesson + shell hardening. An Ollama
+outage (server not started post-reboot) surfaces as "Cannot connect to API: Unable
+to connect" repeating — a NETWORK error (127.0.0.1:11434 refused), not an auth/quota
+error; cloud-side checks (hosts, keys, budget) pass because the failing calls never
+leave the machine. Diagnosis rule: `curl -s http://127.0.0.1:11434/api/tags` FIRST.
+Hardening shipped: `start_ollama.sh --ensure` (silent when healthy, auto-starts with
+the ROS2K env when down, never blocks the launch) wired into the `~/.bashrc`
+`opencode()` wrapper (documented in the team-package README). Subagent/compaction
+models remain local-only — a full outage still disables them until Ollama returns
+or models are switched manually. Note: opencode has no native provider-fallback
+chains (verified against docs v1.18-era schema); local→cloud failover would require
+an interception layer (LiteLLM proxy or a small aiohttp router) — parked.
 
 ### Offer-check automation (v1.5, 2026-08-27)
 

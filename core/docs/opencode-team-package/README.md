@@ -97,6 +97,23 @@ never committed).
 |-------|---------|
 | `gemini-3.5-flash` | Fallback |
 
+## Recommended shell wrapper (optional)
+
+Make every `opencode` launch self-healing: checks OpenRouter special offers and
+auto-starts Ollama with the ROS2K env (OLLAMA_HOST=0.0.0.0, Docker-bridge verified)
+if it is down. Add to `~/.bashrc`:
+
+```bash
+opencode() {
+  python3 "$HOME/R2K-HSL/core/tools/offer_check.py" 2>/dev/null
+  bash "$HOME/R2K-HSL/core/tools/start_ollama.sh" --ensure
+  command opencode "$@"
+}
+```
+
+`--ensure` is silent when Ollama is healthy, starts it (one loud line) when down,
+and never blocks the launch if Ollama cannot start (cloud models remain usable).
+
 ## Running
 
 ```bash
