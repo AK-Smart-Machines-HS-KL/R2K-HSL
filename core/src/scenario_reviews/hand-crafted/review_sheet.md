@@ -1,3 +1,5 @@
+
+
 # Review-Sheet: 17 Hand-crafted Scenarios (IAA Validation)
 
 **Project:** R2K-HSL (RoboCup-HSL Team R-ZWEI KICKERS)  
@@ -73,6 +75,7 @@ Each scenario is evaluated based on the descriptions (**Expert**, **Oracle**, **
 | **17. 3vs3_wing_switch** | 5 | Yes | 5 | - |
 
 **Irregularities:**
+
 * Scenario 01: "blue_2 challenges red_1 for the ball", distance = 1.2m
 * Scenario 02: "blue_2 is on the wing", which wing?**
 * Scenario 03: "blue_2 advances toward the ball", distance = 2.8m
@@ -86,7 +89,51 @@ faulty scenario.json
 "blue has a numbers advantage", blue_2 is alone in midfield
 * Scenario 17: "The right wing (Y<0)", redundant
 
----
+### Tim:
+
+| Scenario                         | Tactical Correctness (1-5) | Position Reachability (Yes/No) | Strategy Clarity (1-5) | Notes                                                        |
+| :------------------------------- | :------------------------: | :----------------------------: | :--------------------: | :----------------------------------------------------------- |
+| **01. 2vs2_default**             |             4              |              Yes               |           5            | blue_1 should cover goal line while dropping back. Is this really a default? |
+| **02. 2vs2_goalie_pass**         |             5              |              Yes               |           5            | -                                                            |
+| **03. 3vs3_attack_center**       |             3              |              Yes               |           5            | blue_3 should also move forward, red posses no threat        |
+| **04. 3vs3_attack_wing**         |             3              |   Yes (potential collision)    |           3            | Potential collision with b_1 and b_3. b_3 should move to left wing, b_3 should cut b_2 should cut between red players |
+| **05. 3vs3_contain_delay**       |             4              |              Yes               |           2            | b_2 movement way to short, doesnt cover the line of passing nor the movement of red team. Goalie should not be directly behind b_2 -> vision obstruction |
+| **06. 3vs3_deep_cross**          |             4              |              Yes               |           5            | goalies vision will be obstructed                            |
+| **07. 3vs3_def_transition**      |             4              |              Yes               |           5            | Maybe b_2 should move towards the ball to cut passing lane, since both red players are close to each other. b_3 should move further |
+| **08. 3vs3_default**             |             3              |              Yes               |           5            | Depending on kick off possession. But b_3 should position either defensively centered or go on the wing to be a option of passing |
+| **09. 3vs3_defensive_crisis**    |             4              |              Yes               |           5            | b_3 should move more inward                                  |
+| **10. 3vs3_fast_counter**        |             1              |              Yes               |           5            | b_1 kicking the ball towards the enemy half will straight up loose the ball. There is nobody to receive the ball. Also it is not a counter if every enemy player is in their half |
+| **11. 3vs3_goalie_distribution** |             3              |              Yes               |           4            | r_1 narrows the passing gap between b_1 and b_2. b_3 should fall into the completely open right wing and build an attack from there, maybe even shoot |
+| **12. 3vs3_high_line**           |             3              |              Yes               |           4            | b_1 targeted position is wrong, b_3 position neither wins nor looses anything |
+| **13. 3vs3_long_shot**           |             1              |              Yes               |           4            | there is practically no way b_2 will get the ball before a red player does, we should use the disorientation of red to reorganize our players |
+| **14. 3vs3_overload**            |             1              |               No               |           3            | blue players way too far off, nowhere near a numbers advantage,ball will be long gone before any player is close. 2v1 not possible with that distance between the two blue players. Would open our defense completely |
+| **15. 3vs3_possession_lost**     |             4              |              Yes               |           5            | missing awareness of r_1 pass to r_2                         |
+| **16. 3vs3_pressing_trap**       |             4              |              Yes               |           2            | b_3 should move to goal line                                 |
+| **17. 3vs3_wing_switch**         |             1              |              Yes               |           5            | blue does not have ball possession! open right wing does not matter if there is no enemy there as well |
+
+**Irregularities:**
+
+- Scenario 02: blue_2 (-1.0, 1.0) is on the wing -> left/right wing?
+
+- Scenario 04: Expert sees distance as too long, oracle pushes ball anyways
+
+- Scenario 05: "blue_1 cover the goal line at (-4.0, 0.5)"
+
+- Scenario 06: "red_2 (-2.0, 0.9) attacks the short post, red_3 (-1.5, -0.9) attacks the long post." Short/Long post only useful in winged attacks, ball will likely land in the middle. Also switched up with short/long post
+
+- Scenario 09: "blue_3 drops to cover the deflection."
+
+- Scenario 11: "blue_3 moves to a secondary outlet" - what does that mean?
+
+- Scenario 14: blue_3 in field_diagram, but blue_1 in analysis
+
+- Scenario 16: "blue_1 is trapped — must escape." Trapped by what? Escape how?
+
+- Scenario 16: "blue_1 passes back to blue_2 to escape the press." passing without the ball?
+
+- Scenario 17: missing information: distance team red to ball
+
+  
 
 ## 📝 Detailed assessment of the 17 scenarios
 
