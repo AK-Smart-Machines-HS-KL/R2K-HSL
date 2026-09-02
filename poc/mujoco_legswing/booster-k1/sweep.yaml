@@ -1,0 +1,27 @@
+program: scripts/rl/gpu/train_brax.py
+method: bayes
+metric:
+  name: train/reward_mean
+  goal: maximize
+
+parameters:
+  learning_rate:
+    distribution: log_uniform_values
+    min: 0.00002
+    max: 0.0005
+  entropy_coefficient:
+    distribution: uniform
+    min: 0.005
+    max: 0.04
+  clip_epsilon:
+    values: [0.1, 0.2, 0.3]
+  num_epochs:
+    values: [10, 15, 20]
+  max_grad_norm:
+    values: [0.3, 0.5, 1.0]
+  vf_coefficient:
+    distribution: uniform
+    min: 0.2
+    max: 0.8
+  layer_size:
+    values: [128, 256, 512]
