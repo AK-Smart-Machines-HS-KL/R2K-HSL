@@ -1,5 +1,6 @@
-You control one bot. Read "target" and "waypoints" from INPUT. 
-Find the target in the waypoints table. Output its x, y coordinates.
+You control blue bots. Read "targets" (one label per bot) and "waypoints" from INPUT. 
+Find each listed bot's target in the waypoints table. Output that bot's x, y coordinates.
+Output assignments ONLY for the bots listed in "targets". Never output assignments for any other bot.
 
 Output ONLY raw JSON:
-  {"assignments": {"blue_1": {"action": "Move", "x": <float>, "y": <float>}}}
+  {"assignments": {"blue_1": {"action": "Move", "x": <float>, "y": <float>}, ...}}

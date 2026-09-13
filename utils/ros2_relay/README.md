@@ -13,7 +13,14 @@ NOTE:once we move the LLM into the K1 bots, this relay will render useless.
 This is a loosely coupled set of python code. Main purposes:
 * Runnning olllama bridge on host requires K1 listening 
 * this code will list specific ros2 topics for DOMAIN 0
-* Eg: K1<robot name>/<rLoCoAPITopicReq/>, <robot name>/Odometer_States
+* Eg: K1<robot name>/<rLoCoAPITopicReq/>, ~~<robot name>/Odometer_States~~
+  **[CORRECTION 2026-09-04 — vendor audit §5, k1_kick_head_vendor_audit.md]** the
+  odometer leg is a NON-FUNCTIONAL placeholder: Booster exposes odom only as the
+  SDK-internal DDS channel `rt/odometer_state` (booster_interface/Odometer), never
+  as a plain ROS 2 topic — the internal relay subscribes a topic that does not
+  exist on the robot. No data has ever been observed (zero logged sessions).
+  Verified working: only LocoApiTopicReq/Resp. ROS-standard path for the future:
+  `rt/odom` (nav_msgs/Odometry) via the ROS bridge, fw >= v1.7.1.0 — probe pending.
 * refresh rate:
 **  Installation**
 0. Start network "maker4", nao12345

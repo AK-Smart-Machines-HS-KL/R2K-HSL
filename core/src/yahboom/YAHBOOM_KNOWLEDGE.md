@@ -18,9 +18,19 @@ domain. The pro was set to domain 20 by a stale config script; every domain-0
 query was blind to it. #1 (domain 0) always worked. Rule: fleet = domain 0.
 
 **Radio note:** the host laptop (Intel Wi-Fi 7 BE200-class) resets in AP mode
-every few minutes on this desk (journal: supplicant-failed → device removed).
+every few minutes on this desk (journal: supplicant-failed → device removed,
+kernel "Internal hw_queue N is full! stopping all queues").
 Lab launches were stable. If in doubt about "no topics", FIRST check
 `ip -4 -br addr` for a flapping hotspot, THEN suspect the graph.
+
+**Cure for "yahboom never reconnects" (2026-09-04):** three layers —
+1. Robot-side (one-time per Pi5, the actual reconnect fix):
+   `sudo nmcli connection modify <PROFILE> connection.autoconnect yes connection.autoconnect-retries 0 802-11-wireless.powersave 2`
+   (retries 0 = forever; powersave off prevents mid-session drops).
+2. Host-side watchdog: `tools/hotspot_watchdog.sh` re-activates the Hotspot
+   profile within 5s after a BE200 reset (NM does not reliably re-activate it).
+3. Host-side stabilization (persistent, needs reboot):
+   `echo "options iwlwifi power_save=0 uapsd_disable=1" | sudo tee /etc/modprobe.d/iwlwifi-ap-stability.conf`
 **Sources of truth:** local `~/yahboom/` resources, ESP32 microROS samples, vendor docs
 (`yahboom.net/study/MicroROS-Pi5`, `category.yahboom.net/products/microros-pi5`).
 Avoid: Amazon listings for technical facts. See also `src/booster/ASSETS.md` (K1 side).
@@ -36,7 +46,8 @@ Avoid: Amazon listings for technical facts. See also `src/booster/ASSETS.md` (K1
 | Capability | Interface | Evidence |
 |---|---|---|
 | Gimbal pan-tilt | microROS topics `<ns>/servo_s1` (pan) + `<ns>/servo_s2` (tilt), Int angle → Servo_Set_Angle | ESP32 `servo_subscriber` sample (`Samples microros/`), course PDF "Subscribe PWM servo topics" |
-| Odometry | `<ns>/odom` (nav_msgs/Odometry), encoder-based, published by ESP32 | `odom_publisher` sample; team `wm.py` POC displays bot1+bot2 odom live |
+| Odometry | `<ns>/odom` (nav_msgs/Odometry, encoder-based, published by ESP32; in the RELAYED domain the physical robot's stream appears as `<ns>/odom_raw` from `YB_Car_Node` — `<ns>/odom` there is the SIM TWIN, see the odom_raw trap in LESSONS_LEARNED 2026-08-31) | `odom_publisher` sample; team `wm.py` POC displays bot1+bot2 odom live |
+| Odom rehearsal (2026-09-08) | bridge (`ollama_sandbox_bridge.py:_ensure_odom_watch`) subscribes `<ns>/odom_raw` per yahboom relay entry → `shared_state/y{1,2}_odom.json` (0.5 s, atomic rename) + `k1_trace_<run_id>.jsonl` records + closed-loop `Goto` feedback (`y1 go to (x,y)`). K1 field-test PREP: Yahbooms mirror the K1 pipeline (odometer_state → k1_odom.json → Goto) so the CLI/exec/results flow is rehearsed on cheap hardware. ±30% encoder slip ACCEPTED (rehearsal vehicle, not accuracy target — arrivals coarse, per-bot PASS thresholds informational). Msg type assumed nav_msgs/Odometry (odom_publisher lineage) — verify live at first lab contact (`ros2 topic info /blue_N/odom_raw -v`, expect `YB_Car_Node`) | bridge code 2026-09-08; `docs/plans/v68_pre_ifa/calib_validation_runbook.md` §V11 |
 | cmd_vel | `<ns>/cmd_vel` Twist | `twist_subscriber` sample; our bridge drives it |
 | LIDAR | `/scan` LaserScan via MS200 driver | course "09.Lidar course"; POCs below |
 | IMU | filtered (imu_tools-humble Madgwick/complementary in `imu_ws`) | driver set |
@@ -75,3 +86,55 @@ field lines (below scan height). Off-the-shelf references:
 - MS200 driver repo not in Yahboom org top-100 (driver lives in the RPi5 image; local
   ROS_Source_Code may contain it — verify at next lab session)
 - Installed ESP32 firmware version unknown (query 0x51 via config tool)
+
+## 7. Booster K1 ROS 2 interface (`booster_ros2_interface`)
+
+**Location:** `src/ros2_ws/src/booster_ros2_interface/`
+
+**Package structure:**
+- **Messages** (`msg/`):
+  - `Odometer.msg` — `float32 x, y, theta` (wheel odometry, vendor SDK internal)
+  - `LowState.msg` / `LowCmd.msg` — vendor low-level state/command
+  - `MotorState.msg` / `MotorCmd.msg` — per-motor state/command
+  - `ImuState.msg` — IMU data
+  - `BoosterApiReqMsg.msg` / `BoosterApiRespMsg.msg` — RPC request/response
+  - `HandCommand.msg` / `HandDdsMsg.msg` / `HandParam.msg` — hand control
+  - `RemoteControllerState.msg` — gamepad state
+  - `ButtonEventMsg.msg` — button events
+  - `RawBytesMsg.msg` / `RawBytesStamped.msg` — raw data transport
+  - `FallDownState.msg` — fall detection state
+- **Services** (`srv/`):
+  - `RpcService.srv` — generic RPC
+  - `AgentService.srv` — agent communication
+- **Header:** `include/booster_interface/booster_interface/message_utils.hpp`
+- **Build:** standard `ament_cmake` + `rosidl_default_generators` (CMakeLists.txt)
+
+**Odom status (CORRECTED 2026-09-06 — live-verified; supersedes the "silent
+placeholder" claim from the 2026-08-26 vendor audit):**
+- `/Kev1n/odometer_state` (type `booster_interface/msg/Odometer`: float32 x, y, theta)
+  **FLOWS at ~490 Hz** — live-verified: echo shows updating values, theta responds to motion.
+- WHY the audit saw "eternal silence": `booster_interface` was never colcon-built, so
+  `ros2 topic echo` failed silently on every past observation — no subscriber could ever
+  exist. LESSON: a topic may only be called silent after its message type is built and a
+  real subscriber has attached.
+- Verified chain: K1 publishes `/odometer_state` (SSH topic list on robot) →
+  `external_fleet_relay_Kev1n` subscribes → republishes `/Kev1n/odometer_state` here.
+- `booster_interface` built 2026-09-06 (`colcon build --packages-select booster_interface`, 4.6s).
+- Vendor-docs note (user, 2026-09-06): docs.booster.tech "Low-Level Topics" concern the
+  C++ SDK transport (ChannelSubscriber) — `rt/odom`/`rt/odometer_state` are SDK-internal
+  names, NOT ROS 2 topics to chase. The ROS 2 surface is what the robot's topic list shows.
+- Bridge integration (2026-09-06): `hal_bridge` subscribes `<ns>/odometer_state` eagerly at
+  boot, writes `shared_state/k1_odom.json` (atomic rename, 0.5 s cadence) and warns on
+  mirror drift > 0.25 m vs the blue_1 sim twin (1 s debounce). K1 stays command-mirror of
+  blue_1; `k1_bot` is deliberately NEVER injected into the LLM payload (phantom-assignment
+  lesson round 4). `Worldstate.json` is off-limits for foreign entries — the aggregator
+  rebuilds it at 10 Hz (entry would be wiped/raced).
+
+**Integration status:**
+- `booster_msgs` built in `ros2_ws` (RpcReqMsg for K1 control)
+- `booster_ros2_interface` provides the full vendor message set
+- K1 control via `/Kev1n/LocoApiTopicReq` (RPC, api_id 2000=stop, 2001=move, 2004=head)
+- K1 mirror slot: `blue_1` (mirrors Y#1 commands, keeps own head for gestures)
+
+**See also:** `docs/plans/v68_pre_ifa/k1_kick_head_vendor_audit.md` (K1 API status),
+`src/booster/ASSETS.md` (K1 assets), `4_EDGE_HARDWARE_SIM2REAL.md` (K1 hardware specifics)

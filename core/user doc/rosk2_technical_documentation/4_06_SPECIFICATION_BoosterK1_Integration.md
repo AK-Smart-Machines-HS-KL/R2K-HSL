@@ -21,6 +21,7 @@ Um Datenkollisionen im ROS 2 DDS-Netzwerk zu vermeiden, kommuniziert die K1-Hard
 
 * Veraltete API-Spezifikation [DEPRECATED]: /LocoApiTopicReq und /odometer_state
 * Neue API-Spezifikation [PRODUCTION]: /bot1/LocoApiTopicReq und /bot1/odometer_state
+* **[KORREKTUR 2026-09-04, Vendor-Audit §5 (`docs/plans/v68_pre_ifa/k1_kick_head_vendor_audit.md`)]** `/bot1/odometer_state` ist **keine funktionierende Produktions-API**: Booster exponiert Odometrie NICHT als plain ROS-2-Topic. Das von unserem eigenen Relay erzeugte Topic ist ein stummer Platzhalter (nie Daten beobachtet). Der einzig ROS-standardisierte Pfad ist `rt/odom` (`nav_msgs/Odometry`) via ROS-Bridge, Firmware ≥ v1.7.1.0 (Kev1n: v1.7.2.0) — Hardware-Probe ausstehend. Nur `/bot1/LocoApiTopicReq` ist empirisch verifiziert.
 
 Die `ollama_sandbox_bridge.py` adressiert gezielt den `/bot1/` Namespace. Dies behebt stille Verbindungsfehler aus asynchronen Simulations- und Hardware-Topics.
 

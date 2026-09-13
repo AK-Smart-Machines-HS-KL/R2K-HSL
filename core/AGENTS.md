@@ -211,7 +211,7 @@ See `docs/calibration_cheat_sheet.md` for the full command reference.
 ### Launch
 ```
 # Gazebo GUI, no matplotlib visualizer
-./launch_r2k.sh --demo --no-visualizer --scenario 1vs0_waypoint --relay single_bot
+./launch_r2k.sh --demo --no-visualizer --scenario 1vs0_default --relay single_bot
 
 # Interactive CLI (second terminal)
 python3 tools/calib_cli.py
