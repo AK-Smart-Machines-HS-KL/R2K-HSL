@@ -184,3 +184,123 @@ Slots as Phase 2.5 (after 2.1 tape measure, same hardware sessions). Risks ranke
 - **Belief feedback** — on goto/home/face commands the CLI prints what the bot itself believes (position + distance to target) and warns "ALREADY THERE" when inside the deadband — a no-op is distinguishable from a failure.
 - **Exec-stepper** — the interactive part of `exec <runbook>`: walks a predefined route leg by leg (command → Enter → reads the bot's odom → drift), ends with one result record (auto PASS/FAIL + human y/n). Hardening = per-leg no-move detection, stale-odom warning, NO-MOVE verdict, bot-prefixed exec.
 - **restart_calib.sh** — one command to stop+relaunch evaluator & bridge with the captured environment (a running Python process keeps its old code — the restart is required after every code change and was a 4-line manual dance typed 6× on 09-08).
+
+---
+
+## Appendix C — U22 regression runbook (native Ubuntu 22.04 + ROS 2 Humble)
+
+> Purpose: the cross-platform regression gate before any merge into `main`.
+> U22 = native (no Docker); U24 = Docker (both pull the same origin refs).
+> Run after `git fetch origin && git checkout <branch>` on U22.
+
+### C.1 Session preconditions (once per U22 machine)
+
+```bash
+lsb_release -d                          # must read: Ubuntu 22.04 LTS
+ros2 --help >/dev/null 2>&1 && echo "ROS 2 ok" || echo "ROS 2 missing -> step C.2"
+```
+
+### C.2 Environment (first U22 provision only)
+
+```bash
+cd ~/R2K-HSL/core && ./install.sh
+```
+
+Installs: ROS 2 Humble + Gazebo (`ros-humble-desktop`, `gazebo`,
+`ros-humble-gazebo-ros-pkgs`), colcon, `numpy<2.0` (Gazebo pin — do not
+bump), builds `ros2_ws` AND the native `uros_ws` (micro-ROS agent — the
+Yahboom leg; Docker is banned here by architecture axiom 6 — FastDDS SHM).
+
+### C.3 Build the workspace — **the regression's core step**
+
+```bash
+source /opt/ros/humble/setup.bash
+cd ~/R2K-HSL/core/src/ros2_ws
+colcon build
+source install/setup.bash
+```
+
+**This is the first native build of `booster_msgs` + `booster_ros2_interface`**
+(the vendor interface package that unblocked `/Kev1n/odometer_state`).
+
+Known failure mode: `numpy/ndarrayobject.h: No such file or directory` →
+stale cached `build/`/`install/` → `rm -rf build install` and rebuild.
+Do NOT install `python3-numpy-dev`, do NOT set CFLAGS (documented red
+herrings). On a fresh clone this should not occur.
+
+### C.4 Fast tier (the core regression, ~30 s)
+
+```bash
+cd ~/R2K-HSL/core/src
+python3 -m pytest tests/ --skip-slow -q \
+  --ignore=tests/test_adaptive_horizon.py \
+  --ignore=tests/test_chart_specs.py
+```
+
+**Expected: `251 passed, 20 failed, 6 skipped`** — the 20 are the
+documented pre-existing `test_i3_sweep` breakage (origin: the uncommitted
+09-05→09-08 backlog, NOT a platform issue). **Any failure outside
+i3_sweep = a U22 finding** → fix-forward commit on the same branch,
+push, re-pull, re-run.
+
+### C.5 Sim battery (offline routing, ~5 s)
+
+```bash
+cd ~/R2K-HSL/core && python3 -c "
+import sys; sys.path.insert(0, 'tools')
+import calib_test
+ok, total, _ = calib_test.run_sim_battery()
+print(f'SIM BATTERY: {ok}/{total}')"
+```
+
+**Expected: `12/12`.**
+
+### C.6 Full tier (real 120 s Gazebo matches — needs services up)
+
+Bring-up, in order:
+
+```bash
+# 1. Ollama, reachable at 0.0.0.0:11434 (Docker/other hosts need the 0.0.0.0 bind)
+OLLAMA_HOST=0.0.0.0 nohup ollama serve > /tmp/r2k_ollama.log 2>&1 &
+#    or the systemd override (Environment="OLLAMA_HOST=0.0.0.0").
+#    First U22 provision: ollama pull qwen2.5:3b
+curl -s http://localhost:11434/api/tags | head -3   # verify up + model listed
+
+# 2. Gazebo test world is launched BY the slow tests themselves (headless) —
+#    no manual gzserver needed. ROS 2 env must be sourced:
+source /opt/ros/humble/setup.bash
+source ~/R2K-HSL/core/src/ros2_ws/install/setup.bash
+
+# 3. Full suite (slow tests included, ~2-3 min each, real matches):
+cd ~/R2K-HSL/core/src
+python3 -m pytest tests/ -v
+```
+
+**Expected:** fast-tier results as C.4 (i3_sweep failures included), plus
+the non-functional slow tests (`test_non_functional.py`) — real 120 s
+matches with per-scenario KPI assertions. A slow-test failure on U22 is a
+finding: compare against the U24 baseline (same commit), fix-forward or
+document platform deltas.
+
+**Slow-tier skips:** tests gracefully skip when `rclpy` is missing —
+if they skip wholesale, the ROS env was not sourced in the SAME shell as
+pytest.
+
+### C.7 Record + close the loop
+
+- Append a dated changelog entry: `U22 regression: fast tier X passed /
+  20 i3_sweep, battery Y/12, full tier Z, findings …`
+- U22-specific fixes → commit on the SAME topic branch → `git push` →
+  U24 `git pull` → both platforms green
+- **Merge gate:** only when BOTH platforms pass → PRs per topic branch
+  into `main` → tag the merge state (pattern: `v6.8-field-day`)
+
+### C.8 U22 platform deltas to watch (not failures, differences)
+
+- micro-ROS/Yahboom: `uros_ws` native on U22 (FastDDS SHM axiom — never
+  Docker) vs absent on U24
+- Docker-owned build dirs: if this U22 clone ever ran Docker-side builds,
+  root-owned `build/`/`install/` may need `sudo rm -rf` first
+- Gazebo GPU: slow tests run headless gzserver — fine without a display,
+  but an NVIDIA suspend-bug history (Xid 31) means after a suspend/resume,
+  re-verify Gazebo before blaming the suite
