@@ -31,7 +31,7 @@ Open: head-command mode requirement (2004 accepted in kWalking?) — part of K1-
 3. **`kResetOdometry` (2031)**: re-zero the internal odometry origin — the correction WRITE path
 So: "vision delta → odometry correction" = a small composition node (subscribe detections + odom → compute correction → 2031), not new firmware. The demo solves the same problem with continuous vision localization instead of corrected odometry.
 
-**calib_cli.py extension (suggested):** add an odom-watch mode (`--odom`): subscribe `/Kev1n/odometer_state` (+ Yahboom odom topic once identified), print and CSV-log **commanded vs reported** per task (commanded is known from task_input/waypoints). This gives the team direct drift data per command type/speed with zero extra hardware.
+**calib_cli.py extension (suggested):** add an odom-watch mode (`--odom`): subscribe ~~`/Kev1n/odometer_state`~~ **[FOLKLORE — silent placeholder; K1 side probe-gated on `rt/odom` ROS bridge, audit §5 `k1_kick_head_vendor_audit.md`]** + Yahboom `/blue_N/odom_raw` (**identified + verified live 2026-09-04**: `/blue_N/odom` is the sim twin, `odom_raw` is the physical robot), print and CSV-log **commanded vs reported** per task (commanded is known from task_input/waypoints). This gives the team direct drift data per command type/speed with zero extra hardware.
 
 **Suggested calibration patterns (floor marks + tape only):**
 | Pattern | Procedure | Measures |

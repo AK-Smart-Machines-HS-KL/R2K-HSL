@@ -32,7 +32,7 @@ CPU-only ROS 2 node between LLM and bridge: path executor, augmented world model
 ### 3. K1 hardware integration (pending K1-PROBE verification)
 - **Kick:** kVisualKick (2038, fw ≥ 1.5.2.1, kV2 recommended by vendor) + evaluate Soccer-mode (4) built-ins (kGoalie, kicking postures) BEFORE custom code; bridge placeholder (2000/mode-1) replaced
 - **Head:** kRotateHead 2004/2043/2006 (limits: yaw ±59°, pitch −19°/+49°) — face/yaw split per plans_v68/mgt_demo_ifa.md
-- **Odometry-closed loop:** `/Kev1n/odometer_state` + LowState already relayed; `kResetOdometry` (2031) correction path
+- **Odometry-closed loop:** ~~`/Kev1n/odometer_state` + LowState already relayed~~ **[FOLKLORE — vendor-audited 2026-09-04, `k1_kick_head_vendor_audit.md` §5: silent placeholder, no LowState leg, zero logged data. Real path: `rt/odom` (`nav_msgs/Odometry`) via ROS bridge, fw ≥ v1.7.1.0 (Kev1n v1.7.2.0 GREEN) — probe pending]**; `kResetOdometry` (2031) correction path
 - **Vision stack:** PR #17 `utils/vision/` (YOLO head camera, PoseEstimator, field lines) — pending merge
 - **Fleet:** 2x K1 **Education** (Orin NX 8GB, confirmed) — onboard vision (TRT) plausible. **Professional NOT yet ordered** — acquisition is a budget request, justified by `proposal_edge_llm_k1.md` + Stage 0/1 evidence
 

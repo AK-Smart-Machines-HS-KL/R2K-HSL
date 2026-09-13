@@ -1,9 +1,9 @@
-# K1 Kick / Head Vendor-Documentation Audit + Hardware Probe Plan (v7)
+# K1 Kick / Head / Odometer Vendor-Documentation Audit + Hardware Probe Plan (v7)
 
-> **Date:** 2026-08-28
-> **Status:** Audit complete — hardware probe REQUIRED before any kick-abort implementation
-> **Trigger:** User challenged the KB claim "kShoot = autonomous shot toward the goal"; no vendor or logged-hardware source could be found
-> **Scope:** Corrects the v6.4-era KB claims about K1 kick skills; does not change any code
+> **Date:** 2026-08-28 (kick/head), 2026-09-04 (odom, §5)
+> **Status:** Kick/head audit complete — hardware probe REQUIRED before any kick-abort implementation. Odom audit (§5) complete — ROS-bridge probe REQUIRED before any K1 closed-loop code.
+> **Trigger:** User challenged the KB claim "kShoot = autonomous shot toward the goal"; no vendor or logged-hardware source could be found. Odom audit triggered by K1 drift/imprecision + user's claim that Booster never exposed odom as a ROS 2 topic.
+> **Scope:** Corrects the v6.4-era KB claims about K1 kick skills; documents the odom-topic ground truth; does not change runtime behavior (relay/launch fixes deferred to the K1 phase)
 
 ## 1. The claim under audit
 
@@ -104,3 +104,103 @@ step below MUST be logged in `SESSION_CHANGELOG.md` immediately after execution.
 
 **Until Gate results exist:** all six KB sites carry an UNVERIFIED annotation,
 and no abort code may be written (scrum GATE 0).
+
+---
+
+## 5. Odometer topic audit (2026-09-04) — "odom is relayed to the fleet"
+
+> **[CORRECTION 2026-09-06 — §5.1/§5.2 conclusions RETRACTED by live test.]**
+> `/Kev1n/odometer_state` FLOWS at ~490 Hz (x/y/theta updating). The audit's
+> "eternal silence" and "topic does not exist on the robot" were artifacts:
+> `booster_interface` was never colcon-built, so every past `ros2 topic echo`
+> failed silently — no subscriber could ever exist, making "zero data
+> observations" vacuous. The robot's SSH topic list (2026-09-06) shows
+> `/odometer_state` exists and the relay forwards it. Lesson: a topic may only
+> be called silent after its message type is built and a subscriber attaches.
+> Vendor-docs note (user): docs.booster.tech Low-Level Topics = C++ SDK
+> transport, NOT the ROS 2 surface. See `src/yahboom/YAHBOOM_KNOWLEDGE.md` §7.
+
+> Folklore-discipline instance #2 (same pattern as §1: a claim exists only in
+> our own files, zero logged observations, vendor docs say otherwise).
+
+**Trigger:** K1 drifting + imprecise in demo/calib; user asserted Booster never
+exposed odom values as a ROS 2 topic. Verified against vendor docs.
+
+### 5.1 The claim under audit
+
+> "`/Kev1n/odometer_state` (Odometer) + IMU LowState are already relayed to
+> the fleet by `external_relay.py` — closing the hardware loop is a
+> subscription away."
+
+Sites (all annotated in place, 2026-09-04):
+
+| Site | Form of the claim |
+| --- | --- |
+| `launch_r2k.sh:320, :449` | **Production code**: K1-ready gate greps topic **existence** — matches our own relay's silent publisher; proves "relay alive", never "odom available" |
+| `docs/plans/v68_pre_ifa/mgt_v68.md` | "already relayed... a subscription away" + claims LowState IMU relayed (**false** — no LowState leg exists in either relay) |
+| `docs/plans/v7/mgt_v7.md`, `plan_v7_coarse.md` | Propagated into v7 closed-loop planning |
+| `docs/plans/v68_pre_ifa/plan_v68.md`, `mgt_demo_ifa.md` | calib_cli `--odom` watch mode designed against the topic |
+| `user doc/.../4_06_SPECIFICATION_BoosterK1_Integration.md` | `/odometer_state` listed as PRODUCTION API |
+| `utils/ros2_relay/README.md` | Odometer_States listed among relayed topics (refresh-rate field empty) |
+| `utils/ros2_relay/internal_relay.py`, `external_relay.py` | Subscribe/publish `/odometer_state` typed `booster_interface.msg.Odometer`; both carry an authoring TODO ("match the actual message type") — the assumption was never verified |
+| `SESSION_CHANGELOG:411` (2026-08-26) | Only logged "observation": host saw no odometer_state — **mis-attributed** to FastDDS NIC routing; the deeper cause is that the internal relay subscribes a topic that does not exist on the robot |
+
+**Audit result (2026-09-04):** `grep odometer SESSION_CHANGELOG*.md` → zero
+sessions ever observed DATA on `/Kev1n/odometer_state`. The topic is a silent
+placeholder created by our own relay. Folklore, not knowledge.
+
+### 5.2 Vendor ground truth (verified 2026-09-04)
+
+Source: **docs.booster.tech** → Developer Guide → C++ SDK →
+**Low-Level Topics** (`https://docs.booster.tech/docs/developer-guide/cpp/low-level-topics/`):
+
+1. `rt/odometer_state` (`b1::kTopicOdometerState`, type
+   `booster_interface::msg::Odometer`, fw ≥ v1.3.1.1) is an **SDK-internal DDS
+   channel** — subscribable ONLY via the SDK's `ChannelSubscriber` /
+   `ChannelFactory`, **not a ROS 2 topic**. Our relays assume a plain ROS 2
+   topic named `/odometer_state` of the same type — wrong name and wrong
+   transport layer. Hence: eternal silence.
+2. The ONLY ROS-standard odom path is `rt/odom` (`b1::kTopicRosOdometer`,
+   type `nav_msgs/msg/Odometry`) — vendor doc: **"requires the ROS bridge"**,
+   firmware **≥ v1.7.1.0**.
+3. No odom **query RPC** exists in the API enum (only `kResetOdometry` 2031).
+4. Verified on the robot's ROS surface today: `/Kev1n/LocoApiTopicReq/Resp`
+   (Move empirically verified, §2.3) — a ROS-facing wrapper exists, so the
+   ROS-bridge probe (§5.4) is plausibly positive — **plausibility is not
+   evidence**.
+5. **Kev1n firmware = v1.7.2.0** (user-verified live via `booster-cli
+   --version`, 2026-09-04) — the `rt/odom` firmware gate is **GREEN**.
+
+### 5.3 Adjacent finding — bridge K1 velocity profile (same session)
+
+The bridge sends sim-tuned velocities to the K1 with no hardware clamp
+(`ollama_sandbox_bridge.py:531-552`): yaw up to **2.5 rad/s** (gain 3.0),
+binary `vx` **0.8/0.2 m/s**, no terminal braking, drive+turn simultaneous.
+The vendor's own K1-safe reference (`src/booster/move_controller.hpp`,
+`MoveToTarget`): yaw **≤ 1.0 rad/s** (gain 1.2), **two-phase** (rotate first
+when heading error ≥ 0.2 rad, then translate holding heading, yaw ± 0.5),
+**distance-proportional braking** (dist < 0.2 m → limit = max(0.1, dist);
+dist < 0.1 m → ≥ 0.05 m/s crawl), success tolerance 0.20 m, 20 ms command
+period. This is a root cause of the observed drift/imprecision independent of
+the missing feedback. Fix belongs to the K1 phase (Step 4 of the
+hardware-closed-loop plan, `mgt` 2026-09-04).
+
+### 5.4 Probe gate (GATE — before any K1 closed-loop code)
+
+On Kev1n (powered, on the maker4 network):
+
+1. `ros2 topic list | grep -i odom` → is `rt/odom` live (ROS bridge running)?
+2. If live: `ros2 topic echo /rt/odom --once` (or `rt/odom`) → confirm
+   `nav_msgs/Odometry` data + note rate. Then: rewire `internal_relay.py` to
+   subscribe `rt/odom` (**plain ROS type — the booster_interface import
+   assumption dies**), external relay publishes it, k1 relay entry gets
+   `odom_topic` → identical closed-loop path as the Yahboom (Phase 2 design,
+   shared seams: odom_topic contract / alignment / velocity profile).
+3. If NOT live: K1 stays open-loop with the fixed velocity profile (§5.3);
+   external feedback becomes a v7 decision (SDK channel app on the host =
+   heavier fallback, ChannelFactory subscribes from an external machine).
+
+**Until Gate results exist:** every site above carries the folklore
+annotation, no K1 closed-loop code may rely on odom, and the
+`launch_r2k.sh` K1-ready gate keeps its current semantics (relay-alive) —
+explicitly NOT an odom availability signal.

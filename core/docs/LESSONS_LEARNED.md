@@ -248,3 +248,82 @@ current_strategy.json.
 **Rule (added to the discipline):** when hardware state contradicts
 expectations, rank suspects: (1) device config registers, (2) process/env
 state, (3) network topology, (4) code — in that order. Never skip 1.
+
+## Docker compose file path (recurring — 2026-08-31)
+
+`docker-compose.yml` lives in `core/src/`, NOT `core/`. The repo root `core/`
+is a thin wrapper; `core/src/` is the runtime CWD (Dockerfile, compose file,
+all ROS 2 nodes, venv on U22). Running `docker compose up -d` from `core/`
+fails with "no configuration file provided: not found".
+
+**Correct sequence:**
+```bash
+cd /home/r-zwei-kickers/R2K-HSL/core/src
+docker compose up -d
+# OR use the launcher which handles this:
+cd /home/r-zwei-kickers/R2K-HSL/core
+./launch_r2k.sh --scenario 3vs3_default --relay hardware_mirror
+```
+
+This error has recurred multiple times. The `launch_r2k.sh` script does
+`cd src` at line 73 — always use it or manually cd to `core/src/`.
+
+## Sim odom vs robot odom_raw trap (2026-08-31)
+
+**Do NOT verify physical motion via `/blue_N/odom`.** In hardware_mirror mode
+the Gazebo sim twin (`blue_bot_diff_drive`) publishes `/blue_N/odom`; the
+PHYSICAL Yahboom publishes `/blue_N/odom_raw` (node `YB_Car_Node` via
+micro-ROS/XRCE agent). Echoing the wrong topic "proves" motion that never
+happened — this burned a live diagnostic session (claimed robot #2 reached
+its goal from sim odom while it physically never moved).
+
+**Rule:** before claiming physical motion, check the publisher node:
+`ros2 topic info <topic> -v | grep "Node name"` — expect `YB_Car_Node`,
+not `blue_bot_diff_drive`/gazebo plugins. Ambiguous topics with 2 publishers
+(`/blue_2/scan`: robot + sim lidar node) prove nothing either way.
+
+**Related: XRCE session-alive ≠ board-link-alive.** The Pi5's micro-ROS
+client registers ALL endpoints at app start (agent logs `create_client` +
+datawriter/reader creation) even when the Pi5↔motor-board link is dead.
+Symptom cluster: endpoints present, but ALL board-derived data silent
+(`imu`, `odom_raw`, `battery` echo nothing for 8s+) and cmd_vel delivered
+but no actuation. The agent log showing one client proves only that a Pi5
+is on the WiFi — not that motors can turn.
+
+**Diagnostic shortcut:** robot absent = no `/blue_N/battery|imu|odom_raw|servo_*`
+topics at all (no client). Robot half-up = endpoints registered, board data
+silent. Robot healthy = board data streams.
+
+## K1 odom folklore — "already relayed, a subscription away" (2026-09-04)
+
+Folklore-discipline instance #2 (after the kShoot-chase folklore, 2026-08-28):
+a claim existed only in our own files, zero logged observations, vendor docs
+say otherwise. Multiple planning docs (mgt_v68, mgt_v7, plan_v7, plan_v68,
+mgt_demo_ifa, user doc 4_06, relay README) and PRODUCTION CODE
+(launch_r2k.sh K1-ready gate) claimed `/Kev1n/odometer_state` (+ a
+non-existent "LowState IMU relay") were already relayed to the fleet.
+
+**Vendor truth** (docs.booster.tech Low-Level Topics; full audit in
+`docs/plans/v68_pre_ifa/k1_kick_head_vendor_audit.md` §5):
+- Booster exposes odom ONLY as SDK-internal DDS channel `rt/odometer_state`
+  (`booster_interface::msg::Odometer`, SDK ChannelSubscriber only) — never as
+  a plain ROS 2 topic. Our relays subscribe a `/odometer_state` that does not
+  exist on the robot → the fleet topic is a silent placeholder, zero data ever.
+- The only ROS-standard path: `rt/odom` (`nav_msgs/Odometry`) via the ROS
+  bridge, firmware ≥ v1.7.1.0. Kev1n fw = v1.7.2.0 (live-verified) → gate
+  GREEN, on-robot probe still required. Plausibility is not evidence.
+- No odom query RPC exists (kResetOdometry 2031 only).
+
+**Rule extensions:** (1) topic EXISTENCE is never data availability — a
+gate that greps `ros2 topic list` proves only "publisher endpoint alive"
+(our own relay creates it). (2) A relay template's TODO comment ("match the
+actual message type") marks an UNVERIFIED assumption — treat as false until
+probed, not as a working default. (3) When a robot-published topic is not
+visible, suspect BOTH the network (FastDDS NIC — changelog 2026-08-26) AND
+the topic's existence at the source; we mis-attributed once already.
+
+**Adjacent finding (same session):** bridge sends sim-tuned velocities to
+the K1 (yaw ≤ 2.5 rad/s, binary vx 0.8/0.2, no braking) while the vendor's
+own `move_controller.hpp` reference uses yaw ≤ 1.0, gain 1.2, two-phase
+rotate-then-translate, distance-proportional crawl braking, 0.20 m
+tolerance. Root cause of K1 drift/imprecision independent of feedback.
