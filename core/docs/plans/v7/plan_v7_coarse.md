@@ -19,7 +19,7 @@
 ## Phase 2 - K1 integration
 - [ ] Bridge kick action = kVisualKick (kV1/kV2 probe first)
 - [ ] Soccer-mode (4) evaluation vs custom skills
-- [ ] Odometry-closed control (odometer_state subscription + 2031 reset)
+- [ ] Odometry-closed control (~~odometer_state subscription~~ **probe-gated: `rt/odom` via ROS bridge — audit §5, k1_kick_head_vendor_audit.md** + 2031 reset)
 - [ ] Head control (2004/2043) in demo + match modes
 - [ ] Vision stack integration (PR #17) for ball/field perception
 

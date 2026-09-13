@@ -1,14 +1,59 @@
 # v7 Calibration: Rotation / Facing Design (Option D)
 
-> **Date:** 2026-08-19
-> **Status:** Design note — not yet implemented
-> **Scope:** Demo/calibration mode only; soccer unaffected
+> **Date:** 2026-08-19 | **Implemented:** 2026-09-05
+> **Status:** Face + Head actions implemented and live-tested (Yahboom#2).
+> K1 head (RPC 2004) coded but UNVERIFIED on hardware (mode gate, vendor
+> audit §2.2). Soccer unaffected — demo-only actions.
 >
 > **Update 2026-08-28:** Head control (separate from this body-rotation
 > design) is **vendor-confirmed for K1**: `RotateHead` (2004, absolute
 > radians, ≥ v1.0.0), `RotateHeadWithTime`, `RotateHeadWithDirection` (2006).
 > See `docs/plans/v68_pre_ifa/k1_kick_head_vendor_audit.md` §2.2. Required RobotMode for
 > head commands is undocumented — verify on hardware.
+
+## Implementation (2026-09-05)
+
+| Piece | File | Notes |
+|---|---|---|
+| Shared contract | `src/ai_tactics/head_cmds.py` | model frame: pan + = LEFT, tilt + = UP; single tuning surface |
+| Bridge Face action | `ollama_sandbox_bridge.py` | P-control turn-in-place, arrival <0.1 rad active brake, K1 vyaw clamp 1.0 rad/s (vendor-safe) |
+| Bridge Head action | same | static pose: edge-triggered 3-tick burst (micro-ROS drops single shots); gestures: ramped sine stream, nonce-id restart, neutral park |
+| Evaluator fast-path | `r2k_evaluator.py` | look/say → blue_2 (gimbal bot); face/turn/rotate → blue_1; `k1` prefix reroutes to blue_1 (K1 mirror source) |
+| CLI | `tools/calib_cli.py` | Head/Face sample categories, instant feedback |
+
+### Empirical servo contract (Yahboom#2, measured 2026-09-05)
+
+- `/blue_N/servo_s1` pan, Int32 deg: topic + = camera RIGHT (S1 negated in firmware); **mechanical stop ±45°** → clamped ±40
+- `/blue_N/servo_s2` tilt, Int32 deg: vendor band [−90, +20] hard top stop; measured upright/level ≈ **4**
+- Single-shot publishes are DROPPED by micro-ROS → burst 3× pattern mandatory
+- `SERVO_SIGN_TILT` still UNVERIFIED ("say yes" model −40 moved camera UP); −8/+8 probe pending next lab session
+- cmd_vel has NO firmware watchdog → always end with explicit zero Twist
+
+## XRCE stall / livelock (root cause of the "Y#2 freezes", 2026-09-05)
+
+Instrumented chain (details in SESSION_CHANGELOG 2026-09-05):
+1. The ESP32 micro-ROS client **stalls stochastically** under sustained reliable
+   traffic (one stall in ~7 min of 3-topic@10Hz max load; zero stalls in 30
+   discrete gestures) — input queue overflow, publishing stops, **ping still
+   answers** (network stack alive).
+2. The stall is **reversible**: after a traffic silence the client drains and
+   recovers by itself within ≤60 s (measured).
+3. It becomes a **permanent freeze (livelock)** only when traffic never stops —
+   which the bridge did (cmd_vel Hold-zeros at 10 Hz forever). Hence "frozen
+   until power-cycle". Yahboom#1 never froze: no gimbal → no servo bursts →
+   load always below drain capacity.
+
+**Defenses shipped (bridge):**
+- **Drain-gaps**: every 2 s of 10 Hz streaming, 200 ms of full silence per
+  bot (`DRAIN_GAP_*` in head_cmds.py) — guaranteed queue drain windows.
+- **Stall-breaker**: imu staleness > 3 s → the bridge goes fully silent for
+  that bot (quarantine, loud log) until imu returns → auto-resume. Converts
+  any stall from a permanent freeze into a seconds-long hiccup.
+- Never gates virtual sim twins or the K1 (no XRCE, no imu → bootstrap rule).
+
+**Lab follow-ups:** disable ESP32 Wi-Fi modem-sleep + add session-reconnect in
+a rebuilt firmware from `~/yahboom/Samples microros` (vendor image has neither);
+Y#1 as the control bot; K1 head probe (2004-in-mode).
 
 ## Problem
 

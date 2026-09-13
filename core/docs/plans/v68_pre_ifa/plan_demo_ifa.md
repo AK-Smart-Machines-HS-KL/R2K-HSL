@@ -36,6 +36,15 @@
 6. [15', optional] VisualKick probe V1/V2 + ball-motion experiment — ONLY if fw ≥ 1.5.2.1 and all green
 7. [5'] Changelog entry with all measured numbers
 
+## A2bot - Two-bot demo support (DEFERRED — simultaneous mirror shipped first)
+
+**Shipped 2026-08-30 (simpler, covers the IFA simultaneous show):** the blue_2
+relay entry carries `mirror_of: blue_1` — the bridge feeds blue_1's command
+stream to `/blue_2/cmd_vel`, so the vision bot runs EVERY demo/calib waypoint
+flow simultaneously with blue_1 (same mechanism as the K1 mirror). No
+evaluator/LLM changes. Per-bot DIFFERENT targets (blue_1 kicks while blue_2
+trails) remain deferred until needed.
+
 ## A2bot - Two-bot demo support (prereq for D1 with both bots)
 
 The v6.6 demo flow is single-bot (waypoints target blue_1 only). For the IFA
@@ -62,6 +71,24 @@ Implementation spec (from the 2026-08-30 code reading, r2k_evaluator.py):
   sufficient; mapping entries already yahboom-typed.
 - Lab verification: `blue_2 go to (2,0)` moves the vision bot while blue_1
   holds; `blue_1 look...`/head commands unaffected.
+
+### 7B syntax probe (done 2026-08-30, probe-only — see `docs/reference/benchmarks/a2bot_syntax_probe.md`)
+
+18 tasks × 5 reps, verbatim compiler prompt, qwen2.5:7b: 100% JSON parse,
+fully deterministic. Evidence-backed conclusions for the implementation:
+- **Scope never reaches the JSON** (no bot field in schema) — per-bot routing
+  MUST be evaluator-side (prefix regex + relay hardware_type), as planned.
+- **Landmark snap hazard:** near-miss literal coords get snapped to landmarks
+  ("goto 2,2" → LEFT WING (2, 2.5), 5/5). Coordinate fast-path (regex) avoids
+  this AND is instant — implement it as part of A2bot scope.
+- **Ball-relative offsets fail in the 7B** (wrong frame + kicking-distance
+  hijack) — compute CPU-side if needed.
+- **`stop all bots` compiles a hallucinated patrol** — control verbs stay
+  fast-path-only, never reach the compiler.
+- **Formations work** (`line up at x=2, spread 1m` → correct arithmetic) —
+  optional future extension via per-bot lists.
+- Compiler prompt needs NO changes for A2bot scope 1 (single-bot
+  absolute-coord tasks already exact).
 
 ## Post-IFA
 c-real (RoboCup vision / goto-ball-and-kick / camera color tracking), d-real refinement (free-pose maneuver library on top of the pre-IFA LIDAR detection), kVisualKick integration (fw-gated), udp-cam rework (separate track).

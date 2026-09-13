@@ -22,11 +22,11 @@ Verdict: structural insufficiency, not a bug. The KB claim "vyaw hard-clamped to
 - Vendor DAMP (mode 0) auto-triggers on instability — never sent by us
 - Note: the K1 "Kick" action currently sends 2000/mode-1 — a stop placeholder, no kick command exists (see the Kick pre-amble below)
 
-**Odometry:** unused today (Gazebo-only, Axiom 2), but `/Kev1n/odometer_state` (Odometer) + IMU LowState are already relayed to the fleet by `external_relay.py` — closing the hardware loop is a subscription away. Lateral walking (`vy`) is available but never commanded.
+**Odometry:** unused today (Gazebo-only, Axiom 2). ~~`/Kev1n/odometer_state` (Odometer) + IMU LowState are already relayed to the fleet by `external_relay.py` — closing the hardware loop is a subscription away.~~ **[FOLKLORE — vendor-audited 2026-09-04, see `k1_kick_head_vendor_audit.md` §5: the topic is a silent placeholder (relay subscribes a topic that does not exist on the robot; no LowState leg exists at all; zero logged data observations). The real ROS path is `rt/odom` (`nav_msgs/Odometry`), gated on the ROS bridge + fw ≥ v1.7.1.0 — Kev1n fw v1.7.2.0 GREEN, probe pending.]** Lateral walking (`vy`) is available but never commanded.
 
 **Implications for v6.8:**
-1. Align command clamps to spec (1.5 rad/s, 1.1 m/s) — named constants, single source
-2. Optional odometry-closed control on hardware (subscribe `/Kev1n/odometer_state`)
+1. Align command clamps to spec (1.5 rad/s, 1.1 m/s) — named constants, single source. **[Also reconcile with vendor `move_controller.hpp` reference: yaw ≤ 1.0 rad/s, gain 1.2, distance-proportional braking — audit §5.3]**
+2. Optional odometry-closed control on hardware ~~(subscribe `/Kev1n/odometer_state`)~~ **[probe-gated: `rt/odom` via ROS bridge — audit §5.4]**
 3. Exploit `vy` (omnidirectional) where useful
 4. Remove the kick placeholder (see the Kick pre-amble below)
 5. K1 fleet: 2x Education (Orin NX 8GB) — onboard vision plausible; Professional (AGX Orin 32GB) not ordered — feasibility path in proposal_edge_llm_k1.md
