@@ -429,6 +429,15 @@ Immediate single step: **Phase 0** (delete the dead calib shake profile,
 `read_k1_odom` alias, fix `y_turns` notes, docstrings, CLI bare-coord echo,
 AGENTS.md "Not yet available" face row — see plan table 0.1–0.8).
 
+**2026-09-12 addendum — regression gate:** the 09-05→09-12 stretch is
+COMMITTED (4 logical commits on `docs/v68Planning`: c471b3e docs-plan v2,
+98fe001 core code+infra incl. booster_ros2_interface, 9cf61ee CLI/tests,
+c2cb226 chronicle) and PUSHED (branches `refactor/CalibCleanup`,
+`feature/K1KickSkill`, `feature/ExecStepperHardening`, `docs/FieldDayLessons`
++ tag `v6.8-field-day`). **U22 regression BEFORE any main merge: follow
+`post_field_test_plan.md` Appendix C** (fast tier 251 expected / battery
+12/12 / full tier with Ollama+Gazebo native; i3_sweep 20 = pre-existing).
+
 **Blockers:** none for Phase 0/1 (code only). Phase 2 needs the K1 online
 (+ Yahbooms for the regression battery). Commit blocked until the formal
 field day passes (user directive).
