@@ -129,6 +129,12 @@ post_field_test_plan carry everything.
 quality = the open design question (D2), NOT a merge blocker per user
 priority ("blue may underperform slightly").
 
+**Merge request (2026-09-14):** PR #20 filed (GitHub UI was unusable on the
+user's browser — React-rendered sections failed to render; resolved by a
+local `git merge --no-ff docs/v68Planning` + push the same day — GitHub
+auto-detected and marked the PR merged). Merge commit tagged
+`v6.9-baseline`. Both platforms green at this point.
+
 ---
 
 ## 2026-09-13 — U22 regression (performed on the U22 machine, integrated 09-14)
