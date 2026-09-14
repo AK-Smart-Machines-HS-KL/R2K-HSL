@@ -137,9 +137,9 @@ Sites (all annotated in place, 2026-09-04):
 | Site | Form of the claim |
 | --- | --- |
 | `launch_r2k.sh:320, :449` | **Production code**: K1-ready gate greps topic **existence** — matches our own relay's silent publisher; proves "relay alive", never "odom available" |
-| `docs/plans/v68_pre_ifa/mgt_v68.md` | "already relayed... a subscription away" + claims LowState IMU relayed (**false** — no LowState leg exists in either relay) |
-| `docs/plans/v7/mgt_v7.md`, `plan_v7_coarse.md` | Propagated into v7 closed-loop planning |
-| `docs/plans/v68_pre_ifa/plan_v68.md`, `mgt_demo_ifa.md` | calib_cli `--odom` watch mode designed against the topic |
+| `docs/outdated/ifa_planning/mgt_v68.md` | "already relayed... a subscription away" + claims LowState IMU relayed (**false** — no LowState leg exists in either relay) |
+| `docs/outdated/mgt_v7.md`, `plan_v7_coarse.md` | Propagated into v7 closed-loop planning |
+| `docs/outdated/ifa_planning/plan_v68.md`, `mgt_demo_ifa.md` (same dir) | calib_cli `--odom` watch mode designed against the topic |
 | `user doc/.../4_06_SPECIFICATION_BoosterK1_Integration.md` | `/odometer_state` listed as PRODUCTION API |
 | `utils/ros2_relay/README.md` | Odometer_States listed among relayed topics (refresh-rate field empty) |
 | `utils/ros2_relay/internal_relay.py`, `external_relay.py` | Subscribe/publish `/odometer_state` typed `booster_interface.msg.Odometer`; both carry an authoring TODO ("match the actual message type") — the assumption was never verified |
