@@ -72,6 +72,25 @@ priority.
 **Blockers:** U22 regression pending (17h). Merge blocked on 17h (user
 directive). No hardware needed for the code-only phases.
 
+**2026-09-14 addendum (doc pass + pit consolidation):**
+- PLANS overview v2 refined: item 21 split into 21a (kick-aim defaults) +
+  21b (goalie-distribution sub-rule, merged from the pit — same code site
+  `resolve_pass_target`, one validation run); row 31 → consolidated pit
+  table P1-P12 (pit file §9); --odom CSV watch DROPPED (superseded);
+  Yahboom camera (udp-cam) renamed for clarity; GUI follow-ups → branch
+  `feature/gzweb-experimental` (POC in development, commit 63b678e).
+- **Permanent writing rule** added to AGENTS.md ("Writing style"): no
+  project-internal abbreviations or phase-relative labels (i3/v0/B1/fast
+  tier/Slice 2) in docs/plans/changelogs without explanation — standard
+  software-engineering wording or spelled-out phase reference; terms
+  defined at first use or linked to the plan glossary (Appendix B).
+  "Drift" wording restricted to odometry/sensor error — prompt divergence
+  = "silent prompt change" (glossary).
+- Glossary additions (Appendix B): silent prompt-change detection,
+  Yahboom camera (udp-cam).
+- **OPEN BUG (pre-merge, user-reported):** detail pending from user —
+  to be fixed before the merge request goes out.
+
 ---
 
 ## 2026-09-13 — U22 regression (performed on the U22 machine, integrated 09-14)

@@ -13,17 +13,18 @@
 
 ## 6.6–6.7 (history — all done unless noted)
 
-| # | Item | Status |
-|---|---|---|
-| 1 | Demo/calibration mode (3B executor + 7B compiler) | ✅ |
-| 2 | n=100 benchmark + kpi_targets re-baseline (PR #16) | ✅ |
-| 3 | Prompt-channel closure (SP/WIN negative) → TC requirements | ✅ |
-| 4 | GZWeb/GUI POC | ✅ — 🔶 PR pending |
-| 5 | opencode model strategy v1.5/1.6 | ✅ |
-| 6 | K1 vendor-doc audit (chase folklore retracted, GATE 0 installed) | ✅ |
-| 7 | Hardware search (Yahboom MicroROS-Pi5 registers, K1 URDF, LIDAR spec) | ✅ |
-| 8 | Docs restructure + KB updates | ✅ |
-| 9 | Residuals: ~~booster_msgs~~ DONE 09-12 · **PR #17 vision merge (team — still open)** · changelog archival (→ cleanup session) · nemotron demotion (optional — drop from opencode favorites; underperformed, format:json confound) | 🔶 |
+| #   | Item                                                                                                                                                                                                                              | Status            |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
+| 1   | Demo/calibration mode (3B executor + 7B compiler)                                                                                                                                                                                 | ✅                 |
+| 2   | n=100 benchmark + kpi_targets re-baseline (PR #16)                                                                                                                                                                                | ✅                 |
+| 3   | Prompt-channel closure (SP/WIN negative) → TC requirements                                                                                                                                                                        | ✅                 |
+| 4   | GZWeb/GUI POC                                                                                                                                                                                                                     | ✅ — 🔶 PR pending |
+| 5   | opencode model strategy v1.5/1.6                                                                                                                                                                                                  | ✅                 |
+| 6   | K1 vendor-doc audit (chase folklore retracted, GATE 0 installed)                                                                                                                                                                  | ✅                 |
+| 7   | Hardware search (Yahboom MicroROS-Pi5 registers, K1 URDF, LIDAR spec)                                                                                                                                                             | ✅                 |
+| 8   | Docs restructure + KB updates                                                                                                                                                                                                     | ✅                 |
+| 9   | Residuals: ~~booster_msgs~~ DONE 09-12 · **PR #17 vision merge (team — still open)** · changelog archival (→ cleanup session) · nemotron demotion (optional — drop from opencode favorites; underperformed, format:json confound) | 🔶                |
+|     |                                                                                                                                                                                                                                   |                   |
 
 ## 6.8 — IFA prep + pivot (demo work = the IFA prep; field-day pivot replaced trailer/LIDAR)
 
@@ -55,27 +56,28 @@
 
 ## 6.9 — two modes + K1 skills (entry: 17h green)
 
-| # | Item | Status |
-|---|---|---|
-| 18 | **--mode flag**: `pure-llm` (bridge scope-reduced — zero tactical constants; Slice 1/2 flag layer retired, TeamCaptain label freed) vs `algorithm-enhanced` (current behavior preserved). pure-llm KPI baseline = the v7 control group | ⬜ 1-2 d |
-| 19 | **K1 kick** ("goto ball and kick at (x,y)"): K0 probe (GATE 0) → kVisualKick(2038) port (vendor Kick/RLVisionKick recipe) → staged validation — [Phase 2.5](v68_pre_ifa/post_field_test_plan.md#phase-25--k1-kick-skill-goto-ball-and-kick-at-xy-project-p1) | ⬜ 1-2 d + 🧪 |
-| 20 | **K1 head movement** (say yes/no via RPC 2004, RotateHead probes) | ⬜ 0.5 d + 🧪 |
-| 21 | Kick-aim quality: algorithm-enhanced defaults ON (R2K_TEAMCAPTAIN=1/R2K_PASS_RESOLVE=1 — validated 0.20→0.94 B/match); pure-llm accepts raw aims (measured: 74% non-goalward) | ⬜ 0.5 d |
-| 22 | Composite gate repair (sub-KPIs hard gate, composite = 3-sample trend) + relay-rename cleanup (tournament/batch_evaluator/rebaseline still reference only_sim_bots) | ⬜ 0.5 d |
-| 23 | Exec-stepper hardening + selftest + preflight + restart_calib.sh (post_field_test_plan Phase 1) | ⬜ 1 d |
-| 24 | Phase 0 cleanup batch (0.1-0.8) + LESSONS_LEARNED write-back (firmware-physics table + architecture lessons) | ⬜ 0.5 d |
+| #   | Item                                                                                                                                                                                                                                                         | Status       |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------ |
+| 18  | **--mode flag**: `pure-llm` (bridge scope-reduced — zero tactical constants; Slice 1/2 flag layer retired, TeamCaptain label freed) vs `algorithm-enhanced` (current behavior preserved). pure-llm KPI baseline = the v7 control group                       | ⬜ 1-2 d      |
+| 19  | **K1 kick** ("goto ball and kick at (x,y)"): K0 probe (GATE 0) → kVisualKick(2038) port (vendor Kick/RLVisionKick recipe) → staged validation — [Phase 2.5](v68_pre_ifa/post_field_test_plan.md#phase-25--k1-kick-skill-goto-ball-and-kick-at-xy-project-p1) | ⬜ 1-2 d + 🧪 |
+| 20  | **K1 head movement** (say yes/no via RPC 2004, RotateHead probes)                                                                                                                                                                                            | ⬜ 0.5 d + 🧪 |
+| 21a | Kick-aim quality: algorithm-enhanced defaults ON (R2K_TEAMCAPTAIN=1/R2K_PASS_RESOLVE=1 — validated 0.20→0.94 B/match); pure-llm accepts raw aims (measured: 74% non-goalward)                                                                                | ⬜ 0.5 d      |
+| 21b | Goalie-distribution sub-rule (merged from the pit 2026-09-14): `resolve_pass_target` never covers the goalie — 0 goalie passes in 200 matches (5,090 kicks, all clearances); sub-rule: unpressured goalie clearance becomes a pass to the open buddy (feeds the only productive lane blue_2→blue_3→goal) | ⬜ 0.5 d      |
+| 22  | Composite gate repair (sub-KPIs hard gate, composite = 3-sample trend) + relay-rename cleanup (tournament/batch_evaluator/rebaseline still reference only_sim_bots)                                                                                          | ⬜ 0.5 d      |
+| 23  | Exec-stepper hardening + selftest + preflight + restart_calib.sh (post_field_test_plan Phase 1)                                                                                                                                                              | ⬜ 1 d        |
+| 24  | Phase 0 cleanup batch (0.1-0.8) + LESSONS_LEARNED write-back (firmware-physics table + architecture lessons)                                                                                                                                                 | ⬜ 0.5 d      |
 
 ## v7 — entry: v6.9 exit (modes stable, K1 kick/head live)
 
-| # | Item | Status |
-|---|---|---|
-| 25 | **Watchdog module** (NEW, 09-12 directive): supervises the LLM — Kalman ball prediction vs reality → divergence-triggered failsafe/re-prompt (W1-W6 scenarios from [phase_w_decision_report](v7/phase_w_decision_report.md)) | ⬜ |
-| 26 | **TeamCaptain ROS 2 node** (ADR-A07, name reserved): path executor + optimized_path.json + arrival yaw, role locks (goalie), augmented world model (lane facts → LLM payload), bridge fallback compat | ⬜ |
-| 27 | World model extensions (mode-independent): bot yaw (tracker 3a), ball velocity, Kalman filter — pure-llm improves with zero rules | ⬜ |
-| 28 | K1 integration: vision stack (PR #17), Soccer-mode-4 eval, odom refinement | ⬜ 🧪 |
-| 29 | Edge-LLM: quality probes → Professional acquisition decision | ⬜ |
-| 30 | Calibration/hardening: Llama 100-match, 15-scenario probe, U22/U24 parity, dead-code batch | ⬜ |
-| 31 | **Pit of nice ideas**: LIDAR ball node (13), trailer choreography (15-16), camera vision (ONNX), goalie-distribution sub-rule (goalie 0 passes in 200), per-bot state unification (5 dicts), team-message protocol (vendor pattern), --odom CSV watch (14) — [pit](v7/pit_of_nice_ideas.md) | ⬜ |
+| #   | Item                                                                                                                                                                                                                                                                                        | Status |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| 25  | **Watchdog module** (NEW, 09-12 directive): supervises the LLM — Kalman ball prediction vs reality → divergence-triggered failsafe/re-prompt (W1-W6 scenarios from [phase_w_decision_report](v7/phase_w_decision_report.md))                                                                | ⬜      |
+| 26  | **TeamCaptain ROS 2 node** (ADR-A07, name reserved): path executor + optimized_path.json + arrival yaw, role locks (goalie), augmented world model (lane facts → LLM payload), bridge fallback compat                                                                                       | ⬜      |
+| 27  | World model extensions (mode-independent): bot yaw (tracker 3a), ball velocity, Kalman filter — pure-llm improves with zero rules                                                                                                                                                           | ⬜      |
+| 28  | K1 integration: vision stack (PR #17), Soccer-mode-4 eval, odom refinement                                                                                                                                                                                                                  | ⬜ 🧪   |
+| 29  | Edge-LLM: quality probes → Professional acquisition decision                                                                                                                                                                                                                                | ⬜      |
+| 30  | Calibration/hardening: Llama 100-match, 15-scenario probe, U22/U24 parity, dead-code batch                                                                                                                                                                                                  | ⬜      |
+| 31  | **Pit of nice ideas** — consolidated table P1-P12: LIDAR ball node, trailer choreography + LIDAR, K1 camera vision, score leftovers, per-bot state unification, team-message protocol, Yahboom camera (udp-cam) rework, silent prompt-change detection, opencode favorites cleanup, GUI follow-ups, user-docs pass, behavioral-priorities reference — [pit §9](v7/pit_of_nice_ideas.md) | ⬜      |
 
 ## Planning-doc cleanup (separate session — task list)
 
