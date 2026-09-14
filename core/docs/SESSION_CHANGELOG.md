@@ -3,6 +3,77 @@
 > For full history (2026-07-13 to 2026-08-02), see `SESSION_CHANGELOG_archive.md`.
 > Compressed on 2026-08-05. Key findings are in the power files and `LESSONS_LEARNED.md`.
 
+## 2026-09-12/14 — Match-slot fix → regression gate → branch/commit/push → overview v2
+
+**Goal:** Diagnose the immobile blue bots → ship + verify the fix → the full
+regression gate → consolidate all planning into one overview → close the
+session with everything committed and pushed.
+
+**Done:**
+- **Match-mode slot fix (2 lookup layers, both from the 09-06/07 relay
+  rename):** (1) `_canon_assignments()` at the evaluator's strategy write —
+  executor world-name slots (`blue_1`) normalize to canon (`blue1`); (2)
+  name-domain translation at the bridge's model lookup (`blue1` ↔ `blue_1`,
+  + `import re` — py_compile doesn't catch runtime imports). Live-verified:
+  blue bots drive (user-confirmed). Lesson: a healthy latency says nothing
+  about the bus; every relay rename needs a MATCH smoke test.
+- **Overnight regression + match analysis** (`tools/overnight_regression.sh`,
+  report `overnight_analysis_20260913.md`): platform green (fast tier 251,
+  battery 12/12, slow tier 8/11). Slow-tier launch was BROKEN (stale
+  `only_sim_bots` relay in `run_match_headless` → fixed to `sim_only`).
+  The 3 performance-test failures = the composite 0.4 gate vs 0-0 matches
+  (a balanced 0-0 lands ~0.33 structurally; the gate came from a goal-rich
+  baseline; single-sample assertions on goal-luck are flaky — same
+  prompt+model spans 0.296–0.505). Behavioral finding: 74% of kick aims
+  non-goalward with flags OFF (915 Kick assignments across 6 runs).
+- **Terminology clarified + glossary written** (Appendix B additions):
+  TeamCaptain/algorithm-enhanced/pure-llm naming decisions (TeamCaptain
+  label RESERVED for the v7 ROS 2 node per ADR-A07), R2K_TEAMCAPTAIN/
+  PASS_RESOLVE/WING_STAGE, goalie wandering, dead reckoning + encoder
+  resync, exec-stepper, restart_calib.sh, kick-FAKE.
+- **Root-cause recall:** the 08-23 goal forensics (blue_3 95% of goals,
+  goalie 0 passes in 200) → the validated fixes (AKM 0.20→0.94 B/match,
+  Slice 2 pass resolve) are launcher-default OFF — last night's match ran
+  without them. Recommend flipping defaults in v6.9 (item 21).
+- **Branch/commit/push:** 4 logical commits (c471b3e docs-plan v2, 98fe001
+  core+infra incl. booster_ros2_interface, 9cf61ee CLI/tests, c2cb226
+  chronicle) + 830fb3b (overnight) + 14179d2 (U22 runbook Appendix C).
+  Pushed: `docs/v68Planning` + 4 topic branches (refactor/CalibCleanup,
+  feature/K1KickSkill, feature/ExecStepperHardening, docs/FieldDayLessons)
+  + tag `v6.8-field-day`. main untouched (merge = PR gate after U22 green).
+- **U22 regression runbook** (plan doc Appendix C): fast tier, battery,
+  FULL tier incl. Ollama/Gazebo bring-up; platform-delta watchlist.
+- **PLANS_v6_v7_overview v2** (this file's companion): IFA-pivot statuses
+  (B1 kick-FAKE WORKED — Yahboom needs high speed), the field-day section
+  (17a-17i), the NEW **v6.9 phase** (--mode pure-llm/algorithm-enhanced,
+  K1 kick, K1 head movement, aim-quality defaults, composite repair,
+  Phase 0/1 exec), v7 restructure (Watchdog module = v7, TeamCaptain node
+  = v7, world-model extensions mode-independent), planning-doc cleanup
+  task list (next session).
+
+**Files touched:** core/src/tests/test_non_functional.py (relay fix),
+core/tools/overnight_regression.sh (new), core/docs/reference/benchmarks/
+overnight_20260914_081439.md + overnight_analysis_20260913.md (new),
+core/docs/plans/PLANS_v6_v7_overview.md (v2), core/docs/plans/v68_pre_ifa/
+post_field_test_plan.md (Appendix B glossary + cross-refs), this file.
+
+**Files deleted:** `Dropped Text.txt` (junk in booster_msgs).
+
+**Not yet done:** U22 regression (17h — user runs Appendix C on the U22
+machine); merge PRs (17i — after 17h green); Phase 0/1 execution; kick
+plan K0 probe (next hardware session); planning-doc cleanup (next session,
+task list in the overview).
+
+**Next:** user runs the U22 regression (Appendix C) and reports results →
+fix-forward or merge PRs per topic branch → new session starts with
+post_field_test_plan Phase 0 (0.1–0.8) or v6.9 item 18 (--mode), per user
+priority.
+
+**Blockers:** U22 regression pending (17h). Merge blocked on 17h (user
+directive). No hardware needed for the code-only phases.
+
+---
+
 ## 2026-09-12 — Match-mode slot fix: blue bots braked since the relay rename
 
 **Goal:** Diagnose `./launch_r2k.sh` (defaults): blue bots motionless while
