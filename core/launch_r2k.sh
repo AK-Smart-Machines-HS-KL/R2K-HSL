@@ -263,6 +263,15 @@ if [[ "$SCENARIO" != 0vs* ]]; then
     curl -s --max-time 120 "${OLLAMA_LOCAL}/api/generate" \
         -d "{\"model\":\"$MODEL\",\"prompt\":\"hi\",\"stream\":false}" > /dev/null 2>&1
     echo "✅ Model '$MODEL' is warm."
+    if [ "$DEMO" = true ]; then
+        # F2 (2026-09-14): warm the 7B compiler too — the demo's FIRST compile
+        # task otherwise stalls the evaluator for ~72s (3B->7B disk swap;
+        # live session …164721). keep_alive keeps both resident for ~1h.
+        echo "🔥 Warming up demo compiler model 'qwen2.5:7b' (~30s on first run)..."
+        curl -s --max-time 120 "${OLLAMA_LOCAL}/api/generate" \
+            -d '{"model":"qwen2.5:7b","prompt":"hi","stream":false,"keep_alive":3600}' > /dev/null 2>&1
+        echo "✅ Demo compiler model is warm."
+    fi
 fi
 
 # Verify Ollama is bound to 0.0.0.0 (reachable from Docker container once it starts).

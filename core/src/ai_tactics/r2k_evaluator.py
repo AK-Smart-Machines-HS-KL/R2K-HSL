@@ -147,6 +147,12 @@ DEMO_CONTROL_VERBS = frozenset(DEMO_FAST_STOP + DEMO_FAST_RESUME +
                                DEMO_FAST_RESTART + DEMO_FAST_HOME)
 
 DEMO_COMPILER_MODEL = "qwen2.5:7b"
+# Demo LLM-cycle rate limit (2026-09-14, live session …164721: the demo
+# executor hammered Ollama at ~5.5 calls/s — 85ms calls with the hash-skip
+# disabled — starving task-input processing and saturating the GPU; commands
+# typed during the hammering were delayed/lost). Match mode is naturally
+# rate-limited by its ~700ms calls.
+DEMO_MIN_CYCLE_S = 1.0
 
 # --- Demo head/face routing (calibration showcase) ---
 # ALL bare commands default to blue_1 (uniform mental model, user 2026-09-06):
@@ -534,7 +540,7 @@ def _compile_demo_task(bot, task_text, ents):
         "prompt": user_prompt,
         "system": sys_prompt,
         "stream": False,
-        "keep_alive": "30m",
+        "keep_alive": "1h",
         "options": {"temperature": 0.0, "num_predict": 400, "num_ctx": 4096, "stop": ["<|im_end|>"]},
     }
     if "glm" in DEMO_COMPILER_MODEL:
@@ -605,6 +611,7 @@ def _canon_assignments(assignments):
 # in match mode hardware mirrors follow their canon slot via the executor.
 # Loaded lazily from active_relay.json (written by setup_r2k at launch).
 _RELAY_MAPPING = None
+_last_llm_call_t = 0.0   # demo rate-limit: last LLM call start (F1)
 
 def _relay_mapping():
     global _RELAY_MAPPING
@@ -1717,6 +1724,16 @@ def main():
                 if not _demo_has_active_waypoints():
                     last_mtime = mtime
                     continue
+                # Demo LLM-cycle rate limit (F1, 2026-09-14): the executor
+                # hammered Ollama at ~5.5 calls/s (85ms calls, hash-skip
+                # disabled in demo) — task-input processing starved and
+                # typed commands were delayed/lost. Min 1s between calls;
+                # the task check above still runs EVERY iteration.
+                now_t = time.time()
+                if now_t - _last_llm_call_t < DEMO_MIN_CYCLE_S:
+                    time.sleep(0.05)
+                    continue
+                _last_llm_call_t = now_t
 
             # Skip LLM call if entity positions AND status haven't changed
             # (aggregator writes at 10Hz unconditionally — 64% of writes have
