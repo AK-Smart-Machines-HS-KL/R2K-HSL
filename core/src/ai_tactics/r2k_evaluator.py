@@ -562,26 +562,6 @@ def _compile_demo_task(bot, task_text, ents):
         print(f"Compiler failed ({e}), keeping existing waypoints", flush=True)
     return False
 
-def _write_assignment(bot, task):
-    """Merge a single bot's assignment into current_strategy.json (bypasses LLM).
-    Other bots' assignments are preserved — the bridge holds per-bot targets.
-    Stale LLM metadata keys are dropped (fast-path writes are not LLM calls)."""
-    try:
-        try:
-            with open(STRATEGY_PATH, 'r') as f:
-                strategy = json.load(f)
-        except Exception:
-            strategy = {}
-        assignments = strategy.get("assignments", {})
-        if not isinstance(assignments, dict):
-            assignments = {}
-        assignments[bot] = task
-        with open(STRATEGY_PATH + ".tmp", 'w') as f:
-            json.dump({"assignments": assignments}, f)
-        os.replace(STRATEGY_PATH + ".tmp", STRATEGY_PATH)
-    except Exception:
-        pass
-
 def _write_hold_strategy(bot=DEMO_DEFAULT_BOT):
     """Write a Hold command directly to current_strategy.json (bypasses LLM)."""
     _write_assignment(bot, {"action": "Hold"})
@@ -614,6 +594,43 @@ def _canon_assignments(assignments):
     fine (latency computed — the strategy bus carried slots the bridge
     never looked up). Unknown keys pass through unchanged."""
     return {_canon_bot(k): v for k, v in assignments.items()}
+
+
+# Mirror-slot resolution (2026-09-14, demo pair-mirror semantics — Option A):
+# the relay declares which hardware entry mirrors which canon slot
+# (hardware_mirror.json: "y1": {..., "mirror_of": "blue1"}). In DEMO mode a
+# y1/y2-prefixed command therefore addresses the PAIR (sim twin + hardware
+# mirror share one command stream /blue_N/cmd_vel — lab-verified 2026-08-31);
+# in calib the hardware entry is addressed directly (field-day semantics);
+# in match mode hardware mirrors follow their canon slot via the executor.
+# Loaded lazily from active_relay.json (written by setup_r2k at launch).
+_RELAY_MAPPING = None
+
+def _relay_mapping():
+    global _RELAY_MAPPING
+    if _RELAY_MAPPING is None:
+        try:
+            path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                "active_relay.json")
+            with open(path) as f:
+                _RELAY_MAPPING = json.load(f).get("mapping", {})
+        except Exception:
+            _RELAY_MAPPING = {}
+    return _RELAY_MAPPING
+
+def _demo_mirror_slot(bot):
+    """NON-demo modes pass the bot through unchanged (calib = direct
+    hardware addressing, match = executor-normalized canon slots). In demo
+    mode, a hardware entry declared as a mirror (relay `mirror_of`)
+    addresses its canon slot — the pair moves together on the shared
+    command stream (IFA simultaneity semantics, user decision 2026-09-14
+    Option A). Unknown bots pass through unchanged."""
+    if CALIB or _active_mode != "demo":
+        return bot
+    entry = _relay_mapping().get(bot)
+    if isinstance(entry, dict) and entry.get("mirror_of"):
+        return entry["mirror_of"]
+    return bot
 
 
 def _parse_task_bot(clause):
@@ -710,7 +727,12 @@ def _demo_direct_move(targets, x, y):
 def _write_assignment(bot, cmd):
     """Write a single assignment to current_strategy.json. Reads existing
     assignments to preserve other bots; drops stale metadata (latency_ms,
-    model_name) since this bypasses the LLM cycle."""
+    model_name) since this bypasses the LLM cycle.
+    ONE convention at the bus boundary (2026-09-14): keys are canon-normalized
+    (blue_1→blue1) and, in demo mode, hardware mirrors address their canon
+    slot (y1→blue1 when the relay declares mirror_of) — the pair (sim twin +
+    hardware) moves together on the shared command stream."""
+    bot = _demo_mirror_slot(_canon_bot(bot))
     data = {"assignments": {}}
     try:
         with open(STRATEGY_PATH, 'r') as f:
@@ -904,6 +926,10 @@ def _handle_task_clause(clause, ents):
             targets = blue_bots
         else:
             targets = [bot]
+    # ONE convention at the bus boundary: fleet targets derived from Worldstate
+    # entity names (blue_1/blue_2) normalize to canon (blue1/blue2) so every
+    # writer below emits slots the relay-keyed bridge actually looks up.
+    targets = [_canon_bot(t) for t in targets]
     if not text:
         return
 
@@ -1173,7 +1199,10 @@ def _demo_reinject_fast_cmds(data):
     for bname, st in _demo_state.items():
         fc = st.get("fast_cmd")
         if fc:
-            assignments[bname] = dict(fc)
+            # canon key: _demo_state may hold world-name keys (blue_1, from
+            # the executor-payload side) AND canon keys (blue1, from the
+            # routing) — the bus speaks canon only.
+            assignments[_canon_bot(bname)] = dict(fc)
     return data
 
 

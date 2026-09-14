@@ -1113,7 +1113,16 @@ class HalBridge(Node):
                     else:
                         self.pubs[hw_name] = self.create_publisher(Twist, topic, 10)
 
-                if target_bot not in self.targets:
+                # SLOT FALLBACK (2026-09-14, demo pair-mirror Option A): a
+                # hardware mirror is driven by EITHER its mirror slot
+                # (blue1 — system/pair semantics) OR its own direct slot
+                # (y1 — a y1-prefixed command that reached the strategy
+                # unredirected, e.g. from a calib-era leftover). One topic,
+                # one stream: the fallback only bridges the name domains —
+                # it never merges two DIFFERENT commands (first match wins).
+                target = (self.targets.get(target_bot)
+                          or self.targets.get(hw_name))
+                if target is None:
                     # No assignment for this bot: ACTIVE BRAKE (publish zeros).
                     # The physical bots have no cmd_vel watchdog — silence
                     # would leave them running on their last command forever
@@ -1121,7 +1130,6 @@ class HalBridge(Node):
                     if self._publish_allowed(hw_name, 'hold'):
                         self._publish_motion(hw_name, hw_type, 0.0, 0.0)
                     continue
-                target = self.targets[target_bot]
                 target_action = target.get('action', '').lower()
 
                 # XRCE stall-breaker + drain-gaps (Yahboom only; Hold always

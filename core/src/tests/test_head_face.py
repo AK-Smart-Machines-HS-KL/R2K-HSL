@@ -827,6 +827,52 @@ def test_canon_assignments_normalizes_executor_world_names():
     assert a["blue1"]["action"] == "Move"
 
 
+# --- Demo pair-mirror semantics (Option A, 2026-09-14): in demo mode a
+# y1/y2-prefixed command addresses the PAIR (sim twin + hardware mirror
+# share one command stream) — the redirect happens at the write boundary,
+# driven by the relay's mirror_of declaration. Calib stays direct.
+
+def test_demo_y1_goto_redirects_to_mirror_slot(paths, monkeypatch):
+    monkeypatch.setattr(ev, "CALIB", False)
+    monkeypatch.setattr(ev, "_active_mode", "demo")
+    monkeypatch.setattr(ev, "_RELAY_MAPPING", {
+        "blue1": {"hardware_type": "virtual", "topic": "/blue_1/cmd_vel"},
+        "y1": {"hardware_type": "yahboom", "topic": "/blue_1/cmd_vel",
+               "mirror_of": "blue1"},
+    })
+    ev._handle_task_clause("y1 go to (1,0)", ENTS)
+    a = _assignments(paths)
+    assert a.get("blue1") == {"action": "Goto", "x": 1.0, "y": 0.0}
+    assert "y1" not in a
+
+
+def test_demo_fleet_say_writes_canon_slots(paths, monkeypatch):
+    # "all say yes" fans out over Worldstate entity names (blue_1/blue_2) —
+    # the write boundary normalizes them to canon so the relay-keyed bridge
+    # consumes them (live 2026-09-14: world-key slots braked every bot).
+    monkeypatch.setattr(ev, "CALIB", False)
+    monkeypatch.setattr(ev, "_active_mode", "demo")
+    monkeypatch.setattr(ev, "_RELAY_MAPPING", {})
+    ev._handle_task_clause("all say yes", ENTS)
+    a = _assignments(paths)
+    assert a.get("blue1", {}).get("action") == "Head"
+    assert a.get("blue2", {}).get("action") == "Head"
+    assert "blue_1" not in a and "blue_2" not in a
+
+
+def test_calib_y1_goto_stays_direct(paths, monkeypatch):
+    # Calib = direct hardware addressing: the relay mirror_of must NOT
+    # redirect y1 commands (the whole field-day vocabulary depends on it).
+    monkeypatch.setattr(ev, "CALIB", True)
+    monkeypatch.setattr(ev, "_active_mode", "demo")
+    monkeypatch.setattr(ev, "_RELAY_MAPPING",
+                        {"y1": {"hardware_type": "yahboom",
+                                "mirror_of": "blue1"}})
+    ev._handle_task_clause("y1 go to (1,0)", ENTS)
+    a = _assignments(paths)
+    assert a.get("y1") == {"action": "Goto", "x": 1.0, "y": 0.0}
+
+
 def test_y1_face_east_writes_face_assignment(paths):
     # Face routes to a fast_cmd assignment on the y1 slot; the bridge
     # executes it against the estimator yaw (CALIB gate + odom source).

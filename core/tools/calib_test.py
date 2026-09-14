@@ -293,17 +293,17 @@ def run_sim_battery():
          lambda a: len(_compile_calls) == 1 and _compile_calls[0][0] == "blue2",
          ev),
         ("stop, resume", "comma chain — resume clears Hold",
-         lambda a: ev._demo_bot_state("blue_1").get("fast_cmd") is None
-                   and not ev._demo_bot_state("blue_1").get("waypoints"),
+         lambda a: ev._demo_bot_state("blue1").get("fast_cmd") is None
+                   and not ev._demo_bot_state("blue1").get("waypoints"),
          ev),
         ("stop", "stop -> Hold for all",
          lambda a: all(
              ev._demo_bot_state(b).get("fast_cmd", {}).get("action") == "Hold"
-             for b in ("blue_1", "blue_2")),
+             for b in ("blue1", "blue2")),
          ev),
         ("all say no", "all -> every blue bot gets Head gesture 'no'",
-         lambda a: ev._demo_bot_state("blue_1").get("fast_cmd", {}).get("gesture") == "no"
-                   and ev._demo_bot_state("blue_2").get("fast_cmd", {}).get("gesture") == "no",
+         lambda a: ev._demo_bot_state("blue1").get("fast_cmd", {}).get("gesture") == "no"
+                   and ev._demo_bot_state("blue2").get("fast_cmd", {}).get("gesture") == "no",
          ev),
     ]
 
