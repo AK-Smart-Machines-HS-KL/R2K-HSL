@@ -34,7 +34,7 @@ def run_match_headless(scenario: str, duration: int = TEST_DURATION) -> dict:
     cmd = [
         str(CORE_DIR / "launch_r2k.sh"),
         "--scenario", scenario,
-        "--relay", "only_sim_bots",
+        "--relay", "sim_only",   # was only_sim_bots (deleted in the 09-06/07 canon-key relay rename)
         "--headless",
         "--duration", str(duration),
     ]

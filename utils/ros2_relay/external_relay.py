@@ -10,8 +10,13 @@ from booster_msgs.msg import RpcReqMsg
 from booster_msgs.msg import RpcRespMsg
 
 # =====================================================================
-# TODO: Update this import to match the actual message type used by 
-# the /odometer_state topic on your robot.
+# VENDOR AUDIT 2026-09-04 (k1_kick_head_vendor_audit.md section 5):
+# The /<prefix>/odometer_state topic published below is a SILENT
+# PLACEHOLDER: the internal relay subscribes a /odometer_state topic that
+# does not exist on the robot (Booster exposes odom only as SDK-internal
+# DDS rt/odometer_state, never as plain ROS 2). The ROS-standard path is
+# rt/odom (nav_msgs/Odometry) via the ROS bridge, fw >= v1.7.1.0 — probe
+# pending. Do not build on this topic until the probe succeeds.
 # =====================================================================
 from booster_interface.msg import Odometer as OdomMsg
 

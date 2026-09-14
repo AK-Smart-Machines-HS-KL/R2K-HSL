@@ -11,12 +11,13 @@ SCENARIO="2vs2_default"
 STRATEGY="strat_aggro"
 MODEL="qwen2.5:3b"
 EXPLAIN_FLAG="--no-explain"
-RELAY="only_sim_bots"
+RELAY="sim_only"
 HEADLESS=false
 NO_VIZ=false
 DURATION=0
 ANALYZE=false
 DEMO=false
+CALIB=false
 TRAP_TRIGGERED=false
 UBUNTU_VERSION=$(lsb_release -rs)
 
@@ -40,7 +41,7 @@ while [[ "$#" -gt 0 ]]; do
             echo "  --scenario <name>     (default: 2vs2_default)"
             echo "  --strategy <name>     (default: strat_aggro)"
             echo "  --model <name>        (default: qwen2.5:3b)"
-            echo "  --relay <name>        (Available: only_sim_bots, hardware_mirror)"
+            echo "  --relay <name>        (Available: sim_only, sim_k1, single_bot, hardware_mirror)"
             echo "  --explain             (Enable AI reasoning output)"
             echo "  --no-explain          (Disable AI reasoning)"
             echo "  --headless            (No Gazebo GUI + no visualizer)"
@@ -48,6 +49,10 @@ while [[ "$#" -gt 0 ]]; do
             echo "  --duration <seconds> (Auto-terminate after N seconds)"
             echo "  --analyze             (Open annotator in new terminal)"
             echo "  --demo                (Demo/calibration mode — overrides mode with demo fragments)"
+            echo "  --calib               (Field calibration: headless, direct hardware addressing."
+            echo "                          LEAN STACK — no gzserver/aggregator/Ollama; bridge + evaluator"
+            echo "                          + agent only, ~15s boot. Hardware vocabulary: goto/home/"
+            echo "                          face/say/turn/exec/results. --nosim is an alias)"
             echo "=========================================================="
             exit 0 ;;
         --scenario) SCENARIO="$2"; shift ;;
@@ -61,6 +66,8 @@ while [[ "$#" -gt 0 ]]; do
         --duration) DURATION="$2"; shift ;;
         --analyze) ANALYZE=true ;;
         --demo) DEMO=true ;;
+        --calib) CALIB=true; HEADLESS=true ;;
+        --nosim) CALIB=true; HEADLESS=true ;;   # alias of --calib (mode merge 2026-09-08)
         *) echo "⚠️ Unknown parameter: $1"; exit 1 ;;
     esac
     shift
@@ -68,6 +75,20 @@ done
 
 # Export explain flag for the evaluator (R2K_EXPLAIN=1 → 600 tokens, analysis+oracle+assignments)
 export R2K_EXPLAIN=$([[ "$EXPLAIN_FLAG" == "--explain" ]] && echo 1 || echo 0)
+
+# Export calib flag (direct hardware addressing, no mirror_of resolution)
+export R2K_CALIB=$([[ "$CALIB" == "true" ]] && echo 1 || echo 0)
+if [ "$CALIB" = true ]; then
+    echo "🔧 Calib mode: direct hardware (y1 y2 k1), headless"
+fi
+
+# Export nosim flag (Gazebo-free field stack, 2026-09-08): bridge drives the
+# hardware dispatch from a wall-clock timer, evaluator polls task_input.json
+# directly — no gzserver, no aggregator, no Ollama needed.
+if [ "$CALIB" = true ]; then
+    echo "🪶 Calib = Gazebo-free field stack: no gzserver/aggregator/Ollama (bridge +"
+    echo "   evaluator + micro-ROS agent only). Hardware vocabulary only."
+fi
 
 # TeamCaptain Slice 1 (v7 pre-work): CPU-side kick skill + goalie-Y smoothing
 # + idle facing in the bridge. Default OFF (legacy behavior). Set R2K_TEAMCAPTAIN=1
@@ -95,8 +116,15 @@ REQUIRES_HARDWARE_SYNC=$(jq -r '.requires_hardware_sync' "$RELAY_FILE")
 YAHBOOM_TOPIC=$(jq -r '[.mapping[] | select(.hardware_type=="yahboom") | .topic][0] // ""' "$RELAY_FILE")
 K1_TOPIC=$(jq -r '[.mapping[] | select(.hardware_type=="k1") | .topic][0] // ""' "$RELAY_FILE")
 YAHBOOM_NS=$(echo "$YAHBOOM_TOPIC" | sed 's|/cmd_vel||')
+YAHBOOM_TOPIC2=$(jq -r '[.mapping[] | select(.hardware_type=="yahboom") | .topic][1] // ""' "$RELAY_FILE")
+YAHBOOM_NS2=$(echo "$YAHBOOM_TOPIC2" | sed 's|/cmd_vel||')
+YAHBOOM_NUM=$(echo "$YAHBOOM_NS" | grep -oE '[0-9]+$')
+YAHBOOM_NUM2=$(echo "$YAHBOOM_NS2" | grep -oE '[0-9]+$')
 K1_NS=$(echo "$K1_TOPIC" | sed 's|/LocoApiTopicReq||')
 
+if [ "$CALIB" = true ]; then
+    echo "🔧 Calib mode: direct hardware (y1 y2 k1), headless"
+fi
 echo "🤖 Relay bots ($RELAY):"
 jq -r '.mapping | to_entries[] | "  \(.key): \(.value.hardware_type) → \(.value.topic)"' "$RELAY_FILE"
 
@@ -154,7 +182,7 @@ cleanup() {
     ../kill_r2k.sh > /dev/null 2>&1
     
     if [ "$UBUNTU_VERSION" == "22.04" ]; then
-        pkill -9 -f "gazebo|gzserver|ruby|r2k_visualizer.py|referee_node|score_node|reward_node|state_aggregator|rule_evaluator_red|r2k_evaluator.py|tracker" > /dev/null 2>&1
+        pkill -9 -f "gazebo|gzserver|ruby|r2k_visualizer.py|referee_node|score_node|reward_node|state_aggregator|rule_evaluator_red|r2k_evaluator.py|drag_twin.py|tracker" > /dev/null 2>&1
         pkill -9 -f "python3.*ollama_sandbox_bridge" > /dev/null 2>&1
         pkill -9 -f micro_ros_agent > /dev/null 2>&1
     else
@@ -194,7 +222,11 @@ HTTP_PROT="http"
 OLLAMA_LOCAL="${HTTP_PROT}://127.0.0.1:11434"
 OLLAMA_DOCKER="${HTTP_PROT}://172.17.0.1:11434"
 
-# ---- OLLAMA CHECK ----
+# ---- OLLAMA CHECK ---- (skipped in --nosim: no LLM cycle ever runs —
+# routing-only vocabulary, no waypoints, no world state)
+if [ "$CALIB" = true ]; then
+    echo "🪶 Skipping Ollama (nosim field stack — no models needed)"
+else
 echo "🧠 Checking Ollama AI Server..."
 export OLLAMA_HOST=0.0.0.0
 if curl -s "${OLLAMA_LOCAL}/api/tags" > /dev/null 2>&1; then
@@ -256,6 +288,9 @@ fi
 
 export R2K_OLLAMA_URL="${OLLAMA_LOCAL}/api/generate"
 export R2K_OLLAMA_MODEL=$MODEL
+fi   # end NOSIM skip (Ollama server + model check + warm-up + 24.04
+    # binding gate + exports — the field stack runs without Ollama; the
+    # binding gate's exit-1 would abort a laptop launch otherwise)
 
 # ==========================================================
 # 🟢 NATIVE LAUNCH (UBUNTU 22.04)
@@ -267,13 +302,17 @@ if [ "$UBUNTU_VERSION" == "22.04" ]; then
     source venv/bin/activate
     
     echo "🌍 Starting Gazebo natively..."
-    if [ "$HEADLESS" = true ]; then
+    if [ "$CALIB" = true ]; then
+        echo "🪶 CALIB: skipping Gazebo/spawner/watchdog (lean field stack)"
+    elif [ "$HEADLESS" = true ]; then
         ros2 launch r2k_scenario_spawner soccer_match.launch.py headless:=true > /dev/null 2>&1 &
     else
         ros2 launch r2k_scenario_spawner soccer_match.launch.py > /dev/null 2>&1 &
     fi
 
-    # Fast-Polling Watchdog (0.2s)
+    # Fast-Polling Watchdog (0.2s) — skipped in NOSIM (no gzserver to watch;
+    # teardown still fires via the CTRL+C/SIGTERM trap)
+    if [ "$CALIB" != true ]; then
     (
         sleep 10
         while true; do
@@ -289,48 +328,77 @@ if [ "$UBUNTU_VERSION" == "22.04" ]; then
         done
     ) &
     MONITOR_PID=$!
+    fi
 
     echo "🤖 Waiting for Gazebo API & Spawning Bots..."
     sleep 2
-    python3 ai_tactics/json_spawner.py
+    if [ "$CALIB" != true ]; then
+        python3 ai_tactics/json_spawner.py
+    fi
 
     if [ "$REQUIRES_HARDWARE_SYNC" = "true" ]; then
         echo "=========================================="
         echo "🚨 BITTE SCHALTE DEN YAHBOOM & K1 JETZT EIN 🚨"
         echo "=========================================="
-        YAHBOOM_READY=false; K1_READY=false; WAIT_TIME=0
+        YAHBOOM1_READY=false; YAHBOOM2_READY=false; K1_READY=false; WAIT_TIME=0
+        [ -z "$YAHBOOM_NS2" ] && YAHBOOM2_READY=true
         while [ $WAIT_TIME -lt 10 ]; do
-            if [ "$YAHBOOM_READY" = false ] && ros2 topic list 2>/dev/null | grep -q "${YAHBOOM_NS}/battery"; then
-                echo "🔋 Yahboom Topic erkannt! Führe DDS Warm-Up durch..."
+            if [ "$YAHBOOM1_READY" = false ] && ros2 topic list 2>/dev/null | grep -q "${YAHBOOM_NS}/battery"; then
+                echo "🔋 Yahboom #${YAHBOOM_NUM} (${YAHBOOM_NS}) erkannt! Führe DDS Warm-Up durch..."
                 ros2 topic echo --once --qos-reliability best_effort ${YAHBOOM_NS}/battery > /dev/null 2>&1 &
-                echo "✅ YAHBOOM BEREIT!"
-                YAHBOOM_READY=true
+                echo "✅ YAHBOOM #${YAHBOOM_NUM} (${YAHBOOM_NS}) BEREIT!"
+                YAHBOOM1_READY=true
             fi
+            if [ "$YAHBOOM2_READY" = false ] && [ -n "$YAHBOOM_NS2" ] && ros2 topic list 2>/dev/null | grep -q "${YAHBOOM_NS2}/battery"; then
+                echo "🔋 Yahboom #${YAHBOOM_NUM2} (${YAHBOOM_NS2}) erkannt! Führe DDS Warm-Up durch..."
+                ros2 topic echo --once --qos-reliability best_effort ${YAHBOOM_NS2}/battery > /dev/null 2>&1 &
+                echo "✅ YAHBOOM #${YAHBOOM_NUM2} (${YAHBOOM_NS2}) BEREIT!"
+                YAHBOOM2_READY=true
+            fi
+            # NOTE (vendor audit 2026-09-04, k1_kick_head_vendor_audit.md #5):
+            # this gate tests topic EXISTENCE = "robot's relay alive", NOT odom
+            # availability (the odometer_state topic is a silent placeholder).
             if [ "$K1_READY" = false ] && ros2 topic list 2>/dev/null | grep -q "${K1_NS}/odometer_state"; then
                 echo "⚙️ K1-INTERFACE ERKANNT! Führe DDS Warm-Up durch..."
                 ros2 topic echo --once ${K1_NS}/LocoApiTopicResp > /dev/null 2>&1 &
                 echo "✅ K1 BEREIT!"
                 K1_READY=true
             fi
-            if [ "$YAHBOOM_READY" = true ] && [ "$K1_READY" = true ]; then break; fi
+            if [ "$YAHBOOM1_READY" = true ] && [ "$YAHBOOM2_READY" = true ] && [ "$K1_READY" = true ]; then break; fi
             sleep 1; ((WAIT_TIME++))
         done
         
-        if [ "$YAHBOOM_READY" = false ] || [ "$K1_READY" = false ]; then
+        if [ "$YAHBOOM1_READY" = false ] || [ "$YAHBOOM2_READY" = false ] || [ "$K1_READY" = false ]; then
             echo "⚠️ WARNUNG: Timeout erreicht. Hardware nicht vollständig erkannt. Starte trotzdem..."
+            [ "$YAHBOOM1_READY" = false ] && echo "   - Yahboom y1 (${YAHBOOM_NS}): nicht erkannt"
+            [ -n "$YAHBOOM_NS2" ] && [ "$YAHBOOM2_READY" = false ] && echo "   - Yahboom y2 (${YAHBOOM_NS2}): nicht erkannt"
+            [ "$K1_READY" = false ] && echo "   - K1 k1 (${K1_NS}): nicht erkannt"
+            echo "Starting with: y1 $([ "$YAHBOOM1_READY" = true ] && echo ✓ || echo ✗)  y2 $([ "$YAHBOOM2_READY" = true ] && echo ✓ || echo ✗)  k1 $([ "$K1_READY" = true ] && echo ✓ || echo ✗)"
+        else
+            echo "Starting with: y1 ✓  y2 ✓  k1 ✓"
         fi
     fi
 
     echo "⚡ Igniting Realtime Nodes & AI..."
-    ros2 run r2k_world_model tracker > /dev/null 2>&1 &
-    if [ "$DEMO" = false ]; then
+    if [ "$CALIB" != true ]; then
+        ros2 run r2k_world_model tracker > /dev/null 2>&1 &
+    fi
+    if [ "$DEMO" = false ] && [ "$CALIB" != true ]; then
         python3 referee_node.py > /dev/null 2>&1 &
         python3 score_node.py > /dev/null 2>&1 &
         python3 reward_node.py > /dev/null 2>&1 &
         python3 rule_evaluator_red.py > /dev/null 2>&1 &
     fi
-    python3 state_aggregator.py > /dev/null 2>&1 &
-    python3 ai_tactics/ollama_sandbox_bridge.py > /dev/null 2>&1 &
+    if [ "$CALIB" != true ]; then
+        python3 state_aggregator.py > /dev/null 2>&1 &
+    fi
+    # Bridge logs to file (XRCE STALL + K1 drift warnings + goto estimator
+    # decisions must be observable — /dev/null debugging cost 5 iterations)
+    mkdir -p logs && python3 ai_tactics/ollama_sandbox_bridge.py > "logs/bridge_${R2K_RUN_ID}.log" 2>&1 &
+    if [ "$DEMO" = true ] && [ "$CALIB" != true ]; then
+        echo "🪏 Starting Drag-Twin (sim drag -> hardware mirror)..."
+        python3 -u ai_tactics/drag_twin.py > /dev/null 2>&1 &
+    fi
     
     echo "🧠 Starting Team Blue AI (Live Output)..."
     python3 -u ai_tactics/r2k_evaluator.py &
@@ -382,13 +450,17 @@ else
     SOURCE_CMD="cd /workspace && source /opt/ros/humble/setup.bash && source ros2_ws/install/setup.bash"
 
     echo "🌍 Starting Gazebo in Docker..."
-    if [ "$HEADLESS" = true ]; then
+    if [ "$CALIB" = true ]; then
+        echo "🪶 CALIB: skipping Gazebo/spawner/watchdog (lean field stack)"
+    elif [ "$HEADLESS" = true ]; then
         $DOCKER_BASE "$SOURCE_CMD && ros2 launch r2k_scenario_spawner soccer_match.launch.py headless:=true > /dev/null 2>&1"
     else
         $DOCKER_BASE "$SOURCE_CMD && ros2 launch r2k_scenario_spawner soccer_match.launch.py > /dev/null 2>&1"
     fi
 
-    # Fast-Polling Watchdog (0.2s)
+    # Fast-Polling Watchdog (0.2s) — skipped in NOSIM (no gzserver to watch;
+    # teardown still fires via the CTRL+C/SIGTERM trap)
+    if [ "$CALIB" != true ]; then
     (
         sleep 10
         while true; do
@@ -404,51 +476,76 @@ else
         done
     ) &
     MONITOR_PID=$!
+    fi
 
     echo "🤖 Waiting for Gazebo API & Spawning Bots..."
     sleep 2
-    docker exec $CONTAINER_NAME bash -c "$SOURCE_CMD && python3 ai_tactics/json_spawner.py"
+    if [ "$CALIB" != true ]; then
+        docker exec $CONTAINER_NAME bash -c "$SOURCE_CMD && python3 ai_tactics/json_spawner.py"
+    fi
 
     if [ "$REQUIRES_HARDWARE_SYNC" = "true" ]; then
         echo "=========================================="
         echo "🚨 BITTE SCHALTE DEN YAHBOOM & K1 JETZT EIN 🚨"
         echo "=========================================="
-        YAHBOOM_READY=false; K1_READY=false; WAIT_TIME=0
+        YAHBOOM1_READY=false; YAHBOOM2_READY=false; K1_READY=false; WAIT_TIME=0
+        [ -z "$YAHBOOM_NS2" ] && YAHBOOM2_READY=true
         while [ $WAIT_TIME -lt 10 ]; do
-            if [ "$YAHBOOM_READY" = false ] && docker exec $CONTAINER_NAME bash -c "$SOURCE_CMD && ros2 topic list 2>/dev/null" | grep -q "${YAHBOOM_NS}/battery"; then
-                echo "🔋 Yahboom Topic erkannt! Führe DDS Warm-Up durch..."
+            if [ "$YAHBOOM1_READY" = false ] && docker exec $CONTAINER_NAME bash -c "$SOURCE_CMD && ros2 topic list 2>/dev/null" | grep -q "${YAHBOOM_NS}/battery"; then
+                echo "🔋 Yahboom #${YAHBOOM_NUM} (${YAHBOOM_NS}) erkannt! Führe DDS Warm-Up durch..."
                 docker exec -i $CONTAINER_NAME bash -c "$SOURCE_CMD && ros2 topic echo --once --qos-reliability best_effort ${YAHBOOM_NS}/battery > /dev/null 2>&1" &
-                echo "✅ YAHBOOM BEREIT!"
-                YAHBOOM_READY=true
+                echo "✅ YAHBOOM #${YAHBOOM_NUM} (${YAHBOOM_NS}) BEREIT!"
+                YAHBOOM1_READY=true
             fi
+            if [ "$YAHBOOM2_READY" = false ] && [ -n "$YAHBOOM_NS2" ] && docker exec $CONTAINER_NAME bash -c "$SOURCE_CMD && ros2 topic list 2>/dev/null" | grep -q "${YAHBOOM_NS2}/battery"; then
+                echo "🔋 Yahboom #${YAHBOOM_NUM2} (${YAHBOOM_NS2}) erkannt! Führe DDS Warm-Up durch..."
+                docker exec -i $CONTAINER_NAME bash -c "$SOURCE_CMD && ros2 topic echo --once --qos-reliability best_effort ${YAHBOOM_NS2}/battery > /dev/null 2>&1" &
+                echo "✅ YAHBOOM #${YAHBOOM_NUM2} (${YAHBOOM_NS2}) BEREIT!"
+                YAHBOOM2_READY=true
+            fi
+            # NOTE (vendor audit 2026-09-04): gate = relay alive, NOT odom available.
             if [ "$K1_READY" = false ] && docker exec $CONTAINER_NAME bash -c "$SOURCE_CMD && ros2 topic list 2>/dev/null" | grep -q "${K1_NS}/odometer_state"; then
                 echo "⚙️ K1-INTERFACE ERKANNT! Führe DDS Warm-Up durch..."
                 docker exec -i $CONTAINER_NAME bash -c "$SOURCE_CMD && ros2 topic echo --once ${K1_NS}/LocoApiTopicResp > /dev/null 2>&1" &
                 echo "✅ K1 BEREIT!"
                 K1_READY=true
             fi
-            if [ "$YAHBOOM_READY" = true ] && [ "$K1_READY" = true ]; then break; fi
+            if [ "$YAHBOOM1_READY" = true ] && [ "$YAHBOOM2_READY" = true ] && [ "$K1_READY" = true ]; then break; fi
             sleep 1; ((WAIT_TIME++))
         done
         
-        if [ "$YAHBOOM_READY" = false ] || [ "$K1_READY" = false ]; then
+        if [ "$YAHBOOM1_READY" = false ] || [ "$YAHBOOM2_READY" = false ] || [ "$K1_READY" = false ]; then
             echo "⚠️ WARNUNG: Timeout erreicht. Hardware nicht vollständig erkannt. Starte trotzdem..."
+            [ "$YAHBOOM1_READY" = false ] && echo "   - Yahboom #${YAHBOOM_NUM} (${YAHBOOM_NS}): nicht erkannt"
+            [ -n "$YAHBOOM_NS2" ] && [ "$YAHBOOM2_READY" = false ] && echo "   - Yahboom #${YAHBOOM_NUM2} (${YAHBOOM_NS2}): nicht erkannt"
+            [ "$K1_READY" = false ] && echo "   - K1 (${K1_NS}): nicht erkannt"
         fi
     fi
 
     echo "⚡ Igniting Realtime Nodes & AI..."
-    $DOCKER_BASE "$SOURCE_CMD && ros2 run r2k_world_model tracker > /dev/null 2>&1"
-    if [ "$DEMO" = false ]; then
+    if [ "$CALIB" != true ]; then
+        $DOCKER_BASE "$SOURCE_CMD && ros2 run r2k_world_model tracker > /dev/null 2>&1"
+    fi
+    if [ "$DEMO" = false ] && [ "$CALIB" != true ]; then
         $DOCKER_BASE "$SOURCE_CMD && python3 referee_node.py > /dev/null 2>&1"
         $DOCKER_BASE "$SOURCE_CMD && python3 score_node.py > /dev/null 2>&1"
         $DOCKER_BASE "$SOURCE_CMD && python3 reward_node.py > /dev/null 2>&1"
         $DOCKER_BASE "$SOURCE_CMD && python3 rule_evaluator_red.py > /dev/null 2>&1"
     fi
-    docker exec -d -e R2K_RUN_ID="$R2K_RUN_ID" $CONTAINER_NAME bash -c "$SOURCE_CMD && python3 state_aggregator.py > /dev/null 2>&1"
-    docker exec -d -e R2K_TEAMCAPTAIN="$R2K_TEAMCAPTAIN" -e R2K_KICK_BEHIND_GATE="$R2K_KICK_BEHIND_GATE" -e R2K_PASS_RESOLVE="$R2K_PASS_RESOLVE" -e R2K_WING_STAGE="$R2K_WING_STAGE" -e R2K_RUN_ID="$R2K_RUN_ID" $CONTAINER_NAME bash -c "$SOURCE_CMD && python3 ai_tactics/ollama_sandbox_bridge.py > /dev/null 2>&1"
+    if [ "$CALIB" != true ]; then
+        docker exec -d -e R2K_RUN_ID="$R2K_RUN_ID" $CONTAINER_NAME bash -c "$SOURCE_CMD && python3 state_aggregator.py > /dev/null 2>&1"
+    fi
+    # Bridge logs to file (XRCE STALL + K1 drift warnings + goto estimator
+    # decisions must be observable — /dev/null debugging cost 5 iterations,
+    # 2026-09-08)
+    docker exec -d -e R2K_TEAMCAPTAIN="$R2K_TEAMCAPTAIN" -e R2K_KICK_BEHIND_GATE="$R2K_KICK_BEHIND_GATE" -e R2K_PASS_RESOLVE="$R2K_PASS_RESOLVE" -e R2K_WING_STAGE="$R2K_WING_STAGE" -e R2K_RUN_ID="$R2K_RUN_ID" -e R2K_CALIB="$R2K_CALIB" $CONTAINER_NAME bash -c "$SOURCE_CMD && python3 ai_tactics/ollama_sandbox_bridge.py > /workspace/logs/bridge_${R2K_RUN_ID}.log 2>&1"
+    if [ "$DEMO" = true ] && [ "$CALIB" != true ]; then
+        echo "🪏 Starting Drag-Twin (sim drag -> hardware mirror)..."
+        docker exec -d $CONTAINER_NAME bash -c "$SOURCE_CMD && python3 -u ai_tactics/drag_twin.py > /dev/null 2>&1"
+    fi
     
     echo "🧠 Starting Team Blue AI (Live Output)..."
-    docker exec -d -e PYTHONUNBUFFERED=1 -e PYTHONWARNINGS="ignore" -e R2K_OLLAMA_MODEL=$MODEL -e R2K_OLLAMA_URL="${OLLAMA_DOCKER}/api/generate" -e R2K_RUN_ID="$R2K_RUN_ID" -e R2K_EXPLAIN="$R2K_EXPLAIN" $CONTAINER_NAME bash -c "$SOURCE_CMD && python3 -u ai_tactics/r2k_evaluator.py"
+    docker exec -d -e PYTHONUNBUFFERED=1 -e PYTHONWARNINGS="ignore" -e R2K_OLLAMA_MODEL=$MODEL -e R2K_OLLAMA_URL="${OLLAMA_DOCKER}/api/generate" -e R2K_RUN_ID="$R2K_RUN_ID" -e R2K_EXPLAIN="$R2K_EXPLAIN" -e R2K_CALIB="$R2K_CALIB" $CONTAINER_NAME bash -c "$SOURCE_CMD && python3 -u ai_tactics/r2k_evaluator.py"
     
     # Duration-based auto-terminate (for batch evaluation)
     if [ "$DURATION" -gt 0 ]; then

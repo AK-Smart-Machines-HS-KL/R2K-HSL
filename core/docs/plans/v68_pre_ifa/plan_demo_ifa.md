@@ -1,0 +1,97 @@
+# IFA Demo Plan (DETAILED) — show-cases & POCs
+
+**Status:** ACTIVE | **Owner:** Prof-Adrian-Mueller | **Date:** 2026-08-28/29
+**Show set:** a (face/yaw) · b-FAKE (kick) · b-LIDAR (detection) · d-FAKE (trailer) · Lab gate. Soccer Agent: OUT.
+
+## Task A - Face vs Yaw
+
+| # | Step | Detail |
+|---|---|---|
+| A1 | Bridge head actions | K1: `headturn` → RPC 2004 `{"pitch","yaw"}` radians, edge-triggered dedup (`_last_head_cmd`, eps), clamp constants: yaw ±59° (1.03 rad), pitch −19°/+49° (−0.33/+0.86 rad). Yahboom: `headturn` → publish angle to `<ns>/servo_s1` (pan) / `servo_s2` (tilt) — interface confirmed at ESP32-firmware level (`servo_subscriber` sample) |
+| A2 | Evaluator fast-path | "look left/right/center/up/down" presets + "say yes" (pitch osc ~3× ±20°) + "say no" (yaw osc) — scripted 2004 sequences; same commands for Yahboom via servo topics; no soccer-mode leakage (demo-only) |
+| A3 | CLI + sim twin | `calib_cli.py` samples; K1 URDF twin gets 2 head joints visible (teammate's Gazebo task) so hardware_mirror shows the nod in sim too |
+
+## Task B - Kick demo
+
+| # | Step | Detail |
+|---|---|---|
+| B1 | b-FAKE | "kick ball" fast-path → waypoints: drive to ball (1,0) with push-through overshoot; Yahboom metal push; K1 walk-push; `hardware_mirror` simultaneity (proven) |
+| B2 | b-LIDAR (pre-IFA) | `lidar_ball_detector` node (see plan_v68.md V4) feeds ball position → demo no longer needs the fixed location: "kick ball" works with the ball anywhere in the front semicircle; ball-size picked at the lab session (3 candidates) |
+
+## Task D - Trailer
+
+| # | Step | Detail |
+|---|---|---|
+| D1 | Choreography | waypoints: approach fork at 0° → push to marked target; return; approach at 45° → CW rotation; (−45° CCW if time) — rotation via approach-angle selection, NO lateral motion (diff-drive) |
+| D2 | Detection (PRE-IFA) | LIDAR-only (decoupled from the udp-cam rework): frame posts/forks are strong scan returns; pose = 2-post fit + known geometry. Same node pattern as ball detection (segmentation -> size/shape gate -> Kalman); runs on sim scans + MS200 |
+| D3 | Goal (post-IFA) | free (x, y, yaw) via tractor-style arc library refining the detection-driven maneuvers |
+
+## Lab session gate
+
+1. [5'] K1-PROBE step 1: `booster-cli version` both K1s → changelog
+2. [10'] Yahboom driver-source verification vs local `ROS_Source_Code/` (freshness check only — source already on laptop)
+3. [10'] Head smoke test: 2004 look-left/center on one K1 (answers 2004-in-WALKING)
+4. [30'] Dry-runs: a (both bots), b-FAKE, b-LIDAR, d-FAKE
+5. [15'] Ball-size pick (3 candidates) + first calibration patterns (straight 2m ×5, rotation 360° ×5)
+6. [15', optional] VisualKick probe V1/V2 + ball-motion experiment — ONLY if fw ≥ 1.5.2.1 and all green
+7. [5'] Changelog entry with all measured numbers
+
+## A2bot - Two-bot demo support (DEFERRED — simultaneous mirror shipped first)
+
+**Shipped 2026-08-30 (simpler, covers the IFA simultaneous show):** the blue_2
+relay entry carries `mirror_of: blue_1` — the bridge feeds blue_1's command
+stream to `/blue_2/cmd_vel`, so the vision bot runs EVERY demo/calib waypoint
+flow simultaneously with blue_1 (same mechanism as the K1 mirror). No
+evaluator/LLM changes. Per-bot DIFFERENT targets (blue_1 kicks while blue_2
+trails) remain deferred until needed.
+
+## A2bot - Two-bot demo support (prereq for D1 with both bots)
+
+The v6.6 demo flow is single-bot (waypoints target blue_1 only). For the IFA
+two-bot choreography (blue_1 kick + blue_2 vision/trailer simultaneously):
+1. Scenario `2vs0_demo` CREATED (blue_1 + blue_2 entities, mode 1vs0 fragments)
+2. Evaluator: per-bot waypoint targets — calib_cli prefix syntax
+   (`blue_2 go to (2,0)`; unprefixed = blue_1, backward compatible)
+3. Bridge: works as-is once targets[blue_2] + sim blue_2 pose exist
+   (mapping entries blue_1/blue_2 already yahboom-typed)
+Effort: ~0.5 d. Blocks: D1 two-bot choreography (not the single-bot dry-runs).
+
+Implementation spec (from the 2026-08-30 code reading, r2k_evaluator.py):
+- The single-bot assumption lives in module globals: `_demo_waypoints`,
+  `_demo_target_idx`, `_demo_arrival_time`, `_demo_start_pos`,
+  `_demo_stopped_idx` — convert to per-bot dicts keyed by bot name.
+- `_write_move_strategy(x, y)` / `_write_hold_strategy()` hardcode
+  `"blue_1"` in the strategy assignments — add a `bot="blue_1"` parameter.
+- `_demo_target_for_bot(bx, by)` already takes the bot position — add the
+  bot key and call it per bot in the per-tick loop (call site ~line 856).
+- `_check_task_input`: parse an optional leading bot name in the task text
+  (`"blue_2 go to (2,0)"`) → route to that bot's state; unprefixed = blue_1.
+- calib_cli.py: pass the task text through unchanged (the evaluator parses).
+- Bridge: NO changes — `targets[blue_2]` + sim blue_2 pose (2vs0_demo) are
+  sufficient; mapping entries already yahboom-typed.
+- Lab verification: `blue_2 go to (2,0)` moves the vision bot while blue_1
+  holds; `blue_1 look...`/head commands unaffected.
+
+### 7B syntax probe (done 2026-08-30, probe-only — see `docs/reference/benchmarks/a2bot_syntax_probe.md`)
+
+18 tasks × 5 reps, verbatim compiler prompt, qwen2.5:7b: 100% JSON parse,
+fully deterministic. Evidence-backed conclusions for the implementation:
+- **Scope never reaches the JSON** (no bot field in schema) — per-bot routing
+  MUST be evaluator-side (prefix regex + relay hardware_type), as planned.
+- **Landmark snap hazard:** near-miss literal coords get snapped to landmarks
+  ("goto 2,2" → LEFT WING (2, 2.5), 5/5). Coordinate fast-path (regex) avoids
+  this AND is instant — implement it as part of A2bot scope.
+- **Ball-relative offsets fail in the 7B** (wrong frame + kicking-distance
+  hijack) — compute CPU-side if needed.
+- **`stop all bots` compiles a hallucinated patrol** — control verbs stay
+  fast-path-only, never reach the compiler.
+- **Formations work** (`line up at x=2, spread 1m` → correct arithmetic) —
+  optional future extension via per-bot lists.
+- Compiler prompt needs NO changes for A2bot scope 1 (single-bot
+  absolute-coord tasks already exact).
+
+## Post-IFA
+c-real (RoboCup vision / goto-ball-and-kick / camera color tracking), d-real refinement (free-pose maneuver library on top of the pre-IFA LIDAR detection), kVisualKick integration (fw-gated), udp-cam rework (separate track).
+
+## Trello
+Card source: `plans/student_projects_autumn_fair.md` (per-section cards, established pattern) + this plan's A/B/D tables.

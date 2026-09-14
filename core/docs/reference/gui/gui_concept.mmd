@@ -1,0 +1,94 @@
+graph TB
+    subgraph ROS2K["ROS2K Control Center"]
+        subgraph NAV["Navigation Sidebar"]
+            N1["Match"]
+            N2["Probe"]
+            N3["Scenarios"]
+            N4["Tools"]
+            N5["Knowledge Base"]
+            N6["System Status"]
+            N7["Regression Tests"]
+            N8["Experiments"]
+        end
+        subgraph MAIN["Main Panel"]
+            subgraph LIVE["Live Match View"]
+                L1["Gazebo field render\nbots + ball + yellow arrows"]
+                L2["Score: B 2 : 1 R\nStatus: playing"]
+            end
+            subgraph LLM["LLM Decision Stream"]
+                D1["blue_1 cover goal line\nblue_2 kick\nblue_3 move to -0.5,-0.5"]
+                D2["Latency: 342ms\nCalls: 87\nPredict horizon: 0.38s"]
+            end
+            subgraph SCORE["Score and Momentum"]
+                S1["Bar chart: t+0.7s t+1.4s t+2.1s"]
+                S2["Current: +3.30\nMomentum: improving\nTrend: +0.08"]
+            end
+            subgraph SYS["System Status"]
+                SS1["Ollama: online\nqwen2.5:3b\nGPU: 54C VRAM:2.4G"]
+                SS2["Gazebo: running\nContainer: core_gazebo"]
+                SS3["Docker: up\nBridge: active\nReferee: active"]
+            end
+        end
+    end
+    subgraph PANELS["Panel Details - click nav"]
+        subgraph P_MATCH["Match Panel"]
+            M1["Scenario dropdown\nRelay dropdown\nModel dropdown"]
+            M2["no-explain / explain toggle\nDuration input\nHeadless checkbox\nAnalyze checkbox"]
+            M3["LAUNCH / STOP / PAUSE\nREPLAY LAST / Speed / Start"]
+        end
+        subgraph P_PROBE["Probe Panel"]
+            PR1["Scenario checkboxes\n17 hand-crafted + 33 empirical"]
+            PR2["Repeats: 10\nConfig: F0 baseline"]
+            PR3["Results table\nScenario / Hard% / Score / Cluster%"]
+            PR4["Summary: 14/15 hard-pass 93%"]
+        end
+        subgraph P_SCEN["Scenario Browser"]
+            SC1["Field diagram\nwith yellow vectors"]
+            SC2["Expert Analysis\nOracle Strategy\nOutput to bridge\nScore chart"]
+            SC3["Prev / Next navigation\nRun 8s test / Probe"]
+        end
+        subgraph P_TOOLS["Tools Dashboard"]
+            T1["analyze_trace.py\nKPI analysis"]
+            T2["dump_prompt.py\nPrompt inspector"]
+            T3["match_annotate.py\nLive annotation"]
+            T4["replay_trace.py\nPost-match review"]
+            T5["gen_diagrams.py\nField diagrams"]
+            T6["gen_score_chart.py\nScore bar charts"]
+            T7["auto_loop.py\nPrompt optimization"]
+            T8["cluster_experiment.py\nCluster measurement"]
+            T9["start_ollama.sh\nManual Ollama start"]
+            T10["reduce_empirical.py\n74 to 33 reduction"]
+            T11["gen_all_analysis.py\nGenerate analysis.md"]
+            T12["regression_runner.py\n8s test runner"]
+        end
+        subgraph P_KB["Knowledge Base"]
+            K1["10 Power Files\n1_CORE through 8_C3\nMETA_ROUTER\nFAQ"]
+            K2["Docs\noptimization_spec_v6.4\nreferee_rulebook\nc3_dictionary\nplaybook\nscrum_tasks\n6 ADRs"]
+            K3["Search bar"]
+        end
+        subgraph P_SYS["System Status"]
+            SY1["Ollama card\nonline / model / GPU temp / VRAM"]
+            SY2["Gazebo card\nrunning / container / 10Hz physics"]
+            SY3["Docker card\nup / container name / ROS Humble"]
+            SY4["Bridge card\nactive / 10Hz / 3 bots controlled"]
+            SY5["Evaluator card\npolling / content-hash skip / 64%"]
+            SY6["Trace logs card\n771 files / 122k calls"]
+            SY7["Start Ollama / Restart Gazebo / Clear logs"]
+        end
+        subgraph P_REG["Regression Tests"]
+            R1["Test suite checkboxes\n17 hand-crafted + 33 empirical"]
+            R2["Duration: 8s per test\nPrediction: ON"]
+            R3["Progress bar with ETA"]
+            R4["Results table\nTest / Delta / Pass / Time"]
+            R5["Pass rate: 46/50 92%"]
+        end
+        subgraph P_EXP["Experiments"]
+            E1["Tabs: Auto-loop / Cluster / M-variants\nBaselines / C-series / K2-K3"]
+            E2["Goals B:R line chart\nBest: iter 19 B:3 R:2\nAvg goal diff: -0.2"]
+            E3["Cluster rate bar chart\nBatch 1: 47%\nBatch 4: 0%"]
+        end
+    end
+    NAV --> PANELS
+    LIVE --> LLM
+    LLM --> SCORE
+    SCORE --> SYS

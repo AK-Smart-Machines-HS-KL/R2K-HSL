@@ -10,7 +10,7 @@
 **Source:** 2026-08-03 session, deferred from v6.4. 6 synthetic scenarios testing
 LLM failure modes. Never run in Gazebo — diagnostic only.
 
-**Location:** `docs/v7/scenarios/w1_*.md` .. `w6_*.md`
+**Location:** `docs/plans/plans/v7/scenarios/w1_*.md` .. `w6_*.md`
 
 | Scenario | Failure mode |
 |---|---|
@@ -21,8 +21,9 @@ LLM failure modes. Never run in Gazebo — diagnostic only.
 | w5_boundary_violation | LLM sends bot out of bounds |
 | w6_passivity_trap | LLM holds all bots, nobody challenges ball |
 
-**Planned use:** Test watchdog re-prompt (Option A) vs second-model monitor (Option B)
-in v7 TeamCaptain. Write decision report.
+**Status:** EXECUTED — decision report exists: `phase_w_decision_report.md` (same dir,
+2026-08-08; tested the second-model monitor against Qwen on all 6 scenarios).
+The scenarios remain as regression assets for TeamCaptain development.
 
 ---
 
@@ -89,19 +90,20 @@ Role assignment must move to CPU planner (TeamCaptain) in v7.
 | Task | Description | Status |
 |---|---|---|
 | 3a | Add gaze direction to Worldstate.json | Deferred to v7 |
-| 5 | Yahboom trailer hitch mechanism | Deferred |
+| 5 | Yahboom trailer hitch mechanism | **IN v6.8** — demo task d (FAKE pre-IFA, LIDAR+maneuvers post-IFA) |
 | 9 | Tech debt: clustering, score metrics, commits | v7 |
 | 10 | Implement TeamCaptain architecture | v7 |
-| 11 | K1 kick abort via ball motion detection | v7 |
+| 11 | K1 kick abort via ball motion detection | v7 — pending K1-PROBE (see plans/v68_pre_ifa/k1_kick_head_vendor_audit.md) |
 
 ---
 
 ## 6. Benchmark Leftovers
 
-- **Llama 100-match benchmark** — NOT STARTED (GPU time consumed by Qwen 150)
+- **Llama 100-match benchmark** — NOT STARTED (GPU time consumed by Qwen benchmark)
 - **Text-probe all 15 scenarios** — NOT STARTED
 - **Analysis report: U22 vs U24, Qwen vs Llama** — NOT STARTED
-- **150-match Qwen re-run post-fix** — BLOCKED on score fix commit
+- ~~150-match Qwen re-run post-fix~~ — SUPERSEDED by the v6.7 n=100 random-draw
+  benchmark (merged via PR #16)
 
 ---
 
@@ -137,7 +139,7 @@ command reference and model capabilities.
 
 | Task | Description | Design doc |
 |---|---|---|
-| Rotation/Face action | `face north/south/east/west`, `turn left/right`, `rotate N degrees` — bridge reads yaw from Gazebo, no tracker/colcon change needed | `docs/v7/calibration_rotation_design.md` (Option D) |
+| Rotation/Face action | `face ...`, `look left`, `say yes` — moved INTO v6.8 pre-IFA (demo task a); design: `plans/v68_pre_ifa/calibration_rotation_design.md` (Option D) | — |
 | Yaw in Worldstate | `tracker_node.py` adds yaw to `/world_positions` — enables compiler to know bot heading for relative commands | scrum Task 3a |
 | Visual markers in Gazebo | Static SDF markers (red gate, blue cone, yellow marker, green pylon) in world file — requires colcon build | — |
 | K1 relay profile | `relay/single_k1.json` — single K1 bot, no Gazebo sim | — |

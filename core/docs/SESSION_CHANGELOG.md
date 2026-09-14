@@ -3,6 +3,1859 @@
 > For full history (2026-07-13 to 2026-08-02), see `SESSION_CHANGELOG_archive.md`.
 > Compressed on 2026-08-05. Key findings are in the power files and `LESSONS_LEARNED.md`.
 
+## 2026-09-12/14 — Match-slot fix → regression gate → branch/commit/push → overview v2
+
+**Goal:** Diagnose the immobile blue bots → ship + verify the fix → the full
+regression gate → consolidate all planning into one overview → close the
+session with everything committed and pushed.
+
+**Done:**
+- **Match-mode slot fix (2 lookup layers, both from the 09-06/07 relay
+  rename):** (1) `_canon_assignments()` at the evaluator's strategy write —
+  executor world-name slots (`blue_1`) normalize to canon (`blue1`); (2)
+  name-domain translation at the bridge's model lookup (`blue1` ↔ `blue_1`,
+  + `import re` — py_compile doesn't catch runtime imports). Live-verified:
+  blue bots drive (user-confirmed). Lesson: a healthy latency says nothing
+  about the bus; every relay rename needs a MATCH smoke test.
+- **Overnight regression + match analysis** (`tools/overnight_regression.sh`,
+  report `overnight_analysis_20260913.md`): platform green (fast tier 251,
+  battery 12/12, slow tier 8/11). Slow-tier launch was BROKEN (stale
+  `only_sim_bots` relay in `run_match_headless` → fixed to `sim_only`).
+  The 3 performance-test failures = the composite 0.4 gate vs 0-0 matches
+  (a balanced 0-0 lands ~0.33 structurally; the gate came from a goal-rich
+  baseline; single-sample assertions on goal-luck are flaky — same
+  prompt+model spans 0.296–0.505). Behavioral finding: 74% of kick aims
+  non-goalward with flags OFF (915 Kick assignments across 6 runs).
+- **Terminology clarified + glossary written** (Appendix B additions):
+  TeamCaptain/algorithm-enhanced/pure-llm naming decisions (TeamCaptain
+  label RESERVED for the v7 ROS 2 node per ADR-A07), R2K_TEAMCAPTAIN/
+  PASS_RESOLVE/WING_STAGE, goalie wandering, dead reckoning + encoder
+  resync, exec-stepper, restart_calib.sh, kick-FAKE.
+- **Root-cause recall:** the 08-23 goal forensics (blue_3 95% of goals,
+  goalie 0 passes in 200) → the validated fixes (AKM 0.20→0.94 B/match,
+  Slice 2 pass resolve) are launcher-default OFF — last night's match ran
+  without them. Recommend flipping defaults in v6.9 (item 21).
+- **Branch/commit/push:** 4 logical commits (c471b3e docs-plan v2, 98fe001
+  core+infra incl. booster_ros2_interface, 9cf61ee CLI/tests, c2cb226
+  chronicle) + 830fb3b (overnight) + 14179d2 (U22 runbook Appendix C).
+  Pushed: `docs/v68Planning` + 4 topic branches (refactor/CalibCleanup,
+  feature/K1KickSkill, feature/ExecStepperHardening, docs/FieldDayLessons)
+  + tag `v6.8-field-day`. main untouched (merge = PR gate after U22 green).
+- **U22 regression runbook** (plan doc Appendix C): fast tier, battery,
+  FULL tier incl. Ollama/Gazebo bring-up; platform-delta watchlist.
+- **PLANS_v6_v7_overview v2** (this file's companion): IFA-pivot statuses
+  (B1 kick-FAKE WORKED — Yahboom needs high speed), the field-day section
+  (17a-17i), the NEW **v6.9 phase** (--mode pure-llm/algorithm-enhanced,
+  K1 kick, K1 head movement, aim-quality defaults, composite repair,
+  Phase 0/1 exec), v7 restructure (Watchdog module = v7, TeamCaptain node
+  = v7, world-model extensions mode-independent), planning-doc cleanup
+  task list (next session).
+
+**Files touched:** core/src/tests/test_non_functional.py (relay fix),
+core/tools/overnight_regression.sh (new), core/docs/reference/benchmarks/
+overnight_20260914_081439.md + overnight_analysis_20260913.md (new),
+core/docs/plans/PLANS_v6_v7_overview.md (v2), core/docs/plans/v68_pre_ifa/
+post_field_test_plan.md (Appendix B glossary + cross-refs), this file.
+
+**Files deleted:** `Dropped Text.txt` (junk in booster_msgs).
+
+**Not yet done:** U22 regression (17h — user runs Appendix C on the U22
+machine); merge PRs (17i — after 17h green); Phase 0/1 execution; kick
+plan K0 probe (next hardware session); planning-doc cleanup (next session,
+task list in the overview).
+
+**Next:** user runs the U22 regression (Appendix C) and reports results →
+fix-forward or merge PRs per topic branch → new session starts with
+post_field_test_plan Phase 0 (0.1–0.8) or v6.9 item 18 (--mode), per user
+priority.
+
+**Blockers:** U22 regression pending (17h). Merge blocked on 17h (user
+directive). No hardware needed for the code-only phases.
+
+---
+
+## 2026-09-14 — Field-verification day: mode matrix, demo problems documented, session close
+
+**Goal:** Verify the rewound state (`fef67d4`, pre-demo-fixes) on all three
+modes, document every open problem, close the session for the merge request.
+
+**Verification matrix (user-executed, hardware live):**
+
+| Mode | Result |
+|---|---|
+| `--scenario 3vs3_default` (match, U24 sim) | blue bots drive in Gazebo ✅ — "no movement of physical bot" is EXPECTED (sim_only relay has no hardware entries; nothing to move on the floor) |
+| `--calib --relay hardware_yahboom --scenario 2vs0_demo` | **everything works** ✅ (the full calib vocabulary) |
+| `--relay hardware_mirror --demo` | **rubbish** ❌ — documented below |
+
+### Demo-mode problems found today (all preserved on branch
+`parked/demo-mirror-f1f2-20260914` — commits de82732/6bc82bc/61c7dad/9bb31ac):
+
+| # | Problem | Root cause (analysis) | Idea for better |
+|---|---|---|---|
+| D1 | Demo+mirror: NO movement at all (the pre-merge bug) | mirror-mode slot lookup (canon `blue1` via mirror_of) never matched the evaluator's direct `y1` slots / ents-world fleet slots (`blue_1`) — the third naming-split leg, demo leg | FIXED in parked commits (Option A pair-mirror redirect at the write boundary + bridge slot fallback). Mechanism choice itself (one topic = one stream) is the deeper question — see D4 |
+| D2 | Pair-motion quality: hopping (move ~1s, stop, hop), creeping, sprint-pause bursts | pair-mirror = ONE topic carrying ONE stream for two VERY different consumers (Gazebo diff-drive vs Yahboom firmware PID with ~1s spin-up and 0.27 rad/s yaw authority); plus the demo executor's re-decision cadence (5.5Hz→1s→3Hz tuning chased the symptom) | Rethink: Option B (independent actuators — y1 drives only the Yahboom, sim twin freezes/shadows) vs leaving pair-motion to a proper position-mirror loop (the deferred sim-puppet design, TeamCaptain v7 scope) |
+| D3 | "say yes" worked once then bot ALSO drove forward; drag: bots stayed dropped; later commands ignored | (a) drag detector DISARMED in demo — match_state.status=None (referee absent) failed the 'playing' gate (fixed in parked 61c7dad); (b) command blackhole: the demo executor hammered Ollama at 5.5 calls/s (fixed in parked 6bc82bc F1) AND the first compile task stalled the evaluator 72s (3B→7B disk swap; fixed in parked F2); (c) single-slot task channel: drag dispatches COALESCE with concurrently-typed user tasks (F3, designed not built) | Land F1+F2+drag-arming from the parked branch in the next session; add task-channel priority (user > drag) |
+| D4 | Y#1/Y#2 XRCE client stalls mid-motion (3 motion sessions, 3 stalls: never recovers in-session, power-cycle required) | vendor micro-ROS client fragility under sustained cmd_vel load; the quarantine defense works (safe freeze) but recovery = power-cycle | v6.9 mitigation item: measure stall rate vs cmd_vel rate (12Hz→lower?), per-bot power-cycle procedure documented; battery field is RAW (~81 = 8.1V), not BatteryState |
+
+### Known bugs / limitations at the rewind point (merge-relevant, documented)
+
+1. **Demo+mirror inert** (D1) — original bug, live at `fef67d4`. Fix exists on
+   the parked branch; decision D2 (pair-motion semantics) pending.
+2. **XRCE stalls** (D3/D4) — vendor firmware; defenses live; recovery =
+   power-cycle; rate correlation unquantified.
+3. **Composite/cluster KPI gates flaky on both platforms** (0-0 matches land
+   ~0.33 structurally; U22+U24 both miss) — recalibration = v6.9 item 22.
+4. **i3_sweep 20 failures** = silent prompt-change detection vs frozen
+   v6.3-era snapshots — by design; refresh = pit P8.
+5. **Stale relay refs** in batch_evaluator/tournament/rebaseline_collect
+   (only_sim_bots) — dead tools, cleanup session.
+6. **K1 DAMP hint + say/face (RPC 2004)** — untested live (v6.9 items).
+
+### Merge-request status
+
+BOTH platforms green at the rewind point (U24 overnight + U22 native 255/0).
+The rewind REMOVED the only un-verified-in-production change (the demo fix)
+from the merge. Remaining TBD before the MR: (a) user decision on demo
+pair-motion semantics (D2) — either merge WITHOUT demo-fix (demo+mirror
+documented-broken, fix lands in v6.9 with the semantics decision) or cherry-pick
+the parked pair-mirror commit after D2 resolution; (b) PR text from the overview
+field-day section; (c) file via GitHub web.
+
+**Next session entry point:** v6.9 item 18 (--mode pure-llm/algorithm-enhanced)
+and/or the D2 semantics decision. The pit (P1-P12), the overview, and
+post_field_test_plan carry everything.
+
+**Blockers:** none for the merge decision itself (documented deltas); demo+mirror
+quality = the open design question (D2), NOT a merge blocker per user
+priority ("blue may underperform slightly").
+
+**Merge request (2026-09-14):** PR #20 filed (GitHub UI was unusable on the
+user's browser — React-rendered sections failed to render; resolved by a
+local `git merge --no-ff docs/v68Planning` + push the same day — GitHub
+auto-detected and marked the PR merged). Merge commit tagged
+`v6.9-baseline`. Both platforms green at this point.
+
+---
+
+## 2026-09-13 — U22 regression (performed on the U22 machine, integrated 09-14)
+
+**Goal:** Execute the U22 native regression runbook (Appendix C) before any
+main merge. Full report: `docs/reference/benchmarks/u22_regression_20260913.md`
+(integrated from the U22 tarball; 3 test-file fixes included).
+
+**Results:**
+- Build: first native `booster_interface` build, 6 packages, no numpy issues
+- Fast tier: **255 passed, 0 failed, 11 skipped** (rclpy system-installed →
+  the 6 bridge tests RUN instead of skip)
+- Sim battery: **12/12**
+- Slow tier: **6 passed / 5 failed** — all KPI threshold misses (composite
+  0.296-0.406 vs mins 0.333-0.427; cluster +6.9/+14.1 over max) = platform
+  deltas, consistent with the U24 overnight verdict (single-sample gates on
+  goal-luck metrics are flaky → recalibration = v6.9 item 22)
+
+**3 test bugs found & fixed by the U22 session (test files only):**
+1. test_score.py rclpy mock isolation — `setdefault` is a no-op when real
+   rclpy is importable (system ROS on U22); fix = force-install mock →
+   import → restore originals (save/restore pattern)
+2. test_head_face.py FB mock incomplete — bare `type("FB")` lacked the
+   methods `_seq_effective` calls; fix = `_fb_mock()` factory wiring the
+   real HalBridge methods (never caught on U24: rclpy missing → bridge
+   tests skip there)
+3. test_non_functional relay — same `sim_only` fix as U24's 830fb3b
+   (independently found — the rename regression confirmed on both platforms)
+
+**i3_sweep note (corrected):** the "20 pre-existing failures" are
+byte-identity assertions of the LIVE prompt fragments against FROZEN v0
+experiment snapshots — they fail by design after any legitimate prompt
+evolution (e.g. the FIELD LIMITS block). Not code bugs; refresh the
+snapshots when prompts change intentionally (cleanup-session item).
+
+**Integration (09-14):** U22 versions of test_score.py + test_head_face.py
+adopted (U24 tree untouched since 14179d2 in those files); U24's
+test_non_functional kept (identical relay fix); fast tier re-verified
+251 passed / battery 12-12 with the integrated files; report archived to
+docs/reference/benchmarks/.
+
+---
+
+## 2026-09-12 — Match-mode slot fix: blue bots braked since the relay rename
+
+**Goal:** Diagnose `./launch_r2k.sh` (defaults): blue bots motionless while
+latency (~450ms) computed normally.
+
+**Done:**
+- **Root cause:** the relay rename (09-06/07, `only_sim_bots.json` deleted →
+  canon keys `blue1`/`blue2`/`blue3`) vs the match-mode 3B executor's output:
+  it echoes **Worldstate entity names** (`blue_1`, `blue_2` — Gazebo model
+  names, which its `min_ents` input carries) into strategy slots. Bridge
+  match-mode lookup `target_bot = "blue1"` never found slots `blue_1` →
+  active brake, every bot, every cycle. LLM cycles ran fine (latency
+  computed) — pure slot-lookup break. Live evidence: bridge log `LOADED
+  target for blue_1: move` (reader fine) + zero errors + braked bots.
+- **Why demo worked but match didn't:** demo fast-paths write canon slots
+  directly (through `_canon_bot`), so `single_bot`/`sim_k1` validations
+  passed; executor-driven cycles were latently broken there too (nobody
+  ran landmark cycles on the renamed relays). Last 2vs2 match trace:
+  2026-08-31 — the match path was never re-validated after the rename.
+- **Fix (ONE convention at the bus boundary):** new `_canon_assignments()`
+  helper gated into the evaluator's strategy write (after parse, before
+  json.dump) — the executor's world-name keys normalize to canon; every
+  writer now passes the same gate. Fragments NOT touched (model-facing text;
+  the model echoes its input entities — naming must be deterministic code,
+  not 3B compliance). drag_twin/visualizer checked: zero slot-key refs.
+  Naming split remains confined to: world/Gazebo = `blue_N` (physical
+  truth), bus/hardware = `blueN` — v7 naming-unification may revisit.
+- **SECOND rename break found + fixed same session (live-verified):** the
+  slot normalization made the reader log `LOADED target for blue1` — but
+  the bots STILL didn't move. Layer two of the same 09-06/07 rename: the
+  bridge's model lookup compares the bus name (`blue1`) against Gazebo
+  model names (`blue_1`) — `"blue1" in "blue_1"` is False → bot_idx None →
+  dispatch skipped. Fix: name-domain translation at the bot_idx lookup
+  (both directions: `blue1`↔`blue_1`, via `re.fullmatch`; sim_bot keys
+  stay world-form) + `import re` added to the bridge. **Live-verified:**
+  relaunch → blue_1/blue_2 driving (Worldstate positions changing; user
+  confirmed "they moved"). The rename had broken BOTH lookup layers
+  (slots + model names); demo never caught it because fast-path canon
+  slots worked on canon-keyed relays via the CALIB gate path, and all
+  earlier sim motion ran on world-keyed `only_sim_bots`.
+- Test: `test_canon_assignments_normalizes_executor_world_names` (73 in
+  test_head_face; fast tier 251 passed, same 20 pre-existing i3_sweep).
+- Plan doc updated: post_field_test_plan.md Phase 0.9 (DONE, both breaks
+  documented) + regression rule: **every relay rename needs a match-mode
+  smoke test.**
+
+**Files touched:** core/src/ai_tactics/r2k_evaluator.py (`_canon_assignments`
++ write-site gate), core/src/tests/test_head_face.py,
+core/docs/plans/v68_pre_ifa/post_field_test_plan.md, this file.
+
+**Files deleted:** none.
+
+**Not yet done:** ~~live verification~~ **DONE — blue bots driving
+(user-confirmed).** The currently running match session was launched by
+the agent (background, visualizer-less — `docker exec -it` needs a TTY);
+tear it down on request and relaunch normally for full GUI+visualizer.
+
+**Next:** relaunch `./launch_r2k.sh` for a clean user session if wanted;
+then continue post_field_test_plan.md Phase 0 (0.1-0.8 cleanup items).
+
+**Blockers:** none (stack was down at deploy time; fix rides the next boot).
+
+---
+
+## 2026-09-08 — Calib field day: Yahboom rehearsal → first real K1 run → lean-stack mode merge
+
+**Goal (evolved through the day):** Start as Yahboom odom rehearsal for the
+K1 field test (±30% accepted, minimal investment) → became: estimator-based
+closed-loop goto live-validated on BOTH hardware types (Y#1 round-trip drift
+6.6 cm → 3 mm; real K1 9/9 goto legs), calib refactored into the lean
+Gazebo-free field stack (`--calib` = bridge + evaluator + agent, mode
+merge), the full calib vocabulary live-proven (goto/home/face/say/turn/
+exec/results), and the arrival-spin bug found+fixed on real K1. User
+directives held: no commit until the K1 field test, no Yahboom accuracy
+campaign, no firmware changes. Next steps consolidated in
+`docs/plans/v68_pre_ifa/post_field_test_plan.md`.
+
+**Done:**
+
+### Root bug found: CALIB dispatch gate stranded ALL hardware actions
+- In CALIB mode hardware entries are addressed DIRECTLY by relay key
+  (y1/y2/k1) — none of those names match a Gazebo model (2vs0_demo spawns
+  blue_1/blue_2), so the model lookup at the dispatch gate `continue`d and
+  **TimedMove/Goto/Hold never executed on the physical bots** (the CLI
+  printed "instant" but the bridge never published; sim_k1 only worked via
+  its `sim_bot` key). Live evidence: today's `y2 forward 0.5` session
+  (R2K_CALIB=1, hardware_mirror) — the TimedMove assignment sits in
+  current_strategy.json but the bot never moved.
+- **Fix** (`ollama_sandbox_bridge.py` state_cb): when no model matches AND
+  CALIB, pose-INDEPENDENT actions (goto/timedmove/hold) proceed with
+  zeroed pose — goto reads the bot's own odom, timedmove owns its clock,
+  hold only brakes. Pose-dependent actions still require the sim twin.
+  This also un-blocks the k1 goto under hardware_mirror for the real
+  field test.
+
+### Yahboom odom watch + closed-loop Goto (K1-pipeline mirror)
+- Bridge `_ensure_odom_watch` (renamed from `_ensure_k1_odom_watch`):
+  yahboom branch subscribes `<ns>/odom_raw` (nav_msgs/Odometry assumed —
+  odom_publisher lineage; **verify live at first contact**: `ros2 topic
+  info /blue_1/odom_raw -v`, expect YB_Car_Node) → `_y_odom` dict.
+- `_publish_odom_states` (renamed from `_publish_k1_odom`): per-bot
+  `shared_state/<hw>_odom.json` (k1_odom.json name preserved; new
+  y1_odom.json / y2_odom.json), same 0.5s atomic-rename cadence; trace
+  records generalized to `{"t_wall","t_odom","bot","pose","target"}` in
+  the same `k1_trace_<run_id>.jsonl` run file (current_run_id() inference
+  unchanged). K1 drift warning stays k1-only (yahboom divergence vs sim
+  twin is EXPECTED under closed loop — warning would spam).
+- Goto loop parameterized per hw_type: yahboom reuses the vendor two-phase
+  recipe at `Y_CALIB_VX/VYAW` (0.2 m/s, 0.5 rad/s) with new named
+  constants `Y_GOTO_XY_TOL=0.35` (coarse by design), `Y_GOTO_THETA_TOL`,
+  `Y_GOTO_ACCEL_*`, `Y_ODOM_FACTOR=1.0`, `Y_ODOM_STALE_S=10` (encoder odom
+  may be on-motion-only; k1 keeps 3.0s as `K1_ODOM_STALE_S` — was
+  hardcoded). Stale/missing odom = brake-and-wait (safe stop). XRCE
+  defenses inherited automatically (goto flows through `_publish_allowed`
+  → drain-gaps + stall quarantine).
+- Evaluator: `yN go to (x,y)` routes to the odom loop via new
+  `DEMO_GOTO_BOTS` (k1 + y1/y2); the 2026-09-06 refusal block deleted;
+  `_demo_goto_cmd` generalized (DAMP hint stays k1-only). `_persist_non_
+  llm_assignments` was already Goto-agnostic (verified) — y-slots carried
+  across 3B cycles.
+
+### CLI: rehearsal flow complete
+- `calib_test.py`: `read_odom(bot)` (reads `<bot>_odom.json`; back-compat
+  alias read_k1_odom), `load_results()`, `RUNBOOK_BOT` map, per-bot
+  `RESULT_TOL_M` (k1 0.15 m; y1/y2 0.5 m — informational), new goto
+  runbooks `y_short`/`y_square`/`y_triangle` (y1, closed-loop).
+- `calib_cli.py`: distinct instant feedback for hardware Goto
+  (`k1 go to`/`yN go to` — previously printed the misleading waypath
+  message), `exec` reads the runbook bot's odom file + records a `bot`
+  field, new `results` command — calib_results.jsonl summary table
+  (drift/auto/human per runbook).
+- **Sim battery fixed + extended: 12/12** (was failing 3/10 — stale
+  expectations from an older evaluator state: checked `k1_bot` slot and
+  `blue_1`/`blue_2` underscore keys; current canonical slots are
+  `k1`/`blue1`/`blue2` matching the relay keys the bridge consumes).
+  Added y1/y2 goto checks.
+- New relay `hardware_yahboom.json` (blue1/blue2 virtual + y1/y2, no k1 —
+  no /Kev1n noise while K1 is offline). Rehearsal launch is
+  **`--calib`** (direct addressing; --demo would use mirror semantics and
+  y-slots would never reach the physical bots — documented in the
+  runbook; --calib forces headless, fine for hardware focus).
+
+### Verification
+- Fast tier: 238 passed / 17 skipped; the only failures are the 20
+  documented pre-existing test_i3_sweep breakage from the uncommitted
+  backlog (verified: committed HEAD runs clean 129/0 — the breakage is
+  older-uncommitted-work, not this session). 4 new y-goto routing tests
+  (test_head_face.py), sim battery 12/12, CLI goto-feedback + results
+  reader smoke-tested offline (live stack untouched).
+- Stale comments fixed (hygiene): head_cmds.py GESTURE_AMP_TILT (gate
+  reopened 2026-09-05, premise retracted) + bridge `_publish_head_pose`
+  docstring (same retraction).
+- Docs: cheat sheet (hardware Goto/runbooks/results section, stale "Not
+  Yet Available" face table corrected, hardware_yahboom launch),
+  calib_validation_runbook.md §V11 (the rehearsal script incl. Phase-0
+  live checks), YAHBOOM_KNOWLEDGE.md §2 (odom rehearsal contract),
+  META_KNOWLEDGE_ROUTER row + tags.
+
+**Files touched:** core/src/ai_tactics/ollama_sandbox_bridge.py,
+core/src/ai_tactics/r2k_evaluator.py, core/src/ai_tactics/head_cmds.py
+(comments), core/tools/calib_test.py, core/tools/calib_cli.py,
+core/src/relay/hardware_yahboom.json (new), core/src/tests/test_head_face.py,
+core/docs/calibration_cheat_sheet.md,
+core/docs/plans/v68_pre_ifa/calib_validation_runbook.md (§V11),
+core/src/yahboom/YAHBOOM_KNOWLEDGE.md, core/src/ros2k_knowledge/
+META_KNOWLEDGE_ROUTER.md, this file.
+
+**Files deleted:** none.
+
+**Not yet done:**
+- ~~Live goto rehearsal~~ **DONE (2026-09-08, third lab touch) — approach #6
+  live-validated end-to-end.** Two more root causes found and fixed on the way:
+  1. **Zero-clobbering (CALIB shadowing):** the relay pairs every virtual
+     sim twin with a hardware entry on the SAME topic (blue1 + y1 →
+     /blue_1/cmd_vel). The virtual's active-brake zeros interleaved with
+     the hardware goto commands — ~50% zeros to the robot (y1: 3.5mm in
+     5s; y2 parked at 0.24m of a 0.5m leg — the ~half-distance signature).
+     Fix (user directive): in CALIB virtual entries NEVER publish —
+     `if CALIB and hw_type == 'virtual': continue` (replaces the earlier
+     per-topic shadowing scan).
+  2. **Seen-then-stale deadlock:** the ESP32 emits one odom sample at
+     boot, then only streams on motion — the stale gate braked every
+     rest→goto transition. **Fix = approach #6: odom as CORRECTION, not
+     permission.** Goto drives on a bridge-side estimate (calibration
+     start pose 0,0,0 + commanded-velocity integration), every NEW
+     encoder sample resyncs it. No stale gate, no blind-start (deleted),
+     k1 unchanged (its 490Hz stream means silence = fault). Y_GOTO_XY_TOL
+     0.35 → 0.15 (the 0.35 deadband parked y2 0.26m short of a 0.5m leg).
+     State files/trace now carry `src` (odometer_state | odom_raw |
+     integrated | start).
+  3. Bridge observability: launch_r2k.sh:497 claimed "bridge logs to
+     file" but still wrote /dev/null — 5 blind iterations. Now logs to
+     `logs/bridge_<run_id>.log`.
+  **Live evidence (run 20260908_115938, Y#1):** outbound parked at
+  0.38m of 0.5 (arrival deadband 0.12<0.15, held 55s); return leg
+  rotated-in-place (vendor two-phase gate works on diff-drive) then
+  translated home; round-trip origin drift 6.6cm; `y1 stop` → instant
+  Hold; 162 trace records all src=odom_raw (encoder live throughout).
+  Boot-order trap reconfirmed: stack restart after robot connect orphans
+  the ESP32 client (vendor no-reconnect) — power-cycle the robot AFTER
+  the stack is up.
+- ~~--calib --no-sim mode~~ **DONE (2026-09-08, same session) — shipped as
+  `--nosim` and LIVE-VALIDATED.** Gazebo-free field stack = the K1
+  field-test posture:
+  - Bridge: hardware dispatch extracted from state_cb into
+    `_hw_dispatch_tick(msg)`; in nosim a 20Hz wall-clock timer drives it
+    (no /gazebo/model_states → state_cb never fires). msg=None → every
+    entry takes the pose-independent path.
+  - Evaluator: `if CALIB and NOSIM:` branch polls task_input.json directly
+    (no Worldstate.json exists — no aggregator); `_compile_demo_task`
+    refuses with guidance in NOSIM (no Ollama in the field stack).
+  - Launcher: `--nosim` (implies --calib+headless) skips gzserver/spawner/
+    watchdog/tracker/referee-set/aggregator/drag_twin/visualizer AND the
+    entire Ollama block — including the 24.04 binding gate whose exit-1
+    would abort a field-laptop launch without Ollama installed. Bridge log
+    line also fixed for the U22 native path (had the same /dev/null bug).
+  - **Live fix during validation:** nosim `ball_pos=None` crash —
+    dist_to_ball was computed unconditionally at the top of the dispatch,
+    killing EVERY tick ('NoneType' has no attribute 'x') before any action
+    could publish. Guarded (ball only matters for sim-only actions).
+  - **Regression PASS (run …121143, Y#1, no Gazebo, no Ollama):** out leg
+    parked at 0.363 m of 0.5 (deadband 0.137<0.15), return leg rotated
+    in place + drove home, origin drift **3 mm** (better than the
+    with-sim run's 6.6 cm), `y1 stop` → Hold, zero bridge errors post-fix.
+    Boot ~15 s (vs ~60 s), no GPU, no sim infrastructure.
+- **Fourth lab touch (2026-09-08 afternoon) — live complaints fixed:**
+  1. **Rear-target reverse drive** (user request): bearing > 135°
+     (`Y_GOTO_REVERSE_BEARING`) backs up with rear-bearing steering
+     instead of the 180° in-place turn (slow rotations compound the
+     ±30% encoder yaw error). Yahboom arrival is now DISTANCE-ONLY —
+     the bearing-to-target near the target is geometric noise (±45° at
+     5cm), and chasing it caused the observed endgame re-turns; k1 keeps
+     the vendor dist+heading gate (validated, 490Hz odom).
+  2. **Face works on hardware** (was: assignment landed, bot never
+     turned — face is pose-dependent and CALIB has no sim yaw): 'face'
+     added to the CALIB pose-independent gate; the face branch sources
+     yaw from the bot's own odometry (yahboom estimator via the new
+     `_y_est_tick()` helper — extracted from the goto branch so goto and
+     face share the estimate; k1 from odometer_state, brakes when stale).
+     Face commands feed `_goto_state` so the estimator integrates them.
+  3. **Home is instant** (was: `y1 go to home` hit the 7B compiler and
+     drove nothing): calib home verbs (`go to home|return|home|start`,
+     prefixed or bare) route to `Goto(0,0)` — the calibration start pose
+     IS the odom origin. CLI echoes it.
+  4. **`turn 45o` parses** (o/°/deg suffixes) — the CLI mirror previously
+     rejected calib turn verbs with the facing-words message; it now
+     echoes TimedMove like the evaluator routes.
+  5. Diagnostics from the live session: user's 12:21 relaunch ran --calib
+     WITH Gazebo (full match pipeline: tracker/aggregator/referee/3B
+     executor live — the executor wrote blue_1 Move(1,1) into the
+     strategy; harmless for calib but worth remembering: --calib alone
+     is NOT the lean stack, --nosim is). The "frozen bot" was the XRCE
+     stall quarantine working as designed (imu degraded to ~5Hz →
+     power-cycle needed). Tests: 64 in test_head_face (+4: home x2,
+     turn-suffix, face routing), fast tier 238, battery 12/12.
+- **Stall #3 forensics (2026-09-08, fifth lab touch):** XRCE stall fired
+  during `y1 face east` — the face P-gain (3.0) saturates instantly and the
+  demo vyaw cap (1.5 rad/s, the firmware ceiling) meant full-speed spins:
+  3x the encoder/imu burst of anything the goto drives had streamed.
+  Fix: CALIB yahboom face spins capped at Y_CALIB_VYAW (0.5 rad/s, the
+  band the goto drives validated); demo mode keeps the 1.5 ceiling.
+  Stall #3 did NOT recover (client wedged >1h, imu silent) → power-cycle;
+  stalls #1-#3 today all correlate with heavy motion sessions — the
+  known vendor fragility (defense = safe freeze, never runaway).
+  Side observation parked: bridge logged K1 drift (7.89,6.87) — something
+  publishes on /Kev1n/odometer_state despite K1 offline (garbage source?
+  the K1 fleet relay?) — CHECK before the K1 field test.
+- **Cleanup round (2026-09-08, user: "fix #7 — think different, what can we
+  sacrifice, I want this dead race to finish"): subtraction, not addition.**
+  Root finding first: the reported "all three failed" (face east / go to
+  home / say yes) decomposed into TWO correct no-ops + one gate-dead verb:
+  after a power-cycle the estimator re-arms at (0,0,0) → face east WAS
+  already east, home WAS the power-cycle spot (odom origin), and say was
+  never executable in calib (head not in the gate). The system worked; it
+  just couldn't SAY "already there". Changes shipped:
+  1. **Mode merge:** --calib = the lean field stack ALWAYS (no Gazebo/
+     aggregator/Ollama; evaluator routing-only, no executor cycles → the
+     strategy-clobber class dies; bridge = single 20Hz wall-clock tick,
+     state_cb never dispatches in CALIB). --nosim is now an alias.
+  2. **Vocabulary freeze:** calib accepts goto/home/face/say/look/stop/
+     forward/back/turn/exec/results; compiler vocab rejects loudly with
+     the list (no more dead waypath compiles).
+  3. **TimedMove repeat fix:** the old expiry popped the in-memory target
+     while the strategy FILE kept the assignment → 0.5s reader restored
+     it → re-latch → endless turn-stop-turn-stop ("y1 turn -30" live).
+     Now id-keyed (evaluator stamps ids, bridge done-set) — the gesture
+     pattern. The targets.pop hack is gone.
+  4. **Say yes/no IN calib (user override):** gate admits 'head'; the
+     gesture fork checks calib hw keys (CALIB_GESTURE_BODY_BOTS=("y1",) —
+     demo slot names missed before, Y#1 took the servo path); estimator
+     yaw is the shake base (cyaw was zeroed); calib spin caps 0.5 rad/s.
+  5. **cmd_vel throttle:** yahboom publishes throttled to ~12Hz in calib
+     (Y_CALIB_PUB_PERIOD_S) — the firmware PID needs ~10Hz; the 48Hz
+     stream is the strongest stall correlate (3 XRCE stalls today).
+  6. **CLI belief feedback:** goto/home/face print the bot's odom belief
+     + distance ("ALREADY THERE (within 0.15m)") — the no-op-vs-failure
+     ambiguity that cost this debug round is gone. face prints the yaw
+     delta to the compass direction.
+  7. **Seq chains admitted (follow-up, live same day):** "y1 face east,
+     then face north, then face east" printed the CLI chain echo but
+     never moved — 'seq' wasn't in the CALIB gate set, and the cursor's
+     cyaw was zeroed (relative-turn snapshots would anchor on 0). Fixed:
+     'seq' admitted; the seq branch sources pose/yaw from the bot's own
+     odometry (estimator/k1-odom, same as face); synthesized Face/Head
+     steps flow into the calib-adapted branches (spin caps, est yaw).
+  8. **'say no' chassis shake fixed (live same day, isolation test by
+     user):** turn-90 (constant vyaw) works, y2's say-no (gimbal servo)
+     works, y1's say-yes (vx bob) works — only y1's say-no failed. Arm
+     log (added for exactly this): branch ran, base_yaw correct, cmd_vel
+     published — wheels ignored it. Root cause: the demo shake profile
+     (±100° @ 2Hz) saturates the vyaw cap with 0.25s ALTERNATING
+     half-cycles; the board's yaw PID cannot reverse that fast, so the
+     commands average to zero. Fix: calib shake profile (Y_CALIB_SHAKE_
+     FREQ_HZ=1.0, Y_CALIB_SHAKE_AMP_DEG=45 — 0.5s half-cycles, ~±14°
+     swings at the cap); gestures now feed _goto_state (est integration);
+     the goto rate-limiter clamps leftover state to the caps (a bob can
+     leave 0.75 m/s behind — the next goto would have ramped from it).
+  9. **Boot compass convention (user 2026-09-08): power-cycle at the home
+     mark, nose facing NORTH** — odom boots (0,0,0), so yaw 0 = north =
+     the rest orientation. Calib compass: face north = 0, face east =
+     -π/2 (90° RIGHT), face west = +π/2, face south = ±π
+     (DEMO_FACE_ABS_CALIB; demo keeps the world frame — sim twins spawn
+     facing +X/east). CLI face feedback uses the calib map in calib mode.
+     Documented as the wake-up ritual (cheat sheet + runbook §V11).
+  Tests: test_head_face 70 (+6 total this cleanup: timedmove-id, freeze
+  rejection, say routing, face-chain Seq, boot compass, demo compass
+  unchanged); fast tier 248 passed (same 20 pre-existing i3_sweep);
+  battery 12/12. Live-deployed into sessions …123745 → …141437.
+  7. **Seq chains admitted (follow-up, live same day):** "y1 face east,
+     then face north, then face east" printed the CLI chain echo but
+     never moved — 'seq' wasn't in the CALIB gate set, and the cursor's
+     cyaw was zeroed (relative-turn snapshots would anchor on 0). Fixed:
+     'seq' admitted; the seq branch sources pose/yaw from the bot's own
+     odometry (estimator/k1-odom, same as face); synthesized Face/Head
+     steps flow into the calib-adapted branches (spin caps, est yaw).
+  10. **`turn <deg>` went closed-loop (live same day):** user test "y2
+      turn 45 → ~20°" + trace forensics: direction always correct, but
+      the board's actual yaw authority is ~0.27 rad/s vs the 0.5
+      commanded (turn 45 → odom +23.5°, turn −45 → −26.2°) and sub-0.5s
+      commands are swallowed by motor spin-up (turn 10/15 → nothing).
+      Key insight: odom YAW is gyro-fused and tracks the physical body
+      (23.5° odom ≈ 20° eyeball) — unlike wheel-distance (±30% slip).
+      Fix (evaluator-only, zero bridge changes): `turn <deg>` routes to
+      the relative-Face machinery (estimator-yaw feedback, P-control,
+      arrival latch, spin caps) instead of open-loop TimedMove.
+      forward/back stay open-loop (distance genuinely can't close the
+      loop — tape-measure contract). CLI echo honest about the default
+      target (bare turn → k1). Tests: 71 in test_head_face (turn tests
+      now assert Face+relative_angle; TimedMove-id test uses forward);
+      fast tier 249 passed.
+  11. **Turn sign + say-no rebuilt on proven machinery (live same day):**
+      - Turn was "counter intuitive" (user): + gave CCW/left (ROS math).
+        Flipped to the COMPASS convention: **+ = clockwise/right** (nose
+        north, turn 90 → nose east) — consistent with the boot compass.
+      - `y1 say no` STILL dead at the 1 Hz profile (arm log proves the
+        new profile ran: freq=1.0Hz amp=45°) — 0.5s reversals cancel in
+        the board yaw PID, while sustained closed-loop turns at the same
+        0.5 rad/s cap work (turn OK). Conclusion: never oscillate vyaw on
+        this hardware. Fix: calib y1 'say no' = Seq of arrival-latched
+        RELATIVE FACES (±25°, 2 cycles, CALIB_SAYNO_SHAKE_* constants) —
+        each swing is the proven turn; y2 keeps the servo pan (works),
+        'yes' keeps the bob (vx works), K1 keeps the RPC head.
+      Tests: 72 in test_head_face (+1 say-no Seq; turn tests assert the
+      flipped sign); fast tier 250 passed.
+  12. **Speed tuning (user 2026-09-08: "turn speed too low, frequency too
+      low"):** Y_CALIB_VYAW 0.5 → **1.2** rad/s (the calib rotational cap
+      for face/turn/goto/say-no swings; live steady-state delivers ~0.89x
+      commanded — the 90° test hit 80°/90° — so the cap translates ~1:1
+      into real speed; margin kept under the 1.5 firmware ceiling; stall
+      safety rests on quarantine + the 12Hz throttle, not this cap).
+      Y_GOTO_ACCEL_VYAW 1.0 → 2.0 (the ramp alone ate the turn budget).
+      CALIB_SAYNO_SHAKE_AMP_DEG 25 → 20 (higher shake frequency at the
+      same cap; each swing ≈ 0.6-0.7 s, ~2x the old rate). Tests: 72/250
+      unchanged (constants only). Both processes restarted live.
+  13. **FIRST REAL K1 RUN + arrival-spin fix (2026-09-08, K1 online):**
+      `k1 go to (x,y)` drove the real K1 — closed-loop, distance roughly
+      ok — THE pipeline milestone of the day (everything prior was
+      Yahboom rehearsal; sim validation 2026-09-06 was the twin pose).
+      Bug found live: at target the K1 started an endless SPIN (either
+      direction, until stop; next goto fine). Root cause: the K1 arrival
+      gate was dist AND heading — at park range dx,dy are tiny so
+      target_yaw = atan2(dy,dx) is GEOMETRIC NOISE (a few cm lateral
+      offset swings the bearing ±14-90°): 'not arrived' → rotate-phase →
+      spin, bearing re-randomizes forever. The yahboom had already gone
+      dist-only for exactly this reason — the vendor gate was kept for
+      K1 because the SIM was too clean to expose the lesson. Fix:
+      **arrival = DISTANCE-ONLY for both hw types** (theta_tol constants
+      deleted; park orientation was never in the calib contract); goto
+      state now RESETS to zeros on arrival (it feeds the estimator —
+      leftover vyaw kept dead-reckoning the belief after the wheels
+      stopped, poisoning the next goto's bearing); one 'goto ARRIVED'
+      log line per destination (arm-log pattern).
+      Exec-runbook session context: `exec short` on a dead k1 slot +
+      a 1.9h-stale ghost k1_odom.json produced a meaningless 3.36m FAIL —
+      stale file deleted; stepper hardening (per-leg no-move detection,
+      dead-bot warnings, bot-prefixed exec with leg re-addressing)
+      designed but NOT yet implemented (next session candidate).
+  14. **Field-test analysis (post-fix session …161450):** 9/9 goto legs
+      ARRIVED (0.16-0.20 m, all inside the deadband), zero errors/stalls;
+      pre/post comparison proves the spin fix (pre: 0 ARRIVED, one leg
+      spun 888 s; post: none). Raw odom parks at a tight 1.30-1.34×
+      target on out-legs — the K1_ODOM_FACTOR=0.8 + coast working as
+      designed; the physical tape measurement is the ONE missing number
+      (decides 0.8 vs 1.0). Returns end 2-10 cm from raw origin — no
+      accumulating drift. Remaining gaps → the integrated plan below.
+  15. **`docs/plans/v68_pre_ifa/post_field_test_plan.md` created** — the
+      integrated time-sorted plan (Phases 0-4: cleanup → hardening →
+      hardware session + commit gate → pre-v7 refactor → parked v7),
+      consolidating the code audit (A/B/C tables), the field-test gaps,
+      and the redesign discussion. This changelog's Next points there.
+- K1 field-test day runs the same: `--calib --relay hardware_mirror` (no
+  uros_agent needed for K1 — booster relay on host network), `exec
+  short/square/triangle`, `results`. Yahboom rehearsal served its purpose.
+- Commit (user directive: none until K1 field test).
+
+**Next:** follow **`docs/plans/v68_pre_ifa/post_field_test_plan.md`** — the
+integrated, time-sorted plan covering everything discussed after the first
+real K1 run (9/9 legs, run `…161450`): Phase 0 cleanup (deletions &
+doc-truths, ~30 min), Phase 1 hardening (exec-stepper, restart script,
+preflight, selftest, C1 helper refactor), Phase 2 next hardware session
+(tape-measure → `K1_ODOM_FACTOR`, K1 say/face pass, formal field day =
+**the commit gate**), Phase 3 pre-v7 refactors, Phase 4 parked v7 designs.
+Immediate single step: **Phase 0** (delete the dead calib shake profile,
+`read_k1_odom` alias, fix `y_turns` notes, docstrings, CLI bare-coord echo,
+AGENTS.md "Not yet available" face row — see plan table 0.1–0.8).
+
+**2026-09-12 addendum — regression gate:** the 09-05→09-12 stretch is
+COMMITTED (4 logical commits on `docs/v68Planning`: c471b3e docs-plan v2,
+98fe001 core code+infra incl. booster_ros2_interface, 9cf61ee CLI/tests,
+c2cb226 chronicle) and PUSHED (branches `refactor/CalibCleanup`,
+`feature/K1KickSkill`, `feature/ExecStepperHardening`, `docs/FieldDayLessons`
++ tag `v6.8-field-day`). **U22 regression BEFORE any main merge: follow
+`post_field_test_plan.md` Appendix C** (fast tier 251 expected / battery
+12/12 / full tier with Ollama+Gazebo native; i3_sweep 20 = pre-existing).
+
+**Blockers:** none for Phase 0/1 (code only). Phase 2 needs the K1 online
+(+ Yahbooms for the regression battery). Commit blocked until the formal
+field day passes (user directive).
+
+---
+
+## 2026-09-06 (6) — K1 sim practice relay + runbook persistence + CLI executor
+
+**Goal:** Offline exec practice using Gazebo as the K1 stand-in (new sim_k1 relay),
+persist runbook results to calib_results.jsonl for automated analysis, and enable
+interactive "exec <id>" with break/continue/capture.
+
+**Done:**
+- **Relay `sim_k1.json`** — `hardware_type: virtual`, topic `/blue_2/cmd_vel`,
+  `sim_bot: blue_2`. No mirror_of (strategy reads k1_bot directly). Launched
+  via `--relay sim_k1`.
+- **Bridge Goto shim** — if relay has `sim_bot` key for the hardware entry, read
+  sim pose (x, y, yaw from quaternion) as odometry instead of `_k1_odom`
+  subscription. Writes into `self._k1_odom[hw_name]` so the 0.5s k1_trace
+  publisher + drift warning work unchanged. Offline practice posture:
+  blue_2 walks in Gazebo, exec runbook sees real-ish odom values, pipeline
+  exercised end-to-end. No physical K1 needed.
+- **Result persistence** — `calib_test.py`: `current_run_id()` (infers R2K_RUN_ID
+  from newest k1_trace file), `append_result()` (atomic append to `src/logs/
+  calib_results.jsonl`, try/except non-blocking). Record schema includes:
+  run_id, runbook, mode (sim/field), initial_odom, per-leg odom+drift,
+  origin_drift_m, auto_result (PASS/FAIL based on 0.15m threshold),
+  human_report (OK/ISSUE), aborted (true if break typed).
+- **CLI executor (`calib_cli.py`)** — `_detect_mode()` reads active_relay.json
+  for `sim_bot` key. `_exec_runbook` now collects all per-leg data into a list,
+  captures initial_odom, persists on BOTH exit paths (normal completion with
+  y/n and broken with aborted=true + last-leg state). `b`/`break` sends stop
+  and saves partial data ("it broke on leg 3" is exactly the analysis target).
+  No printer, no LAN — terminal ASCII, file on disk.
+- **Fast tier: 606 passed** (unchanged — no new failures).
+- **Sim battery: 10/10** (calib_test.py -- offline evaluator routing).
+- **Offline smoke:** append_result + current_run_id confirmed writing
+  `src/logs/calib_results.jsonl`.
+
+**Files touched:** core/src/relay/sim_k1.json (new), core/src/ai_tactics/
+ollama_sandbox_bridge.py, core/tools/calib_test.py, core/tools/calib_cli.py,
+this file.
+
+**Next:** Run `exec short` in sim mode: `--demo --relay sim_k1`. Then on the
+field with K1: `--demo --relay hardware_mirror`, same exec commands.
+
+**Blockers:** none.
+
+## 2026-09-06 (5) — K1 trace file + offline test driver + runbook executor
+
+**Goal:** K1 odometry time series (JSONL, joins with world_trace), offline sim
+battery for evaluator routing, interactive field runbook via "exec <id>".
+
+**Done:**
+- **K1 trace (`ollama_sandbox_bridge.py`):** append one JSONL line per 0.5s
+  in `_publish_k1_odom()` to `logs/k1_trace_<R2K_RUN_ID>.jsonl`. Schema:
+  `t_wall, t_odom, k1:{x,y,theta}, target:{action,x,y}`. Non-blocking,
+  same try/except pattern as world_trace. Consumers: `cat logs/k1_trace_*.jsonl
+  | python3 -m json.tool`, later `analyze_trace.py --k1`.
+- **Offline sim battery (`tools/calib_test.py`):** new module with
+  `run_sim_battery()` — 10 evaluator-routing checks (Goto targets, waypath,
+  face, compiler chain, stop/resume, all-scope). 10/10 passing. Uses temp
+  files, monkeypatched 7B compiler, no ROS/Ollama. Also: `read_k1_odom()`,
+  `fmt_odom()`, `print_runbook()` for field reference.
+  =3 runbook definitions (SHORT = 2 legs forward/return, SQUARE = 4 legs
+  0.5m with 90° turns, TRIANGLE = 3 legs 1m equilateral with 60° turns).
+  All return to (0,0) — one human Y/N check.
+- **Runbook executor (`calib_cli.py`):** `exec <id>` command in main loop.
+  Interactive stepper: sends each `k1 go to ...`, waits for Enter, reads
+  `k1_odom.json`, prints drift. `b`/`break` aborts safely (sends stop).
+  After final leg: automatic origin-drift computation + PASS/FAIL + Y/N
+  human report.
+- **Fast tier: 606 passed** (unchanged — no new failures).
+
+**Files touched:** core/src/ai_tactics/ollama_sandbox_bridge.py, core/tools/
+calib_test.py (new), core/tools/calib_cli.py, this file.
+
+**Files deleted:** none.
+
+**Next:** Power K1, launch `--demo --relay hardware_mirror`, run `exec short`,
+then `exec square`, then `exec triangle`. Inspect `k1_trace_*.jsonl` offline.
+
+**Blockers:** none.
+
+---
+
+## 2026-09-06 (4) — Removed bridge log redirect + cold-compile pre-warm
+
+**Goal:** Eliminate `logs/bridge.log` (K1 drift warnings visible on bot terminal,
+duplicate file), remove 7B pre-warm and CLI cold-compile timeout band-aid.
+
+**Done:**
+- `launch_r2k.sh`: bridge stdout `>> logs/bridge.log` → `> /dev/null` (both
+  native + Docker paths); removed `R2K_COMPILER_MODEL` var and both 7B pre-warm
+  blocks (native ~line 361-367, Docker ~line 500-502). Pre-existing model
+  warm-up at boot (line 229-234, loads the 3B soccer model) stays unchanged.
+- `calib_cli.py`: timeout 30s → 8s, removed cold_note_shown logic and comment.
+- Fast tier 605 passed (unchanged), bash + python syntax verified.
+
+**Files touched:** core/launch_r2k.sh, core/tools/calib_cli.py, this file.
+
+---
+
+## 2026-09-06 (3) — K1 calibration Goto action (odom loop, Option A)
+
+**Goal:** Add `Goto(x,y)` action for K1 calibration. Bridge reads `k1_odom`
+as feedback (490 Hz), runs PD velocity with rate-limiting, parks naturally at
+deadband — no evaluator Hold. Firmware-velocity limits clamped at source.
+Yahboom unchanged (still sim-pose Move).
+
+**Done:**
+- **Evaluator (`r2k_evaluator.py`):** `DEMO_K1_ALIASES` (separate from
+  `DEMO_HEAD_K1_ALIASES` documents Goto routing semantics). `_demo_goto_cmd`
+  writes `{"action":"Goto","x":...,"y":...}` to `k1_bot` slot via
+  `_write_assignment` (read-existing-assignments + preserve). Routing block
+  before `DEMO_COORD_RE`: `k1 go to (x,y)` → Goto; blue bot → Move (mixed
+  prefix routes each correctly). `_persist_non_llm_assignments` in main loop:
+  carries forward Goto targets across 3B executor cycles (k1_bot is not in
+  min_ents, so the 3B would strip it every cycle).
+- **Bridge (`ollama_sandbox_bridge.py`):** 5 new constants (K1_GOTO_VX_MAX=
+  1.1, VYAW_MAX=1.5, accel rates, deadband 0.1m). `_k1_goto_state` per-bot
+  rate-limiting. `goto` branch in `state_cb` (after head, before kick): odom
+  position from `_k1_odom` subscription (not Gazebo model_states), PD toward
+  target, distance-scaled speed with turn slowdown, smooth accel/decel via
+  rate limiter, natural park at deadband. `stop_all_hardware` clears state.
+- **CLI:** sample `k1 go to (1,0)` added (24 total).
+- **Tests:** 3 new unit tests (Goto writes correct assignment, does NOT
+  remap to blue_1, blue_1 direct_move unchanged). Fast tier: **605 passed**
+  (= 602 baseline + 3 new); 20 test_i3_sweep failures + 1 collection error
+  = documented pre-existing — no new failures.
+
+**Files touched:** core/src/ai_tactics/r2k_evaluator.py, core/src/ai_tactics/
+ollama_sandbox_bridge.py, core/tools/calib_cli.py, core/src/tests/test_head_
+face.py, this file.
+
+**Files deleted:** none.
+
+**Not yet done:** Manual integration check (needs K1 powered, `--relay
+hardware_mirror`): send `k1 go to (1,0)`, verify `k1_odom.json` advances,
+bridge.log shows smooth motion, K1 parks at ~0.1m from target. Yahboom Goto
+needs wheel encoder odom first (future).
+
+**Next:** Power K1, launch `--demo --relay hardware_mirror`, run integration
+battery: `k1 go to (1,0)`, `k1 go to (-1, 0)`, `k1 go to (0, 1)`.
+
+**Blockers:** none.
+
+---
+
+## 2026-09-06 (2) — Uniform blue_1 default + "all" scope prefix + CLI trim
+
+**Goal:** Make Y#1 (blue_1) the default for ALL demo commands (bare `say` →
+physical body yes/no on Y#1), add an `all` command prefix routing to every
+blue bot, and shorten the calibration CLI example text (user spec: 20 entries).
+
+**Done:**
+- **Uniform default (physical yes/no falls out):** `DEMO_HEAD_DEFAULT_BOT`
+  `"blue_2"` → `"blue_1"` (`r2k_evaluator.py:113`). Bare `say yes`/`say no` now
+  route to blue_1 and the bridge body-gesture fork
+  (`ollama_sandbox_bridge.py:888`, `GESTURE_BODY_BOTS=("blue_1",)`) runs the
+  chassis bob/yaw-shake — no bridge code change needed. Camera work = explicit
+  `blue_2 …` prefix (unchanged). Head fast-path comment updated
+  (`r2k_evaluator.py:741`).
+- **`all` scope prefix:** evaluator-side scope tokens (`all/every/both/
+  yahbooms/sim`) already fanned coords/head/face to every blue bot; fixed the
+  one gap — facing chains with `all` used the literal string `"ALL_BOTS"` as
+  Seq target (no bridge bot consumes it): `all face west, then say no` now
+  fans the Seq to every bot (`r2k_evaluator.py:721-726`).
+- **CLI (`tools/calib_cli.py`):** SAMPLE_COMMANDS 48 → 20 trimmed entries
+  (user spec: "20, trim the length"), incl. 2 new scope samples (`all go to
+  (1,1)`, `all say no`); startup banner 30 → 8 lines; `show_examples` flat
+  format (unique descriptions broke the category-header grouping); scope-strip
+  mirror of `DEMO_SCOPE_TOKEN_RE` in `send_task` (otherwise `all go to (1,1)`
+  fell through to the 8s compiler-wait despite being instant); fleet-stop fix
+  (`stop all bots` now prints instant instead of timing out); scope-only guard
+  (bare `all` no longer hangs the wait loop). Smoke-tested all 8 routing paths
+  offline (temp paths).
+- **Tests:** 7 bare look/say tests re-pointed blue_2 → blue_1 in
+  `tests/test_head_face.py`; 4 new `all`-scope tests (coords, say, face,
+  facing-chain fan-out). Full fast tier: **602 passed** (= 598 documented
+  baseline + 4 new); the 20 `test_i3_sweep` failures + 1 `test_adaptive_
+  horizon` collection error remain the documented pre-existing breakage — no
+  new failures.
+- **Sim end-to-end validation (live stack, `--demo --headless --scenario
+  2vs0_demo --relay only_sim_bots`):** battery sent via `task_input.json`,
+  verified in `current_strategy.json`/`waypoints.json`: bare `say no` →
+  blue_1 only (Head gesture, nonce id); bare `say yes` → blue_1; `all say
+  no` → blue_1 AND blue_2 (distinct nonces); `all go to (1,1)` → waypath
+  [(1,1)] for both bots; explicit `blue_2 say yes` → blue_2 only (blue_1
+  kept its executor Move — no leak). Stack torn down cleanly (docker exec
+  pkill inside container — host pkill hits root-owned PIDs, "Operation not
+  permitted").
+
+- **Cold-compile fix (user error report, "approach the ball into kicking
+  distance" → CLI timeout):** the first 7B compiler call of a session pays
+  the ~20s model load inside the CLI's 8s wait window. Diagnostic
+  reproduction with the evaluator's own prompt builder proved the compiler
+  healthy on a warm model (0.7s, valid JSON, live ball at (-0.3,-1.8) →
+  kicking-distance waypoints). Fixes: (1) `launch_r2k.sh` pre-warms the 7B
+  at boot in BOTH paths (native + Docker), fire-and-forget, gated on
+  `--demo`, model via `R2K_COMPILER_MODEL` (default qwen2.5:7b, matches
+  `DEMO_COMPILER_MODEL`); (2) `calib_cli.py` wait window 8s → 30s with a
+  "(cold model loading — first compile takes ~20s)" note at 8s. Both files
+  syntax-verified; CLI success + timeout paths smoke-tested (simulated).
+  NOTE: pre-warm takes effect on next boot; the running session's 7B was
+  warmed by the diagnostic call — re-sending the task works immediately.
+- **Comma-only chain delimiter:** evaluator `_handle_compound_task` +
+  `_DEMO_COMMA_SEP_RE` (digit + then/next guards: "stop, resume" = two
+  independent control calls; "go to 1, 1, then go to 2, 2" stays a single
+  chain; "draw a hexagon 2m, 2m sides" stays a single compile task). CLI
+  mirror (`_COMMA_SEP_CLI_RE`) prints the clause count without blocking.
+  All 4 routing variants verified (stop/resume → comma chain, then-chain
+  unchanged, hexagon description comma → compiler).
+- **CLI samples redesigned (user spec 2nd pass):** SAMPLE_COMMANDS from 20
+  tuples → 22 flat strings. Added control verbs (stop/resume/restart/go
+  home), geometric shapes (rectangle + pentagon, replacing triangle),
+  comma-chain samples ("stop, resume", "go to (2,0), return"),
+  `blue_2 look left`. Removed explanation second line in `show_examples`
+  ("remove the second line to reduce length"), duplicate entries trimmed
+  (say no+next pause, go to (2,0) alone, go to the left wing alone,
+  rotate 90, draw a triangle). Flat numbered list: 22 lines.
+- **Corner diagonal sample:** added `"go to own left corner, then go to
+  opponent right corner"` to the CLI sample list (landmark chain, tests
+  both landmark lookup and chain routing). 23 total samples.
+
+**Files touched:** core/src/ai_tactics/r2k_evaluator.py, core/tools/calib_cli.py,
+core/launch_r2k.sh, core/src/tests/test_head_face.py, this file.
+
+**Files deleted:** none.
+
+**Not yet done:** Cheat sheet NOT trimmed (user: CLI only — note its "Not Yet
+Available (v7)" face table is stale, Face is implemented). Hardware battery
+not yet run (needs Y#1/Y#2 powered, K1 out of DAMP).
+
+**Next:** Power Yahbooms, launch `--demo --relay hardware_mirror`, run the
+hardware battery: bare `say yes`/`say no` (Y#1 chassis bob/shake), `all say
+no` (Y#1 body + Y#2 camera + K1 head), `all go to (1,1)` (both mirrors drive).
+
+**Blockers:** none.
+
+---
+
+## 2026-09-06 — Say/look routing rewind + K1 odom live (vendor-audit odom claim retracted)
+
+**Goal:** Restore the gimbal routing broken by the late round-5 flip (2026-09-05),
+then make K1 odometry visible for mirror-drift monitoring (K1 stays a command mirror).
+
+**Done:**
+
+### Routing rewind (user: "start over before that build" → Option B)
+- `r2k_evaluator.py:113` `DEMO_HEAD_DEFAULT_BOT` blue_1 → **blue_2** (gimbal bot;
+  Y#1 has no camera — the round-3 finding the round-5 flip had contradicted).
+  `DEMO_FACE_DEFAULT_BOT` stays blue_1. Evaluator+bridge restarted live; bare
+  "say yes" routed to blue_2 (strategy file + /blue_2/servo_s1 bridge publisher
+  confirmed).
+- `tests/test_head_face.py`: 7 bare-look/say tests re-pointed blue_1 → blue_2
+  (defaults, right/up/down/center, say-yes nonce, say-no, waypoint-clear).
+  Fast tier **598 passed** (was 596); the 20 `test_i3_sweep` failures and the
+  `test_adaptive_horizon` collection error remain the documented pre-existing
+  breakage (untouched).
+
+### K1 odometry — LIVE (retracts the 2026-08-26 vendor-audit odom conclusion)
+- **Root discovery:** `/Kev1n/odometer_state` (booster_interface/msg/Odometer,
+  float32 x/y/theta) FLOWS at ~490 Hz. The audit's "eternal silence" was an
+  artifact: `booster_interface` was never colcon-built, so every past
+  `ros2 topic echo` failed silently — no subscriber could exist. User's SSH
+  topic list confirms `/odometer_state` exists on the robot; chain = robot →
+  external_fleet_relay_Kev1n → our domain. Vendor docs = C++ SDK transport
+  only, NOT the ROS 2 surface (user correction — `rt/odom` is not a ROS topic).
+- `booster_interface` built (`colcon build --packages-select`, 4.6s, container).
+- `ollama_sandbox_bridge.py`: eager K1 odom subscription at boot
+  (`_ensure_k1_odom_watch`, ns derived from relay topic, sub ref kept alive);
+  `_publish_k1_odom()` every 0.5s → **`shared_state/k1_odom.json`** (atomic
+  rename) + drift warning > `K1_ODOM_DRIFT_M = 0.25` vs blue_1 sim pose with
+  `K1_DRIFT_WARN_DEBOUNCE_S = 1.0`. Live-verified: file advances, warnings
+  fire 1s-apart (0.78m drift while sim twin played soccer; K1 in DAMP mode
+  per user — moves testable later).
+- **Worldstate.json deliberately NOT touched:** state_aggregator rebuilds it at
+  10Hz (`json.dump(combined_state)` + `os.replace`) — a foreign k1_bot entry
+  would be wiped within 100ms and race the writer. Own state file instead.
+  `k1_bot` also never enters the LLM payload (round-4 phantom-assignment rule).
+- `launch_r2k.sh` (2 lines): bridge stdout `/dev/null` → `logs/bridge.log`
+  (XRCE STALL + drift warnings must be observable; native + Docker paths).
+
+### Knowledge base corrections
+- `src/yahboom/YAHBOOM_KNOWLEDGE.md` §7 rewritten: odom LIVE (not silent),
+  silence-artifact lesson, verified chain, SDK-vs-ROS2 vendor-docs note,
+  bridge integration contract.
+- `ros2k_knowledge/META_KNOWLEDGE_ROUTER.md`: row updated (LIVE ~490Hz,
+  retraction note, k1_odom.json, drift warning), tags +version v6.8 date.
+- `docs/plans/v68_pre_ifa/k1_kick_head_vendor_audit.md` §5: correction banner —
+  §5.1/§5.2 conclusions retracted by live test.
+
+**Files touched:** `src/ai_tactics/r2k_evaluator.py` (1 line),
+`src/ai_tactics/ollama_sandbox_bridge.py` (K1 odom watch + publisher +
+constants), `launch_r2k.sh` (2 lines), `src/tests/test_head_face.py` (7 tests),
+`src/yahboom/YAHBOOM_KNOWLEDGE.md`, `src/ros2k_knowledge/META_KNOWLEDGE_ROUTER.md`,
+`docs/plans/v68_pre_ifa/k1_kick_head_vendor_audit.md`, this file.
+
+**Files deleted:** none.
+
+**Not yet done:** K1 motion test (bot in DAMP mode — user defers); K1 in DAMP
+does not execute RPC 2001 — mirror fidelity unproven until DAMP off.
+`SESSION_DEAD_S` 5→8 tuning and imu-sub-ref hardening were proposed and
+explicitly deferred by the user ("hold it, later"). Y#1/Y#2 were powered off
+during the verification run ("nicht erkannt" in launch log).
+
+**Next:** Power Yahbooms, exit K1 DAMP, run the command battery: bare
+"look left"/"say no" (→ Y#2 gimbal), "face west" (→ blue_1 body + K1 mirror),
+then watch `k1_odom.json` + drift warnings during a real "go to".
+
+**Blockers:** none code-side; hardware state only (DAMP, Yahbooms off).
+
+## 2026-09-05 — Face/Head showcase implemented + XRCE stall root cause (the "Y#2 freezes")
+
+**Goal:** Implement the face-vs-yaw demo commands (Face + Head/gestures per
+calibration_rotation_design.md), then debug Y#2 freezing during live tests.
+
+**Done:**
+
+### Face/Head implementation (demo mode, no colcon build)
+- `src/ai_tactics/head_cmds.py` (NEW): shared contract — model frame
+  pan + = LEFT, tilt + = UP; servo conversion, K1 radian clamps, gesture
+  math (ramped sine shake; one-sided bow nod), drain-gap + liveness helpers.
+- `ollama_sandbox_bridge.py`: `Face` action (P-control turn-in-place,
+  arrival 0.1 rad active brake, K1 vyaw 1.0 rad/s); `Head` action (static
+  pose edge-triggered 3-tick burst — micro-ROS drops single shots; gestures
+  stream with nonce-id restart + neutral park); `read_llm_strategy`
+  passes yaw/relative_angle/pan_deg/tilt_deg/gesture/cycles/id through;
+  XRCE stall-breaker + drain-gaps (below).
+- `r2k_evaluator.py`: demo fast-path before verb guard — `look *`/`say *`
+  default **blue_2** (gimbal bot, user decision), `face *`/`turn *`/`rotate N`
+  default blue_1, `k1`/`k1_bot` prefix reroutes to blue_1 (K1 mirror source).
+- `tools/calib_cli.py`: Head/Face sample categories + instant feedback.
+- Tests: `tests/test_head_face.py` (NEW, 27 tests) — routing, k1 alias,
+  gesture envelope math, sign/clamps, strategy passthrough. Fast tier:
+  574 passed (pre-existing breakage untouched: test_adaptive_horizon
+  collection error, test_i3_sweep 20 failures — verified stale via stash).
+- Docs: calibration_rotation_design.md → status implemented + empirical
+  contract + XRCE section; cheat sheet → Head/Face command tables.
+
+### Empirical Yahboom#2 servo contract (live-measured)
+- servo_s1 pan: topic + = RIGHT, mechanical stop ±45° → clamp ±40.
+- servo_s2 tilt: vendor band [−90,+20], measured upright ≈ 4.
+- `--once` publishes DROPPED by micro-ROS — burst mandatory (verified live).
+- cmd_vel has NO watchdog → explicit zero Twist required after motion.
+- Tuned per user feedback: say-no 2 Hz ±40°; say-yes one-sided bow
+  (symmetric nod impossible: +20 top stop); `SERVO_SIGN_TILT` UNVERIFIED
+  ("say yes" model −40 moved camera UP — −8/+8 probe pending).
+
+### XRCE stall / livelock — ROOT CAUSE of the "Y#2 freezes"
+- Timeline of failed theories (all retracted with evidence): servo stall
+  crash (camera moved on BOTH axes), S2 dead servo (premise false — earlier
+  "no movement" probes were already-stalled sessions), message-rate
+  overflow (300-msg tri-topic test survived; 30 discrete gestures survived).
+- Measured: ESP32 micro-ROS client STALLS stochastically under sustained
+  reliable traffic (1 stall / ~7 min of 3-topic@10Hz; zero in bursts).
+  Symptom: publishing stops (imu/battery/odom dead), **ping still answers**
+  (140 ms, modem-sleep), no reboot (no new agent session), no agent errors.
+- KEY: stall is REVERSIBLE — after traffic silence the client drains and
+  recovers ≤60 s (measured). It became a PERMANENT freeze only because the
+  bridge streamed cmd_vel at 10 Hz forever → livelock. Yahboom#1 never
+  froze: no gimbal → no servo bursts → load below drain capacity.
+- Defenses shipped in bridge: (1) drain-gaps — 200 ms full silence per bot
+  every 2 s of streaming (stall prevention); (2) stall-breaker — imu
+  staleness >3 s → full quarantine (all topics incl. cmd_vel, loud log) until
+  imu returns → auto-resume (stall RECOVERY). Virtual sim twins + K1 never
+  gated (bootstrap rule: never-seen imu = alive).
+- End-to-end validated post-fix: 2 pipeline gestures, imu ~22 Hz steady.
+
+### Fix round 5d — Move-chains as WAYPATHS (user: make "go to 2,2, then pause 2sec, then go to 3,3" runnable)
+
+- OPERATIONAL PITFALL (recurring, 3rd time this session): the container
+  mounts code instantly, but RUNNING processes keep the old module — the
+  user's "no movement at all" chain test hit a 40-min-old round-5c
+  evaluator that still rejected move-chains. After process restart the
+  chain completed end-to-end live: 2,2 -> 0,0 (2s hold) -> 3,3 -> park,
+  physical Y#1 mirroring, drag_twin silent. RULE: restart evaluator+bridge
+  after every code delivery (docker exec pkill + relaunch, or full
+  launch_r2k.sh).
+
+- DESIGN (rewind-compliant): chained moves flatten to WAYPOINTS — the
+  proven machinery (drag_twin sees the 3B's plain Move targets; zero new
+  bridge motion code). "go to 2,2, then pause 2sec, then go to 3,3" →
+  waypoints [(2,2) hold 2s] → [(3,3)], auto-park. Pauses attach to the
+  PRECEDING stop's hold_duration; a LEADING pause holds at the bot's
+  current position. `goto` == `go to` (already in DEMO_COORD_RE, now
+  chain-usable). Duplicates merged (_merge_duplicate_waypoints reused).
+- Chain decision table (evaluator `_handle_task_clause` + CLI mirror):
+  all instant steps → Seq; all move/pause steps → waypath; facing+move
+  mixed → rejected with guidance; else → 7B compiler.
+- 5c REGRESSION FOUND+FIXED (guard test added): landmark+pause compounds
+  ("go to the left wing, pause 2 seconds, go to the right wing" — pure
+  compiler vocabulary) were accidentally REJECTED by 5c's any(steps)
+  branch; now they reach the 7B again.
+- New compiler guard DEMO_INSTANT_WORD_RE (face|turn|rotate|look|say):
+  such words never reach the 7B (it has no facing concept — the original
+  "face west, then go to 1,1" garbage compile class); rejected with split
+  guidance, mirrored in the CLI.
+- Tests: waypath flattening (pause attach, leading pause, goto alias,
+  prefix/scope), landmark-compound regression guard, facing-words guard,
+  mixed rejection. Fast tier 596 passed.
+
+### Fix round 5c — REWIND of Seq-driven moves (user: "go to is broken ... reset and rewind")
+
+- LIVE FAILURE (user): "go to (3,1)" — destination never reached; the bot
+  stops, gets reset a short distance in SIM, then goes to the same target
+  again; the real bot mimics. Loop.
+- ROOT CAUSE (not the Seq code itself): `drag_twin.py:_refresh_targets`
+  recognizes ONLY plain waypath `Move` targets. My Seq assignments are
+  invisible to it -> during a Seq drive it believes the bot is PARKED ->
+  idle-watch sees the commanded drive as an "external drag" (>0.3m) ->
+  fires its anti-drag protocol: "blue_1 stop" (kills the Seq) + teleport-
+  back (the sim reset) + dispatches "goto <pose>" (its own task_input
+  write) -> new Seq -> blind again -> ~1.5s loop, destination unreachable.
+  Evidence: task_input.json contained drag_twin's own 2-decimal-rounded
+  "blue_1 goto 1.35,1.45" dispatch.
+- LESSON (same class as round 4): current_strategy.json has THREE readers
+  (bridge, drag_twin, evaluator fast_cmd loop) — introducing a new action
+  shape without mapping ALL readers is an integration bug by construction.
+- REWIND (user directive — revert, don't patch):
+  1. Direct moves ("go to (x,y)", "go home") -> back to the PROVEN waypath
+     machinery: seed a ONE-waypoint waypath; evaluator arrival + park at
+     0.2m -> Hold. Zero new bridge motion code. drag_twin's waypath-watch
+     was designed for this path.
+  2. Chains restricted to NON-MOTION steps (face/turn/rotate/look/say/
+     pause — position-stable, immune to drag_twin). Mixed chains (move +
+     instant steps) REJECTED with guidance ("face west" then "go to
+     (1,1)"). Pure compile compounds still reach the 7B.
+  3. Bridge: Seq move branch + arrival-latch machinery DELETED; stale
+     strategies carrying motion steps park safely (defensive hold).
+     MOVE_STOP_M/MOVE_REENGAGE_M constants removed from head_cmds.
+- KEPT (all verified non-motion): face/say/look/pause chains, body
+  gestures + capability fork, camera gestures, face snapshot fix,
+  strip-all + fast_cmd override, heading guard.
+- Tests rewritten to rewound semantics (waypath seeding, mixed-chain
+  rejection, defensive park, guidance); fast tier 590 passed.
+
+### Fix round 5b — Seq whitelist gap ("go to (3,1): no move")
+
+- LIVE CATCH (user: bare coordinate move dead on sim AND physical): the
+  Seq assignment reached the strategy file intact, but the bridge's
+  `read_llm_strategy` whitelist (`TARGET_EXTRA_KEYS`) did not include
+  `'steps'` — targets got `{'action':'seq','id':...}` with the steps list
+  DROPPED → `_seq_effective` saw an empty sequence → "finished" → parked
+  zeros forever. One-line fix: `'steps'` added to the whitelist.
+- Test seam that let it through: the cursor tests fed Seq dicts directly
+  into `_seq_effective`, bypassing the strategy read. Hardened:
+  passthrough test now includes a Seq assignment (steps + nested Pause
+  duration), and a NEW production round-trip test (strategy file →
+  read_llm_strategy → _seq_effective must yield a drivable Move).
+- CLI: coordinate fast-path message updated ("instant Seq … arrival-latches
+  and parks") — was still saying "instant Move".
+- Fast tier 589 passed (bridge tests skip locally, run under ROS).
+
+### Fix round 5 — Sequences + body gestures + the "shaky dog" (user: "go for it")
+
+- "SHAKY DOG" REGRESSION (my round-4 override made it visible): direct
+  fast_cmd Moves are immortal and raw Moves have NO arrival — the PD's
+  constant lin_x=0.8 at 10Hz (8cm/tick) overshoots the 0.15m stop band
+  forever: decelerate-hunt-correct, "like a dog going to sleep". FIX:
+  Move arrival LATCH with hysteresis (0.15m latch / 0.4m re-engage) in the
+  Seq executor; direct "go to (x,y)" and "go home" became single-step Seqs
+  → every fast-path move ends PARKED.
+- SEQUENCES (user request "i want both" + then/next/pause semantics):
+  chain parser splits on ", then"/", next" — if ALL segments are fast-path
+  steps (face/turn/rotate/look/say/coord-move/pause) the evaluator writes
+  ONE Seq assignment; anything compile-flavored falls through to the 7B.
+  ONE BOT per chain (user rule). "; " stays PARALLEL clauses.
+  THE BRIDGE OWNS EXECUTION (only it observes yaw+position+time):
+  _seq_effective cursor synthesizes the per-tick target — face step reuses
+  the snapshot+latch machinery, move step latches on arrival, pause/gesture
+  steps are time-based, look steps burst-and-advance; chain end = parked.
+- BODY GESTURES (user: Y#1 has no gimbal — use body motion, no flag, no
+  warning): GESTURE_BODY_BOTS=('blue_1',) in head_cmds; the head-branch
+  fork renders 'say no' as a ±20°@2Hz yaw shake (P-control against an
+  intentionally moving target ending at base) and 'say yes' as a 3-surge
+  forward-back bob (BODY_BOB_MPS=0.15, slight drift accepted). K1 keeps its
+  head (RPC 2004); sim twins get body motion (visible in Gazebo); Y#2 keeps
+  camera gestures. Harmless servo publishes to Y#1 still go out (ESP32
+  consumes them; no connected load — verified harmless, user question).
+- ROUTING UNIFORM (user): ALL bare commands default blue_1; camera gimbal
+  work = explicit "blue_2 ...". CLI samples/banner/legend updated; chain
+  instant-feedback display; [pause 0s] display threshold fix (>=0.05s).
+- Tests: defaults flip, chain parse (then/next/pause/prefix/fallthrough/
+  semicolon-parallel), Seq cursor + forks (FakeBridge), bob waveform,
+  latch thresholds. Fast tier 589 passed.
+
+### Fix round 4 — ROOT CAUSE: post-park executor hallucination (the "both bots drive off")
+
+- TRACE-PROVEN (llm_trace 140805 + 121521): when the LAST bot parks, no bot
+  has an active waypath → `_demo_inject_targets` returned early WITHOUT
+  stripping → the 3B saw BOTH bots + ball with no target labels and
+  hallucinated soccer assignments: `blue_1: role=goalie, Move(-2.5,0)`
+  (= own goal — user's "direction opposite goal"), `blue_2: Kick`,
+  phantom `blue_3: Move to ball`. These landed in the strategy and beat the
+  parked Hold fast_cmds (gap-fill only). Explains: post-park zombie drives
+  (both reports), "say yes looks up then freezes" + gesture degradation
+  (hallucinated Moves overrode gestures mid-run), sim blue_2 "jumps" in the
+  world trace (driven, not dragged).
+- RETRACTED: drag-twin collision theory — drag_twin was innocent; the
+  world-trace 1m jumps were hallucinated drives.
+- Fix 1 (r2k_evaluator): `_demo_inject_targets` strips ALL blue bots when
+  no waypath is active (ball stays) — executor can never see an
+  uncontrolled bot.
+- Fix 2: `_demo_reinject_fast_cmds(data)` — fast_cmd now OVERRIDES executor
+  output for its bot (was gap-fill; the 3B assigns phantom/invisible bots
+  too). Hold/Head/Face commands are now the exclusive authority until a
+  new task/compile clears fast_cmd.
+- Fix 3: `_merge_duplicate_waypoints` — consecutive waypoints <0.1m apart
+  merge (hold_duration summed, labels renumbered): "left wing, pause 2s,
+  right wing" now compiles to FIRST(2,2.5)[2s], SECOND(2,-2.5) instead of
+  the duplicate-waypoint pattern the 7B copies from its few-shot example.
+- "Can we undo the ROS2 fixes?" — NO, audited: the XRCE stall was
+  independently reproduced with raw probes (no LLM involved) and is a
+  firmware property; stall-breaker/drain-gaps/Hold-bypass/stale-target
+  rebuild all remain justified. The S2-tilt gate was already reverted
+  (wrong premise); gesture rate cuts stay (servo slew limit — no visual
+  loss, halved stall exposure). Post-fix traffic is tamer, so the XRCE
+  defenses drop from load-bearing to safety net.
+- Tests: strip-all + override semantics + merge (3 new, 1 rewritten);
+  fast tier 579 passed.
+
+### Fix round 3 (live test feedback: blue_1-look no-op; endless turn)
+- ENDLESS TURN (my bug): the bridge re-derived relative Face targets
+  (cyaw + relative_angle) EVERY 10Hz tick — the target moved with the bot,
+  so `turn left/right/around` spun forever. Fix: `_face_target_yaw`
+  snapshots the target ONCE per command nonce id (evaluator now adds
+  "id" to Face commands); arrival latch + hysteresis (stop at 0.1 rad,
+  re-engage only beyond 0.35 rad) absorbs post-turn drift hunting.
+- `blue_1 look left` does nothing: Yahboom#1 has NO gimbal (vision bot is
+  #2) — its /blue_1/servo_* topics go nowhere. CLI samples updated:
+  removed the misleading `blue_1 say no`; k1 head samples labeled
+  "K1 offline, unverified"; help explains the no-gimbal fact.
+- Wing-task observation traced: llm_trace shows only blue_1 was ever
+  targeted/assigned (blue_2 got Hold-zeros only) — the compiled waypath
+  is correct (left wing, pause, right wing). Likely mirror-behavior
+  observation (sim twin + physical Y#1 both converge), not a code path.
+- Fast tier 576 passed; bridge face-snapshot test added (skips w/o ROS).
+
+### Fix round 2 (live test feedback: "say yes weakens/delays; move-forward runs forever")
+- SAFETY: stall-breaker could quarantine `Hold` — the emergency stop itself
+  (bots run on last cmd_vel, no firmware watchdog). Hold now NEVER gated;
+  during quarantine it keeps a 1Hz zero heartbeat so the client's first
+  action on recovery is STOP (`_publish_allowed` in bridge).
+- SAFETY: `read_llm_strategy` never removed stale targets → a bot dropping
+  out of the strategy kept executing its last command forever. Targets are
+  now REBUILT each read; absent bots get active-brake zeros in state_cb.
+- "move forward 1m" is heading-relative: no yaw in Worldstate (v7 Task 3a),
+  7B compiled garbage ("forward" → x+1.3 / diagonal runs). Evaluator guard
+  `DEMO_HEADING_REL_RE` rejects forward/backward+distance with guidance;
+  live-validated (rejection confirmed, waypoints untouched).
+- Say-yes degradation (weaker + delayed nods over repetitions) = XRCE queue
+  congestion during gestures (30 msg/s). Reduced: gesture servo samples
+  10→5 Hz (servo can't track 10 Hz at ±40° anyway), body-brake zeros during
+  head actions 10→2 Hz.
+- SESSION_DEAD_S 3→5 s: observed false quarantine on a brief imu blip
+  (bridge log: STALL → RECOVERED 60 ms later).
+- Both processes (bridge + evaluator) restarted live; fast tier 576 passed.
+
+**Files touched:** `src/ai_tactics/head_cmds.py` (NEW),
+`src/ai_tactics/ollama_sandbox_bridge.py`, `src/ai_tactics/r2k_evaluator.py`,
+`tools/calib_cli.py`, `src/tests/test_head_face.py` (NEW),
+`docs/plans/v68_pre_ifa/calibration_rotation_design.md`,
+`docs/calibration_cheat_sheet.md`, this file.
+
+**Files deleted:** none.
+
+**Not yet done:** K1 head probe (`k1 say yes` — RPC 2004 mode gate
+unverified, vendor audit §2.2); `SERVO_SIGN_TILT` −8/+8 probe; camera-visual
+confirmation of the final 2 Hz/40° tuning; firmware rebuild (modem-sleep off
++ session reconnect from `~/yahboom/Samples microros`); E2/E3 experiments
+(Y#1 control gesture, servo-disconnect) — deprioritized after root cause.
+
+**Next:** lab hands-on: run `k1 say yes` (answers the 2004-in-mode gate),
+sign-probe servo_s2 ±8, visually confirm gesture tuning. If a bot freezes
+>60 s despite the bridge logging `XRCE STALL`, power-cycle (expected rare).
+
+**Blockers:** none for demo — K1 head commands may silently fail until the
+mode gate is probed on hardware.
+
+
+## 2026-09-04 — Fleet healthy + K1 odom vendor audit (folklore #2) + hardware-closed-loop replan
+
+**Goal:** Diagnose Yahboom #2 no-motion; verify K1 odom/velocity claims
+after user report of K1 drift + imprecision in odom/calib.
+
+**Done:**
+
+### Fleet verified healthy (end-state of the Yahboom saga)
+- Restart-order cure CONFIRMED: stack up first, THEN power-cycle robots —
+  2 XRCE sessions from different IPs (10.42.0.15 + 10.42.0.44), clean
+  `/blue_1` + `/blue_2` namespace split (1 publisher each, no collision),
+  both boards stream imu/odom_raw/battery, both robots driven by user.
+- RETRACTED: my "stale Fritzbox board config" and "namespace inversion"
+  theories — both were artifacts of single-robot observation. The
+  "never reconnects" root cause = boot-order timing (ESP32 sessions only
+  open when booting into an existing hotspot+agent).
+- Structural finding (measured live): sim twin vs physical divergence
+  blue_1 ~1.5m, blue_2 ~0.6m — open-loop mirror by architecture; nothing
+  consumes `/blue_N/odom_raw` (0 real subscribers). Consequence:
+  evaluator waypoint advance fires on SIM arrival, physical lags →
+  sequence desync on the floor.
+
+### K1 odom vendor audit — folklore-discipline instance #2 (user claim verified)
+- User claims verified against docs.booster.tech (Low-Level Topics):
+  1. Booster NEVER exposes odom as plain ROS 2 topic. `rt/odometer_state`
+     = SDK-internal DDS channel (booster_interface::msg::Odometer, SDK
+     ChannelSubscriber only). Our relays subscribe a `/odometer_state`
+     that does not exist on the robot → `/Kev1n/odometer_state` = silent
+     placeholder, zero logged data observations ever.
+  2. Only ROS-standard path: `rt/odom` (nav_msgs/Odometry) via the ROS
+     bridge, fw ≥ v1.7.1.0. Kev1n firmware = **v1.7.2.0** (user-verified,
+     booster-cli) → gate GREEN, on-robot probe still open.
+  3. "LowState IMU already relayed" (mgt_v68) = false — no LowState leg in
+     either relay.
+  4. No odom query RPC exists (kResetOdometry 2031 only).
+- Adjacent bridge bug found: K1 gets sim-tuned velocities (yaw ≤ 2.5 rad/s
+  gain 3.0, binary vx 0.8/0.2, no braking — bridge :531-552) vs vendor
+  reference `move_controller.hpp` (yaw ≤ 1.0 gain 1.2, two-phase,
+  crawl braking, 0.20m tolerance). Independent drift/imprecision cause.
+- Full audit: `docs/plans/v68_pre_ifa/k1_kick_head_vendor_audit.md` §5.
+
+### Replan (user directive: Yahboom first — cheaper, less risk, live calib)
+- Step 1 (this entry): documentation truth-fix — folklore annotated in
+  place (strike-through + audit pointer), NOT deleted.
+- Step 2 (next): Yahboom hardware-closed loop, flag-gated
+  (R2K_HW_CLOSED_LOOP), shared seams so K1 plugs in later: odom_topic
+  contract (nav_msgs/Odometry), alignment module, velocity-profile
+  dispatcher. Sim-puppet sync so Worldstate/LLM/evaluator see physical
+  truth. Validation: both Yahbooms, arrival error < 0.1m.
+- Step 3: K1 probe on Kev1n (rt/odom live? velocity ladder 0.1→0.8 m/s).
+- Step 4: K1 fixes (vendor velocity profile, relay rewire to rt/odom if
+  probe positive, launch K1-gate semantics).
+
+### Step 2 design Q&A (saved for recall, 2026-09-04 — implementation not started)
+
+**Q1 — Digital twin semantics: who overrides whom?**
+- Flag ON (demo/calib): flow is ONE-WAY: `odom_raw → bridge (aligned to
+  field frame) → SetEntityState overwrites the sim twin`. The sim NEVER
+  writes into the robot's odom.
+- Flag OFF (matches, today): sim = independent reference model, hardware
+  mirrors open-loop — not a twin, a puppet-master. Full sim physics.
+- Flag ON + hardware fresh: sim twin = DISPLAY of physical truth (a real
+  digital twin); that bot's Gazebo physics is BYPASSED (pose overwritten
+  each tick); ball + red/pure-sim bots KEEP their physics.
+- Explicit trade-off: cannot have Gazebo physics AND truth-display for the
+  same bot — puppet wins by design; flag stays OFF for matches (axiom 2
+  untouched there).
+
+**Q2 — Yahbooms offline, only K1 online?**
+- Step 2 as shipped (K1 has no odom_topic yet): blue_1/blue_2 entries fall
+  back on odom staleness (>0.5s) → sim-pose PID, puppet-sync off → behaves
+  EXACTLY like today (Gazebo self-simulates; K1 mirrors blue_1 open-loop
+  with the too-fast profile until Step 4).
+- Fallback is PER ENTRY: no feedback source → that entry open-loop. All
+  entries stale → full sim. Graceful by construction.
+- After Step 4 (probe positive, k1_bot gets odom_topic): K1 = blue_1's only
+  fresh feedback → K1 closed loop + blue_1's sim twin puppeted to the K1's
+  pose — single-robot closed-loop demo, zero new concepts.
+
+**Multi-mirror conflict (blue_1 is mirrored by BOTH yahboom + k1_bot in
+hardware_mirror.json) — PROPOSED precedence rule, PENDING user confirmation:**
+1. Per-entry closed loop: each entry with fresh odom computes its OWN
+   velocities toward the shared target — each physical robot arrives
+   independently (own loop, own gait/speed profile).
+2. Puppet precedence: per sim bot, freshest odom wins; tie → first entry in
+   relay order (yahboom blue_1 before k1_bot).
+3. Sim twin also receives the yahboom Twist on the shared cmd_vel topic —
+   harmless, SetEntityState overwrites the physics result each tick.
+
+**Open decision to resolve before Step 2 implementation:** confirm the
+precedence rule above.
+
+**Files touched:**
+- `docs/plans/v68_pre_ifa/k1_kick_head_vendor_audit.md` — §5 odom audit (NEW)
+- `docs/plans/v68_pre_ifa/mgt_v68.md`, `mgt_demo_ifa.md`, `plan_v68.md`,
+  `docs/plans/v7/mgt_v7.md`, `plan_v7_coarse.md` — folklore annotations
+- `user doc/rosk2_technical_documentation/4_06_SPECIFICATION_BoosterK1_Integration.md` — PRODUCTION-API claim corrected
+- `utils/ros2_relay/README.md`, `internal_relay.py`, `external_relay.py` —
+  odom-leg marked non-functional placeholder (comments/README only, no
+  behavior change)
+- `launch_r2k.sh:320, :449` — comment: K1 gate = "relay alive", not odom
+- `docs/LESSONS_LEARNED.md` — K1 odom folklore entry + rule extensions
+  (topic existence ≠ data availability; TODO = unverified; suspect source
+  existence too, not just network)
+
+**Files deleted:** None.
+
+**Not yet done:**
+- Step 2 implementation (Yahboom closed loop) — approved plan, not started
+- K1 probe (Step 3) + K1 fixes (Step 4)
+- Commit of all session changes
+
+**Next:** Confirm the multi-mirror precedence rule (see design Q&A above),
+then Step 2 — bridge changes behind R2K_HW_CLOSED_LOOP flag + odom_topic
+relay entries + alignment + sim-puppet sync + unit tests, then live
+validation with both Yahbooms. (Session topic changed by user 2026-09-04 —
+new topic pending.)
+
+**Blockers:** None (fleet online and healthy).
+
+## 2026-08-31 (cont.) — PS4 teleop bring-up + Yahboom #2 no-motion diagnosis
+
+**Goal:** Get PS4 (ESM 9013 Pro) teleop working in demo mode with
+`hardware_mirror`; diagnose why Yahboom #2 physically never moves.
+
+**Done:**
+
+### Joy device passthrough fix (docker-compose.yml)
+- Symptom: `joy_enumerate_devices` empty inside container although host had
+  `/dev/input/js0` ("Gamepad"). Root cause: no device passthrough.
+- Fix: added `devices: - /dev/input/js0:/dev/input/js0` to the `gazebo_sim`
+  service (`core/src/docker-compose.yml:19-20`). After `docker compose down/up`,
+  enumerate works. NOT committed yet.
+- Process drift note: each `docker compose up` wipes manually-started
+  joy_node/ps4_teleop — they must be re-started via `docker exec` after every
+  container recreate. joy_node has NO launch file on Humble — use
+  `ros2 run joy joy_node` (a `ros2 launch joy joy_node.launch.py` attempt
+  fails: file does not exist in the package).
+
+### ESM 9013 Pro button mapping (differs from DS4)
+- Live-verified by user: Engage = **Back** button (not PS), shoulders unmapped,
+  drive works **without** deadman. `ps4_teleop.py` constants (BTN_ENGAGE=10,
+  deadman axis 5, L1/R1 select) still DS4 defaults — NOT yet adapted.
+  Bot selection via teleop is therefore impossible on this pad (no L1/R1).
+
+### Demo coordinate fast-path (explained, not a bug)
+- `calib_cli.py` now prints "instant Move (coordinate fast-path, no compiler)"
+  for explicit coords — uncommitted `COORD_FASTPATH_RE` (calib_cli.py:69)
+  mirrors `r2k_evaluator.DEMO_COORD_RE`; CLI no longer waits for the 7B
+  compiler on coordinate tasks. Introduced post-`f43d5b3`, intentional.
+
+### Yahboom #2 no-motion diagnosis (read-only, root cause narrowed)
+- **First claim was WRONG and corrected:** `/blue_2/odom` is published by the
+  Gazebo sim twin (`blue_bot_diff_drive`) — I initially read it as proof the
+  physical robot reached (3,3). Physical robot publishes `/blue_2/odom_raw`.
+  Lesson captured in LESSONS_LEARNED.md ("Sim odom vs robot odom_raw trap").
+- Evidence chain: task `blue_2 go to 3,3` → strategy → bridge →
+  `/blue_2/cmd_vel` (sim twin executed; robot datareader exists via agent) —
+  but robot's board-derived topics (`imu`, `odom_raw`, `battery`) echo
+  NOTHING for 8s+, endpoints registered. Exactly ONE XRCE client
+  (0x71272B2B, = robot #2's Pi5) since agent boot 12:42; robot #1 never
+  connected (no `/blue_1/battery|imu|odom_raw|servo_*` at all).
+- **Conclusion: Pi5 #2↔motor-board link dead or board power/config off**
+  (per the config-registers-first discipline). cmd_vel arrives at the Pi5;
+  motors never actuate. Robot #1: simply powered off/not connected.
+- Stack-level wiring verified healthy (bridge/evaluator/tracker/aggregator
+  running; relay mapping correct). No host-side fix required.
+
+### Housekeeping
+- Reset stale `teleop_state.json` (`active:true, bot:blue_1`, ~3 days old,
+  ts 1788210077) → `active:false`. Inert today (bridge teleop logic was never
+  finished — only constants `TELEOP_STATE_PATH`/`TELEOP_HEARTBEAT_S` exist at
+  ollama_sandbox_bridge.py:84-85) but a trap once the override lands.
+- LESSONS_LEARNED.md: new "Sim odom vs robot odom_raw trap" entry (publisher
+  node check + XRCE-session-alive ≠ board-link-alive + 3-state diagnostic
+  shortcut absent/half-up/healthy).
+
+**Files touched:**
+- `core/src/docker-compose.yml` — joy device passthrough (uncommitted)
+- `core/docs/LESSONS_LEARNED.md` — odom trap lesson
+- `core/docs/SESSION_CHANGELOG.md` — this entry
+- `core/src/shared_state/teleop_state.json` — stale-engaged reset (runtime)
+
+**Files deleted:** None.
+
+**Not yet done:**
+- Robot #2 hardware-side fix (user at robot): Pi5 app restart / board power /
+  serial / `config_robot2` registers; verify via board data streaming, then
+  retest `blue_2 go to 1,1`.
+- Robot #1 bring-up (user switched it off; was never connected this session).
+- `ps4_teleop.py` adaptation to ESM 9013 Pro (Back=engage, no shoulders —
+  needs alternative bot-select scheme, e.g. D-pad or face buttons).
+- Bridge teleop override implementation (constants exist, logic never
+  finished) + heartbeat staleness check (`TELEOP_HEARTBEAT_S`).
+- Commit of the session's changes.
+
+**Next:**
+1. User restores robot #2 board link → verify `imu`/`odom_raw`/`battery`
+   stream → retest `blue_2 go to 1,1`
+2. Adapt `ps4_teleop.py` to the ESM 9013 Pro map (user reads indices live via
+   `ros2 topic echo /joy`)
+
+**Blockers:** Robot #2 board link is a hardware-side issue — no host-side
+action can fix it. Docker registry DNS failure (`registry-1.docker.io`
+server misbehaving) blocks any image pulls — workaround: use local images only.
+
+---
+
+## 2026-08-31 — Docker compose file path error (recurring mistake)
+
+**Goal:** User attempted `docker compose up -d` from `core/` directory, got error
+"no configuration file provided: not found". This is a recurring mistake.
+
+**Root cause:** `docker-compose.yml` lives in `core/src/`, NOT `core/`. The thin
+wrapper `core/` is the repo root; `core/src/` is the runtime CWD where the
+Dockerfile, compose file, and all ROS 2 nodes live.
+
+**Done:**
+- Verified: `find /home/r-zwei-kickers/R2K-HSL -name "docker-compose*.yml"` → only
+  `/home/r-zwei-kickers/R2K-HSL/core/src/docker-compose.yml` exists
+- Confirmed containers already running (`core_gazebo` Up 2 hours)
+- Documented in LESSONS_LEARNED.md (see below)
+
+**Files touched:**
+- `core/docs/SESSION_CHANGELOG.md` — this entry
+- `core/docs/LESSONS_LEARNED.md` — added "Docker compose file path" lesson
+
+**Not yet done:** None — containers already running, no code changes needed.
+
+**Next:** User should run `cd core/src && docker compose up -d` in future, or
+use `launch_r2k.sh` which handles the directory change automatically.
+
+**Blockers:** None.
+
+---
+
+## 2026-08-27 — GUI POC: bug triage, architecture redesign, requirements docs, opencode team package
+
+**Goal:** Fix the first-shot GUI bugs (scenario mismatch, DONE failure, GPU leak),
+then design the v6.7 GUI POC architecture with the team workshop input, produce
+requirements + implementation plan documents, and package opencode config for
+team distribution.
+
+**Done:**
+
+### Bug fixes in ws_backend.py (first-shot GUI, NOT committed yet — POC code)
+
+- **n_vs_m → 2vs2 scenario mismatch:** Root cause: `setup_r2k.py` exit(1) on
+  invalid scenario left stale `active_scenario.json` → gzserver spawned old bots.
+  Fix: `/launch` now validates scenario file on disk before any state mutation
+  and removes stale `active_scenario.json` in teardown (`ws_backend.py:260-300`).
+- **DONE not terminating:** Root cause: `handle_done` killed processes but never
+  sent `keep_alive:0` to Ollama → model stayed in VRAM for 30 min. Fix:
+  `_unload_ollama_model()` queries `/api/ps` and sends `keep_alive:0` for each
+  loaded model (`ws_backend.py:168-192`). Also kills `server.js 8080` (GZWeb
+  gzbridge) which was consuming 199% CPU and keeping GPU pipeline busy.
+- **GPU >25% after DONE:** Root cause: (1) Ollama model not unloaded (above),
+  (2) gzbridge not killed, (3) unload targeted `172.17.0.1` instead of
+  `127.0.0.1` (container uses `network_mode: host`). Fix: unload queries
+  `127.0.0.1:11434/api/ps` and unloads ALL loaded models, not just the tracked
+  one (handles demo compiler loading `qwen2.5:7b` alongside executor `3b`).
+- **Dropdown resets to 2vs2:** Root cause: `loadCatalog()` hardcoded
+  `2vs2_default` as `selected`; `location.reload()` re-ran `loadCatalog()`.
+  Fix: reactive store (in requirements doc) replaces `location.reload()`;
+  `localStorage` persists last selection. Not yet implemented — documented in
+  the POC requirements as a design decision.
+- **`_current_model` NameError:** Root cause: module-level global lost during
+  iterative edits to `ws_backend.py`. Fix: state machine with typed dataclass
+  replaces bare globals (in requirements doc, not yet implemented).
+
+**Files touched (bug fixes):** `core/src/tools/ws_backend.py` (NOT committed —
+POC code, will be replaced by `r2k_supervisor.py`), `core/launch_gzweb.sh`
+(Ollama unload in cleanup).
+
+### Architecture redesign: ws_backend.py → r2k_supervisor.py
+
+- Identified 6 systemic fragilities in the first-shot GUI (pkill race
+  conditions, stale state across layers, global variable fragility, Ollama
+  model not unloaded, gzbridge consuming GPU, browser caching).
+- Designed replacement: `r2k_supervisor.py` — single asyncio process with
+  PID-tracked ProcessManager, StateMachine (IDLE→LAUNCHING→RUNNING→
+  TEARING_DOWN), HealthMonitor, file-bus watcher. No pkill anywhere.
+- 14 design decisions locked (see requirements doc §5):
+  - 3D Scene: Keep GZWeb (PoC passed N4)
+  - Supervisor: New file (ws_backend.py stays as fallback)
+  - Frontend: Vanilla JS + reactive store, 3 files (index.html + style.css + app.js)
+  - Build sequence: Clean build, no patches
+  - opencode: Direct Ollama dialogue, opencode integration deferred
+  - System Tree: Sidebar liveness dots + detail panel (follow-up)
+  - AI Navigation: Toasts + button highlighting + assistant panel (follow-up)
+  - Reboot: One-click bring-up per dead subsystem
+  - Ruleset: KISS — minimal scope, don't build what's not needed
+  - Assistant: META-ROUTER based, one assistant (not per-submodule)
+  - Homepage: Approved (commits + health + runs + quick launch + digest)
+  - JS files: Split into 3 (index.html + style.css + app.js)
+  - Build scope: Core first (supervisor + frontend + homepage + health),
+    features later (system tree, toasts, assistant, SSE, replay)
+
+### Team workshop notes integration
+
+- Analyzed workshop notes (hackathon): three-pillar structure (Deployment/
+  Simulation/Core), dashboard as homepage, Trello, W&B, reboot management,
+  scalability, ruleset-aware filtering, system prompts per submodule.
+- User clarification: NO W&B (ADR-A03 stays rejected). Three pillars deferred
+  (focus on Simulation only). No Trello yet. Two-level nav after pillars.
+- KISS interpretation for ruleset: don't build features the ruleset/workflow
+  doesn't need. No competition/development toggle, no data suppression.
+
+### v7 use cases (UC11–UC17, to be discussed)
+
+- 7 future-oriented use cases: system prompt improvement, candidate LLM
+  evaluation, fast text probing, in-depth benchmark analysis, world model
+  extension, eye-in-the-sky calibration, video recording review.
+- 3 AI integration modes: Supervisor (passive monitoring), Copilot
+  (interactive dialogue), Analyst (offline mining). All marked "To Be
+  Discussed" in the requirements doc.
+- 6 additional v7 candidates: TeamCaptain, robot-to-robot comms, STT voice,
+  K1 image recognition, scalability, full reboot automation.
+
+### opencode team package
+
+- `docs/opencode-team-package.tar.gz` (3.9 KB) — config + model favorites
+  for team distribution. Contains:
+  - `config/opencode.json` — 4 providers (Ollama, OpenRouter, Uni Mainz,
+    Ollama Cloud). Ollama Cloud key included (shared team key). Other 3
+    keys sanitized to `<YOUR_*_KEY_HERE>`.
+  - `config/opencode.jsonc` — Google provider, key sanitized.
+  - `share/model.json` — 11 model favorites (3 local Ollama, 4 Ollama Cloud,
+    2 Uni Mainz, 1 OpenRouter, 1 Google).
+  - `project-opencode/opencode.json` — repo-root instructions pointer.
+  - `install.sh` — copies configs, checks for opencode binary, prints
+    which keys need filling + provider signup links.
+  - `README.md` — setup instructions, provider signup links, model table.
+- Verified: no leaked keys except the intentional Ollama Cloud shared key.
+
+**Files touched (docs):**
+- `docs/gui_v67_discussion.md` — annex additions (N1 feasibility, N3-N7)
+- `docs/model_selection_strategy.md` — v1.3→v1.4 change log, gotcha #3
+- `docs/SESSION_CHANGELOG.md` — this entry
+- `docs/gui_v67_poc_requirements.md` (NEW) — requirements + design decisions
+- `docs/gui_v67_poc_implementation_plan.md` (NEW) — implementation plan
+
+**New files (untracked):**
+- `docs/gui_v67_poc_requirements.md`
+- `docs/gui_v67_poc_implementation_plan.md`
+- `docs/opencode-team-package.tar.gz`
+- `docs/opencode-team-package/` (5 files: config, install.sh, README.md)
+- `launch_gzweb.sh` (GZWeb launcher — from 2026-08-26 session, untracked)
+- `src/docker-compose.gzweb.yml` (from 2026-08-26 session, untracked)
+- `src/Dockerfile.gzweb` (from 2026-08-26 session, untracked)
+- `src/tools/gui/index.html` (first-shot GUI, untracked)
+- `src/tools/ws_backend.py` (first-shot backend, untracked)
+- `src/tools/gzweb_inline_material.patch` (from 2026-08-26 session)
+- `src/tools/gzweb_probe.js` (from 2026-08-26 session)
+- `src/tools/setup_gzweb.sh` (from 2026-08-26 session)
+- `src/tools/hardware_mirror.json` (relay profile copy)
+- `docs/figures/n4_gzweb_colored.png` (from 2026-08-26 session)
+- `docs/figures/n4_gzweb_scene.png` (from 2026-08-26 session)
+
+**Files deleted:** None.
+
+**Not yet done:**
+- `r2k_supervisor.py` implementation (core build) — deferred to next session.
+  The bug fixes in `ws_backend.py` are NOT committed (POC code, will be
+  replaced). The requirements + implementation plan are ready.
+- System tree, toast notifications, assistant panel, SSE event stream,
+  replay view — all follow-up scope (documented in requirements §6).
+
+**Next:**
+1. Implement `r2k_supervisor.py` (core build, ~600 lines) per the
+   implementation plan.
+2. Implement `tools/gui/` frontend (3 files: index.html + style.css + app.js,
+   ~870 lines total).
+3. Change 1 line in `launch_gzweb.sh` to launch the supervisor.
+4. Test: 3vs3 launch, DONE, GPU unload, dropdown persistence, homepage.
+
+**Blockers:** None. The requirements and implementation plan are approved.
+The opencode team package is ready for distribution.
+
+---
+
+## 2026-08-26 — GZWeb PoC (GUI gate 1): PASSED + inline-material patch + codification
+
+**Goal:** Execute the GZWeb PoC defined in the GUI annex N4 (hardest embedding
+problem first): live Gazebo scene with moving bots visible in a browser, inside
+the existing Docker stack. On pass: codify into Dockerfile + tools.
+
+**Done:**
+- **Build (jammy, source):** gzweb NOT in apt (as the annex predicted); built
+  osrf/gzweb `93b6a6f` from source in container `core_gazebo`. Missing deps
+  found and installed: `nodejs`/`npm` (jammy 12.22/8.5), `libjansson-dev`
+  (cmake), `imagemagick` (cmake); `libgazebo-dev` already present. `deploy.sh
+  -m local` (npm install + grunt + cmake gzbridge + node-gyp + local model DB)
+  clean, ~10 min. GAZEBO_MODEL_PATH must be exported for the local model DB
+  (`/usr/share/gazebo-11/models`; sun + ground_plane only — robocup.world is
+  100% primitives).
+- **Run:** headless gzserver (robocup.world) + `json_spawner.py` with the
+  transient `active_scenario.json` (3v3: 6 bots + ball) + `gzbridge/server.js`
+  8080. Container is `network_mode: host` → port directly reachable.
+- **Acceptance evidence (all three legs):**
+  1. **Websocket data path** (`tools` probe in /opt/gzweb): `~/scene` delivers
+     all 19 models with poses; `~/pose/info` streams only moving entities
+     (blue_1 arc-drive -4.0,0 → -3.1,3.1 verified).
+  2. **Static render**: headless-Chrome (CDP-driven, `--use-angle=swiftshader`)
+     screenshot → green field 24.8% of frame, blue/red bot + goal-post clusters.
+  3. **Live motion in client scene graph**: CDP `Runtime.evaluate` — blue_2's
+     THREE.js position updates live (7m in 12s while driving).
+- **Upstream bug found + patched:** GZWeb renders inline SDF materials
+  (`<ambient>/<diffuse>/<specular>` without script names — our whole
+  robocup.world) WHITE: `parseMaterial` only reads material scripts. Patch adds
+  inline fallback (`{r,g,b,a}` objects → `[r,g,b,a]` arrays for `setMaterial`)
+  → floor renders `005b00` green. Patch: `src/tools/gzweb_inline_material.patch`,
+  applied in `gz3d/src/gziface.js`, bundle rebuilt via `grunt concat` (deployed
+  client is the unminified concat). Reverse-dry-run verified.
+- **Headless test artifact documented:** `Page.captureScreenshot`/`readPixels`
+  do NOT capture animated WebGL frames under software GL (SwiftShader) —
+  verified via forced `scene.render()` + identical captures while the scene
+  graph moved. Animation proof therefore uses the live scene-graph probe;
+  real browsers (rAF) are unaffected.
+- **Debugging detours worth recording:** (1) CDP target selection must filter
+  `type == 'page'` — `/json[0]` can be a chrome-extension background page
+  (symptom: canvasCount 0 on a loaded page). (2) `pkill -f <pattern>` kills
+  your own bash when the pattern appears in the command line (use
+  `pattern[x]`). (3) gzweb's `--timeout=N` headless flag is a MAX, not a wait —
+  screenshot fires at page load, before the websocket scene arrives.
+- **Codified:**
+
+## 2026-08-26 — GZWeb integration for demo mode
+
+**Goal:** Enable real-time GZWeb visualization during --demo calibration sessions
+
+**Done:**
+- Implemented `--gzweb` flag in `launch_r2k.sh:422-438` (starts websocket_server.py + GZWeb proxy)
+- Added Docker dependencies: `websockets` and `aiofiles` in `src/Dockerfile:17`
+- Created calibration CLI: `src/tools/calib_cli.py` (interactive demo control)
+
+**Files touched:**
+- core/docs/SESSION_CHANGELOG.md
+- core/launch_r2k.sh
+- core/src/Dockerfile
+- core/src/tools/calib_cli.py
+
+**New files (untracked):**
+- src/tools/ws_backend.py
+- src/tools/setup_gzweb.sh
+
+**Files deleted:**
+- (none)
+
+**Not yet done:**
+- Full end-to-end validation of GZWeb streaming (requires physical test)
+
+**Next:**
+- Verify websocket connection stability during 10-minute demo session
+
+**Blockers:**
+- GZWeb requires manual port forwarding in Docker compose config
+  - `src/Dockerfile` — apt deps added (nodejs npm libjansson-dev imagemagick)
+  - `src/tools/setup_gzweb.sh` (NEW) — idempotent: deps → clone → patch →
+    deploy; validated as a no-op against the live patched container
+  - `src/tools/gzweb_inline_material.patch` (NEW)
+  - `src/tools/gzweb_probe.js` (NEW) — headless websocket verification probe
+  - `launch_r2k.sh` — `--gzweb` flag: runs setup_gzweb.sh + starts server on
+    :8080 after bot spawning; curl retry loop (5×1s); teardown kills
+    `server.js 8080` before `docker compose down`; U22 guard (Docker-only).
+    End-to-end validated: `--gzweb --headless --duration 120` → build (~10min
+    first run) → `✅ GZWeb is live → http://localhost:8080` → clean teardown.
+  - Bug found: `setup_gzweb.sh` `set -euo pipefail` + `source ROS setup.bash`
+    → `AMENT_TRACE_SETUP_FILES: unbound variable` aborts deploy. Fixed: `set +u`
+    around the source, `set -u` after.
+  - `docs/gui_v67_discussion.md` — N4 marked PASSED with result table,
+    evidence screenshot, run instructions; appendix row 32
+  - `docs/figures/n4_gzweb_colored.png`, `n4_gzweb_scene.png` (NEW — evidence)
+
+**Files touched:**
+- core/launch_r2k.sh — `--gzweb` flag + teardown + U22 guard
+- core/src/Dockerfile
+- core/src/tools/setup_gzweb.sh (NEW)
+- core/src/tools/gzweb_inline_material.patch (NEW)
+- core/src/tools/gzweb_probe.js (NEW)
+- core/docs/gui_v67_discussion.md (N4 + appendix)
+- core/docs/figures/n4_gzweb_colored.png, n4_gzweb_scene.png (NEW)
+- core/docs/SESSION_CHANGELOG.md — this entry
+
+**Files deleted:** (none)
+(model_selection_strategy.md modified = pre-existing uncommitted v1.4 edits)
+
+**Not yet done:**
+- Commit of the session's work (user chose not to commit before opencode restart)
+- GUI shell build (dockview + file-bus backend) — the actual widget work, now
+  unblocked by gate 1 + the `--gzweb` flag
+- v7 TeamCaptain Slice 3 (closest-bot + goalie gating) — the other major thread
+  (user was presented the choice: GUI gate 2 vs TeamCaptain Slice 3; not yet picked)
+
+**Next:**
+1. Commit the session's work (launch_r2k.sh --gzweb, setup_gzweb.sh, patch, probe,
+   annex N4, figures, changelog) — one coherent change on a `feature/` branch
+2. User picks thread: GUI gate 2 (file-bus WebSocket backend + dockview shell)
+   OR v7 TeamCaptain Slice 3 (closest-bot + goalie gating CPU-side)
+3. If GUI: the `--gzweb` flag is the foundation; gate 2 is ~100 lines Python
+   (file-bus backend tailing Worldstate/strategy/traces → browser WebSocket)
+
+**Blockers:** None. GPU idle, no production changes (bridge/evaluator untouched;
+Dockerfile adds 4 apt packages; container /opt/gzweb is ephemeral and rebuilt by
+setup_gzweb.sh).
+
+---
+<!-- Stub generated by session_entry.sh on 2026-08-26 -->
+<!-- Branch: feature/gzweb-experimental | Modified: 4 | New: 10 | Deleted: 0 -->
+<!-- Last commits:
+  5996a91 docs: changelog archival protocol, edge-LLM K1 proposal, session entries, opencode instruction trim
+  5e786a2 chore: re-baseline kpi_targets to v6.7 final benchmark
+  034c61a data: v6.7 final benchmark raw results (n=100 random-draw)
+-->
+
+## 2026-08-26 (cont.) — GZWeb experimental container + K1 DDS diagnosis
+
+**Goal:** Two threads. (1) Diagnose why the K1 (Kev1n) topics were missing from
+the host while Yahboom worked. (2) Stop the repeated ~10-min GZWeb apt+build
+on every `--gzweb` run by isolating GZWeb into its own experimental container
+on a feature branch (no production risk).
+
+**Done:**
+- **K1 DDS root cause (diagnosis, no code change):** Kev1n's
+  `external_relay.py` runs on the robot; host only saw `/Kev1n/LocoApiTopicReq`
+  (host bridge publishes it) but not Resp/odometer_state (robot-published).
+  `ros2 topic info -v` showed `Subscription count: 0` — robot invisible to
+  host DDS. Root cause: **FastDDS picks the default-route NIC for its unicast
+  locator.** Plugging in LAN made ethernet (10.0.5.58) the default route; K1
+  (WiFi 10.42.0.122) discovered the host via multicast (host joins 239.255.0.1
+  on all NICs) but couldn't send data back to the ethernet IP. Yahboom
+  unaffected because micro-ROS XRCE-DDS is UDP **unicast** to the agent's
+  hardcoded `10.42.0.1:8888` — no multicast-routing dependency. Fix = cut LAN
+  cable + reboot (user did this; K1 connected). Permanent fix options
+  documented: FastDDS interface whitelist (profile.xml) or Discovery Server.
+  NOT an RMW/domain mismatch (both sides domain 0; relay services fine).
+- **GZWeb container isolation (the main deliverable):**
+  - **Root cause of repeated apt+build:** Docker image was stale (built
+    2026-07-25, Dockerfile edited 2026-08-26) — `npm`/`node`/`convert`/
+    `libjansson-dev`/`websockets`/`aiofiles` all MISSING from the running
+    image despite Dockerfile listing them. Plus `docker compose down`
+    (launch_r2k.sh:386, every run) wipes `/opt/gzweb` (outside the volume).
+  - **Solution: separate container `r2k_gzweb` on branch
+    `feature/gzweb-experimental`.** New files: `Dockerfile.gzweb` (production
+    Dockerfile + GZWeb apt deps + websockets/aiofiles + GZWeb cloned/patched/
+    deployed at **build** time — zero runtime apt), `docker-compose.gzweb.yml`
+    (service `gzweb_sim`, `container_name: r2k_gzweb`, network_mode:host,
+    ipc:host, named volume `gzweb_data:/opt/gzweb`), `launch_gzweb.sh`
+    (~230-line minimal launcher: real AI match with `only_sim_bots` relay +
+    gzbridge:8080 + ws_backend:8765; no hardware sync/micro-ROS/hotspot/--relay;
+    --scenario/--strategy/--model/--explain/--headless/--no-visualizer/
+    --duration/--demo pass-through).
+  - **Production `launch_r2k.sh` reverted:** the `--gzweb` block (lines 20,
+    52, 66, 268-271, 421-438) + the broken `tools/websocket_server.py`
+    reference removed. `git diff` vs main = 0 lines. Production path pristine.
+  - **ws_backend.py comment** updated (references launch_gzweb.sh, not the
+    removed --gzweb flag).
+- **Verification:** `bash -n` on both launchers (syntax OK); `docker compose
+  -f docker-compose.gzweb.yml config` (valid); fast pytest 504 passed, 20
+  failed (all in test_i3_sweep.py — confirmed identical on `main`, pre-existing
+  v7 work, NOT caused by this session).
+
+**Files touched:**
+- core/launch_r2k.sh — `--gzweb` block reverted (zero diff vs main)
+- core/launch_gzweb.sh (NEW) — minimal GZWeb experimental launcher
+- core/src/Dockerfile.gzweb (NEW) — production + GZWeb baked in at build
+- core/src/docker-compose.gzweb.yml (NEW) — r2k_gzweb service + volume
+- core/src/tools/ws_backend.py — comment updated (launch_gzweb.sh reference)
+
+**Files deleted:** (none)
+
+**Not yet done:**
+- Docker image build (`docker compose -f docker-compose.gzweb.yml up -d --build`,
+  ~15 min one-time) — not run this session (user shutting down PC).
+- End-to-end smoke test: `./launch_gzweb.sh --headless --duration 30` →
+  browser http://localhost:8080 shows scene + ws://localhost:8765 streams.
+- Gate 2 (dockview shell HTML/ES-module + panel widgets) — not started.
+- Commit of this session's work (user will commit).
+
+**Next:**
+1. Build the image: `cd core/src && docker compose -f docker-compose.gzweb.yml up -d --build` (~15 min)
+2. Smoke test: `./launch_gzweb.sh --scenario 2vs2_default --headless --duration 30`
+3. Commit on `feature/gzweb-experimental` (launch_gzweb.sh, Dockerfile.gzweb, docker-compose.gzweb.yml, ws_backend.py comment, launch_r2k.sh revert, changelog)
+
+**Blockers:** None. Ollama must be running (`OLLAMA_HOST=0.0.0.0 ollama serve`)
+for the AI match; the container reaches it via network_mode:host.
+
+## 2026-08-25 (cont.3) — HTML GUI feasibility annex (Spotify-style shell, GZWeb gate 1)
+
+**Goal:** User wants a PoC for an HTML GUI (Spotify-style docked widgets). Before
+any code: document feasibility as an annex in the GUI discussion doc. Executed on
+GLM 5.3 per model-selection strategy (complex coding mnemonic — recommended for
+this session, user confirmed via /models).
+
+**Done:**
+- **ANNEX section (N1–N7) added to `docs/gui_v67_discussion.md`** (placed between
+  EDGE and APPENDIX, per task spec — 2 file writes, no code, no Docker changes):
+  - **N1 verdict + embedding matrix** (14 widgets): ~80% of the B0–B5 wished
+    widgets are file-bus-native (zero ROS in browser); Gazebo 3D → GZWeb iframe
+    (native web client for Gazebo Classic 11); Gazebo camera → MJPEG via
+    web_video_server; visualizer re-rendered natively (NOT streamed matplotlib);
+    rqt_graph → custom simplified view or defer; RViz2 deferred (no TF today).
+  - **N2 file-bus insight:** Worldstate.json 10 Hz, current_strategy.json
+    ~1.5 Hz, trace jsonl — the decoupling axiom (agent axiom 3) already IS a
+    message bus; a small observe-only WebSocket backend (mtime + content hash,
+    the evaluator's own pattern) covers ~80% of widgets; live view and replay
+    become the same widget.
+  - **N3 hybrid three-layer architecture** with mermaid diagram (browser shell
+    dockview / file-bus backend / opt-in ROS bridges); docker-compose already
+    runs network_mode: host → bridge ports directly browser-reachable.
+  - **N4 GZWeb PoC = gate 1:** hardest embedding problem first; osrf/gzweb
+    source build (apt availability on jammy to be verified in PoC); fallbacks
+    camera-sensor MJPEG (colcon rebuild) then noVNC of gzclient on :1;
+    acceptance = live scene in browser with moving bots; est. 1-2h. Argument:
+    gzclient runs LIBGL_ALWAYS_SOFTWARE=1 — GZWeb moves rendering into the
+    browser GPU (laptop plausibly gets lighter).
+  - **N5 safety:** GUI observes only; 0.2s watchdog/teardown stays authoritative;
+    stack control via launch_r2k.sh wrapper; write paths (B1 fragment editor,
+    B5 task_input) are separate later gates.
+  - **N6 two whiteboard cards pre-answered** (evidence, not decisions): A4
+    "embed external tools" — iframes make option B concrete; "one GUI vs.
+    family" — one shell, docked modes (role sidebar switches presets).
+  - **N7 frontend choice:** no-build vanilla HTML/ES modules + dockview (MIT)
+    via CDN now; React+Vite documented as growth path.
+- **Cross-references added** from B0 (role matrix → ~80% file-bus-native) and
+  A4 (external tools → iframes make B concrete); appendix visual list row 31
+  added for the N3 mermaid.
+- **Model recommendation for the PoC coding session:** GLM 5.3 (complex coding)
+  for the annex (done, this session); the GZWeb PoC itself is Docker/build work —
+  32B coder or GLM 5.3 both viable when it starts.
+
+**Files touched:**
+- core/docs/gui_v67_discussion.md — ANNEX N1–N7 + B0/A4 cross-refs + appendix row 31
+- core/docs/SESSION_CHANGELOG.md — this entry
+
+**Files deleted:** (none)
+(model_selection_strategy.md shows as modified from the earlier /models session —
+pre-existing uncommitted v1.4 edits, not touched here.)
+
+**Not yet done:**
+- GZWeb PoC (gate 1, est. 1-2h) — first execution task when the team green-lights
+  (or earlier on explicit user go)
+- Team discussion of gui_v67_discussion.md incl. the annex (decision half of the
+  whiteboard cards stays open)
+- Widget build order after gate 1 (file-bus backend + dockview shell first)
+
+**Next:**
+1. GZWeb PoC: extend Docker image, verify jammy build path, acceptance = live
+   scene with moving bots in the browser
+
+**Blockers:** None. No code or Docker changes in this step (pure documentation).
+
+---
+<!-- Stub generated by session_entry.sh on 2026-08-25 -->
+<!-- Branch: main | Modified: 2 | New: 0 | Deleted: 0 -->
+<!-- Last commits:
+  5996a91 docs: changelog archival protocol, edge-LLM K1 proposal, session entries, opencode instruction trim
+  5e786a2 chore: re-baseline kpi_targets to v6.7 final benchmark
+  034c61a data: v6.7 final benchmark raw results (n=100 random-draw)
+-->
+
 ## 2026-08-25 (cont.2) — JSON-mode kick quality benchmark: 3B geometry blind spot confirmed live
 
 **Goal:** User reported poor 3B text output quality during an `--explain --analyze`
@@ -2786,3 +4639,916 @@ deferred to post-v6.7.
 - `docs/proposal_edge_llm_k1.md` (NEW)
 
 **Not yet done:** everything queued behind v6.7 benchmark completion + commit.
+
+## 2026-08-27 (cont.) — opencode favorites v1.5: OpenRouter special offers + automation
+
+**Goal:** Add 3 OpenRouter special-offer models to the favorites, fix the
+deployment (state file + whitelist both needed), shorten mnemonics to "offer:",
+reorder (auto after offers), and automate the periodic offer scan.
+
+**Done:**
+- 3 special offers added (checked OpenRouter catalog, benchmarks, pricing):
+  `z-ai/glm-5.3-flash` (50% off, expires Sep 9 16:00 UTC — $0.075/$0.25,
+  Programming #21), `meta/muse-spark-1.2-contributor` ($0.10/$0.20, trains on
+  data — no API keys), `nvidia/nemotron-3-ultra-550b-a55b:free` (10s latency,
+  79% uptime — emergency only). Total favorites 11 → 14.
+- Deployment fix: favorites were invisible because (a) the live state file
+  `~/.local/state/opencode/model.json` was never updated and (b) gotcha #3 —
+  the 3 models were not in the LIVE config whitelist
+  `~/.config/opencode/opencode.json`. Both fixed; `/tmp/restore_favorites.py`
+  (ephemeral) preserves the variant map on cold restore.
+- Mnemonics shortened "special offer for ..." → "offer: ...";
+  `@preset/ros2k-auto` moved to position 4 (after the 3 offers).
+- Offer-check automation: `tools/offer_check.py` (NEW) — guarded scanner
+  (pgrep TUI guard + 24h interval + seen-ledger), OpenRouter API pricing
+  (per-token → per-1M conversion), free/cheap thresholds as constants,
+  report at `~/.local/state/opencode/offer_report.md`, `--auto-add` flag.
+  Triggers: bash function `opencode()` in `~/.bashrc` (pre-launch) + cron
+  `17 9 * * *` (user crontab, logs to offer_cron.log). Plugin hook rejected:
+  fires after TUI boot → flush-revert gotcha.
+
+**Files touched:**
+- `docs/opencode-team-package/config/opencode.json` — 3 whitelist + models entries, "offer:" names
+- `docs/opencode-team-package/share/model.json` — 14 favorites, reorder
+- `docs/opencode-team-package/README.md` — count 14, 3 OpenRouter rows
+- `docs/model_selection_strategy.md` — v1.5: changelog, preview, deployment lesson, automation §
+- `tools/offer_check.py` (NEW)
+- `docs/SESSION_CHANGELOG.md` — this entry
+- Outside repo: `~/.config/opencode/opencode.json` (live whitelist/models),
+  `~/.local/state/opencode/model.json` (reorder), `~/.bashrc` (wrapper fn),
+  user crontab (daily line)
+
+**Not yet done:**
+- First-inventory review: 62 free/cheap candidates in `offer_report.md`
+  need triage (promote/ignore) — ignoring = automatic via seen-ledger
+- GLM 5.3 Flash 50% off expires Sep 9 — revisit favorites then
+- `--auto-add` adds models with unverified tool-calling — human review
+  still required before relying on auto-added favorites
+- Team tarball `opencode-team-package.tar.gz` not yet rebuilt from the
+  updated package dir
+
+**Next:**
+1. User opens a NEW shell + `opencode` → verify 14 favorites, "offer:" names,
+   auto at position 4
+2. Triage `~/.local/state/opencode/offer_report.md` (62 candidates)
+
+**Blockers:** None. Wrapper/cron active. Current session's TUI still has the
+pre-rename in-memory copy — favorites order fixes apply on next fresh launch
+(restore script re-run if needed).
+
+**Correction (same day):** cron backstop removed (was the only crontab entry,
+now empty). The ~/.bashrc wrapper alone covers idle days via catch-up fetch;
+cron's only benefit was saving 2-5s on the first launch back. Strategy doc
+automation section updated accordingly.
+
+**Addendum (same day):** offer maintenance automated in `tools/offer_check.py`:
+offers (config-name prefix `offer:`) are re-validated against live API pricing
+on every check run — expired (price above thresholds / delisted) offers are
+auto-removed from whitelist + favorites, cap `MAX_OFFER_ENTRIES = 3` evicts the
+oldest offer. Wrapper in `~/.bashrc` now shows script output ("looking for
+special offers ..." on fetch, silent on guard skips). Verified: today's 3
+offers active; simulated post-promo price + delisting correctly flagged.
+
+**Addendum 2 (same day):** auto-promotion implemented per user decision
+(D1b/D2/D3 reviewed in chat). `tools/offer_check.py`: `--auto-add` flag
+replaced by default-on auto-add (`--no-auto-add` to opt out). Quality gate:
+`tools` in supported_parameters + context >= 256K (MIN_CONTEXT_TOKENS) +
+vendor/slug blocklist (sao10k/gryphe/anthracite-org, hy-mt, -rp-) + price.
+D3 ranking: free first, then cheapest output. Slot-limited: only free offer
+slots filled; waiting candidates retry next check (seen-ledger records only
+added slugs). D1b: reviewed offers ("offer:") eviction-proof; auto offers
+FIFO-evict each other. Verified: gate 62->34 eligible on live catalog;
+temp-file cap simulation correct; TUI-guard silence intact. Current state:
+3 reviewed offers fill the cap -> nothing auto-adds today; first slot frees
+when glm-5.3-flash promo expires Sep 9 (auto-expiry).
+
+## 2026-08-27 (cont.2) — GUI v6.7 POC core build + launch-blocker fix
+
+**Goal:** Implement `gui_v67_poc_implementation_plan.md` steps 1-5 (supervisor,
+frontend, launcher) + fix the root-owned-transient-files launch blocker.
+
+**Done:**
+- Launch blocker: GUI container (root) had written `ai_tactics/*.json` + 
+  `system_prompt.txt` root-owned → native `launch_r2k.sh` crashed with
+  PermissionError at `setup_r2k.py:157`. Fix: removed root-owned files (dir is
+  user-owned → rm works without sudo) + pre-flight guard in `setup_r2k.py:155-172`
+  (unlink unwritable transient files; actionable chown hint if unlink fails).
+- `src/tools/r2k_supervisor.py` (NEW, ~700 lines): ProcessManager (PID-tracked,
+  per-child logs in /tmp/supervisor_<name>.log), Supervisor state machine
+  (IDLE/LAUNCHING/RUNNING/TEARING_DOWN), /launch (validate→clean→setup→
+  gzserver-port-poll:11345→spawn→gzbridge→ROS2 nodes→AI), /done (group-kill +
+  Ollama keep_alive:0 unload), /health (concurrent 2s-capped checks),
+  single file-watcher broadcasting to all WS clients, /catalog (mode-grouped
+  strategies), /runs, /git/commits + /session/digest (degraded: repo root NOT
+  mounted in container), static catch-all registered LAST.
+- `src/tools/gui/` — style.css (extracted + homepage grid + health cards),
+  index.html (rewrite: structure only + Home dashboard nav), app.js
+  (reactive Store, WS handler, canvas renderers ported from first-shot
+  index.html, catalog + scenario→strategy filtering, launch/done, homepage
+  renderer, localStorage selection persistence, demo-mode passthrough).
+- `launch_gzweb.sh:236` — ws_backend.py → r2k_supervisor.py (the 1-line change).
+
+**Verified (runtime, in r2k_gzweb container):**
+- py_compile OK on py3.12 (host) AND py3.10 (container); app.js parses
+  (v12-compatible after dropping `||=`; `?.`/`??` browser-only, as in old GUI)
+- Endpoints live: /health /state /runs /catalog /git/commits /session/digest,
+  static index/app.js/style.css 200
+- REAL cycle: /launch (1vs0_default, demo, qwen2.5:3b) → state=running,
+  gzserver+tracker+bridge+evaluator alive, Worldstate populated (ball+blue_1)
+  → /done → `CLEAN: no match processes left`, Ollama `{"models":[]}`,
+  host GPU 50 MiB (idle). 502 fast tests pass.
+- Bugs found+fixed during verification: (1) create_subprocess_shell defaults to
+  dash — `source` fails → executable="/bin/bash"; (2) killing `ros2 launch`/
+  `ros2 run` orphans grandchildren (gzserver traps SIGTERM) → start_new_session
+  + killpg SIGTERM→wait→SIGKILL group unconditionally; (3) no nvidia-smi in
+  container → GPU health degrades gracefully (POC limitation).
+
+**Files touched:**
+- `src/tools/r2k_supervisor.py` (NEW) | `src/tools/gui/style.css` (NEW)
+- `src/tools/gui/index.html` (REWRITE) | `src/tools/gui/app.js` (NEW)
+- `launch_gzweb.sh` (1 line) | `src/setup_r2k.py` (transient-file guard)
+- `docs/SESSION_CHANGELOG.md` (this entry)
+- ws_backend.py stays as fallback (untouched, per plan)
+
+**Not yet done:**
+- Browser acceptance (checklist #8-#11): 3vs3 GUI launch, iframe reload,
+  dropdown persistence after hard refresh, homepage cards — needs a human
+  at the browser; all backend counterparts verified
+- `ws_backend.py` still referenced by old sessions; deletion deferred
+- Known POC limitations: /git/commits + /session/digest need repo-root mount
+  (or host-dumped files in shared_state/); GPU health needs nvidia-smi in
+  container image; both need compose changes = plan §8 out of scope
+
+**Next:**
+1. User: `./launch_gzweb.sh` + browser http://localhost:8765 → checklist #8-#11
+2. Then: resume GUI LLM build task (glm-5.3-flash recommended, see above)
+
+**Blockers:** None.
+
+**Addendum 3 (same day):** browser acceptance of GUI core build confirmed by
+user ("./launch_gzweb.sh worx"). Homepage gap closed: /git/commits +
+/session/digest were "n/a" (repo root not mounted in container). Fix without
+compose changes: launch_gzweb.sh now dumps `git log --oneline -5` +
+SESSION_CHANGELOG tail to `shared_state/git_commits.txt` / `session_digest.txt`
+(host-side, ~4 lines before backend start); supervisor's existing fallback
+reads them. Current files written manually too — running GUI shows cards on
+refresh. Checklist #10 now fully green.
+
+**Addendum 4 (same day):** Follow-up pass started — Assistant panel (v7
+Copilot seed, mode B) implemented:
+- Supervisor: `/assistant/ask?q=&model=` — builds system prompt from
+  host-dumped context (`shared_state/assistant_ctx/agent_prompt_de.txt` +
+  `META_KNOWLEDGE_ROUTER.md`, NOT mounted in container) + live Worldstate/
+  strategy snapshot (8KB cap), calls Ollama via async curl (stream:false,
+  temp 0.3, num_predict 512, default model qwen2.5:7b — env
+  R2K_ASSISTANT_MODEL). Event loop stays responsive (no blocking subprocess).
+- launch_gzweb.sh: context dump extended (2 lines: mkdir + cp of the two KB
+  files); files also written manually for the running session.
+- Frontend: new nav item Know › Assistant, chat UI (Store.chat history
+  survives workflow switches, model picker from /catalog models, bubble
+  styles in style.css).
+- Verified live: qwen2.5:7b + 37KB context → grounded German answer in
+  ~10.3s; empty q → 400; /health + static unaffected. py3.10/3.12 compile,
+  app.js parse OK, launcher bash -n OK.
+- Known: 7B grounding imperfect on fine distinctions (conflated Phantom Kick
+  with thread-closures) — context tuning is v7 mode-B scope, not POC blocker.
+
+## 2026-08-28 — K1 vendor-doc audit: "autonomous chase" downgraded, GATE 0 installed
+
+**Goal:** User challenged the KB claim "kShoot = autonomous shot toward the
+goal". Audit vendor documentation, correct the ROS2K knowledge base, gate the
+v7 chase-abort design on a hardware probe.
+
+**Done:**
+- Source audit: claim exists ONLY in our KB (6 sites, v6.4 era); zero
+  changelog entries behind it. Vendor ground truth established: official docs
+  at docs.booster.tech (Motion-Control Interfaces, K1/T1/T2); local
+  `b1_loco_api.hpp` = official B1LocoClient header (older snapshot); ODT is
+  titled "K1 *and* T1 Instruction Manual" (shared, not T1-only);
+  `T1InstructionManual.html` = Feishu dump, no API content.
+- Key vendor facts: `Shoot()` — "current T1 provides the intended motion"
+  (may FAIL on K1); `VisualKick` — K1-supported, firmware ≥ v1.5.2.1, V2 =
+  stronger force; NO autonomy/chase/aiming documented for either. NEW
+  discoveries missing from our hpp: `RobotMode::kSoccer = 4` (K1+T1) with
+  built-in kicking/goalie actions, `RotateHeadWithTime`, WBC gait (K1-only),
+  firmware line v1.7.2. Head control `RotateHead` (2004) IS vendor-confirmed
+  for K1 (≥ v1.0.0, radians; joints kHeadYaw=0/kHeadPitch=1).
+- `docs/v7/k1_kick_head_vendor_audit.md` (NEW, authoritative): source audit,
+  vendor quotes, probe protocol (GetRobotInfo → on-robot SDK inspection →
+  VisualKick V1/V2/Shoot matrix incl. ball-motion chase experiment), decision
+  gates (abort design vs Soccer mode vs VisualKick-only).
+- KB annotated (UNVERIFIED/GATE 0): 4_EDGE (matrix + pitfalls + new "Official
+  vendor documentation" subsection + head-section vendor note),
+  8_C3 (matrix + chase problem), ROS2K_GEM_FAQ Q28 (German correction),
+  1_CORE (TeamCaptain kick-abort gated), LESSONS_LEARNED (correction + new
+  lesson "claims without logged sessions become folklore"),
+  scrum_tasks (GATE 0 in K1 story), ADR-A07 (gate note),
+  calibration_rotation_design (head control confirmed),
+  META_KNOWLEDGE_ROUTER (new [V7-gate] routing row, tag k1-vendor-audit,
+  last_modified bump).
+- gui_v67_discussion.md deliberately untouched (historical record).
+
+**Files touched:**
+- `docs/v7/k1_kick_head_vendor_audit.md` (NEW — authoritative)
+- `src/ros2k_knowledge/4_EDGE_HARDWARE_SIM2REAL.md`
+- `src/ros2k_knowledge/8_C3_SOCCER_KNOWLEDGE.md`
+- `src/ros2k_knowledge/ROS2K_GEM_FAQ.md`
+- `src/ros2k_knowledge/1_CORE_ARCHITECTURE_AND_SYNC.md`
+- `src/ros2k_knowledge/META_KNOWLEDGE_ROUTER.md`
+- `docs/scrum_tasks.md`, `docs/LESSONS_LEARNED.md`,
+  `docs/adr/ADR-A07-team-captain-architecture.md`,
+  `docs/v7/calibration_rotation_design.md`
+- `docs/SESSION_CHANGELOG.md` (this entry)
+
+**Not yet done:**
+- Hardware probe (GATE 0) — needs robot + changelog-logged session:
+  firmware check, on-robot SDK inspection, kick-behavior matrix
+- Kick/head/head-turn implementation stays blocked behind the probe
+- Pending from earlier today: nemotron demotion (offer queue), GUI commit
+
+**Next:**
+1. Hardware session: run `docs/v7/k1_kick_head_vendor_audit.md` §3 probe
+   protocol, log results in changelog
+2. Then: re-scope v7 kick-abort story per gate outcome
+
+**Blockers:** None for docs. K1 probe needs physical robot access
+(booster@10.42.0.102) and a safe test area (robot on stand for kick tests).
+
+**Addendum 2026-08-28 (PR #18 merged):** b1_loco_api.hpp now current in repo
+(kSoccer=4, kSoccerGait=5, kRotateHeadWithTime=2043, Shoot "no model-name
+gate / StateTransitionFailed" refinement, VisualKick "primary or fallback").
+Vendor audit doc updated: "older snapshot" caveat retired. PR #18 merged by
+user after accidental close + reopen; approval requirement (1 write-access
+review) satisfied.
+
+## 2026-08-28/29 — v6.8 planning session: clarifications, hardware search, docs restructure, wrap-up
+
+**Goal:** execute the v6.8/demo_ifa/v7 communication plan: clarify K1 walk/kick/head,
+search hardware resources (Yahboom + K1 sims, LIDAR ball detection), write the three
+plan sets, restructure docs, extend KBs.
+
+**Done:**
+- Clarifications (evidence in plans/scratch.md): K1 walk = bridge P-loop on SIM twin
+  (open-loop on hardware); folklore #2 BUSTED ("0.4 rad/s bridge clamp" — real clamp
+  ±2.5, firmware spec 1.5 rad/s / 1.1 m/s → systematic shortfall root-caused);
+  3 stop semantics (2001-zeros brake / 2000-mode1 freeze / vendor DAMP auto); K1 "kick"
+  = 2000/mode1 placeholder today; K1 fleet = 2x Education, Professional = feasibility
+  question (AGX Orin 32GB catalog variant); head limits documented (yaw ±59°,
+  pitch -19/+49°); RoboCup demo architecture = brain-owns-chase → "chase forever"
+  folklore likely an architecture confusion (K1-PROBE still required for raw skills)
+- Hardware search (~14 sources): Yahboom identified (MicroROS-Pi5, MS200 lidar,
+  2-DOF gimbal via servo_s1/s2 topics, ESP32-native odom); K1 official URDF+meshes
+  (booster_assets), sim-3v3-simple-framework agent API; LIDAR ball pipeline specified;
+  Mecanum catch (ROSMASTER X3 sims = wrong kinematics for our diff-drive);
+  roboticscenter.ai flagged UNVERIFIED
+- LOCAL Yahboom resources integrated (~/yahboom/): driver source on laptop,
+  servo/odom/PID-register confirmations, Factory-Firmware images, team POCs
+- Docs restructure (user-approved mapping): docs/plans/{v68_pre_ifa, v68_after_ifa,
+  v7, root}, reference/{benchmarks, experiments, gui, specs, c3, redesign},
+  outdated/; junk (8 autosave files) + 4 PDF duplicates deleted; pit_of_nice_ideas
+  pruned (W-decision report exists, 150-match superseded, trailer in v6.8,
+  rotation/face → v6.8 task a); link-update pass 14 files (AGENTS, router, KB,
+  ADR, scrum, cheat sheet)
+- Plans written: plan_v68.md (V1-V11 detailed), plan_demo_ifa.md (A/B/D + lab-gate
+  agenda); mgt_demo_ifa Demos section (LIDAR pre-IFA per user, Soccer Agent OUT,
+  trailer FAKE in IFA set); mgt_v68 firmware policy (no upgrade pre-IFA, probe
+  decides in-session); student_projects_autumn_fair.md → plans/ (Trello source)
+- KB/persistence: src/yahboom/YAHBOOM_KNOWLEDGE.md (NEW), src/booster/ASSETS.md (NEW),
+  proposal_edge_llm_k1.md hardware addendum, 4_EDGE Yahboom addendum, META_ROUTER
+  V6.8 row + moved-path fixes
+
+**Files touched:** docs/plans/** (NEW structure), docs/reference/**, docs/outdated/**,
+deleted junk+PDFs, AGENTS.md, src/ros2k_knowledge/{4_EDGE, META_KNOWLEDGE_ROUTER}.md,
+src/yahboom/YAHBOOM_KNOWLEDGE.md (NEW), src/booster/ASSETS.md (NEW), this changelog.
+13 tracked moves + 8 deletes + new files committed on feature/gzweb-experimental
+(plans stay laptop+Trello per In-list; KB/src committed).
+
+**Not yet done:**
+- Mgt summaries: content complete, HUMAN REVIEW pending → then Trello + dissemination
+- plan_v68 V1-V6 + demo plan A/B/D: execution (pre-IFA work itself)
+- Changelog archival (209 KB, trigger 100 KB) — deferred as own session
+- User-docs pass (40-file technical reference) — deferred, scope undecided
+- udp-cam rework; Yahboom MS200 driver location verification (lab)
+
+**Next:**
+1. User reviews mgt_v68/mgt_demo_ifa/mgt_v7 → Trello + team dissemination
+2. Schedule the lab session (plan_demo_ifa gate agenda)
+3. Start V1 (clamp alignment) — pure code, no hardware needed
+
+**Blockers:** None. IFA date + lab session slot to be confirmed by user.
+
+## 2026-08-29 — opencode DB recovery: root-cause fix for "table `project` already exists"
+
+**Goal:** Recover the opencode session database after cleanup deleted
+`~/.local/share/opencode/opencode.db`, and restore chat-history access.
+
+**Done:**
+- Incident reconstructed from `~/.local/share/opencode/log/opencode.log`
+  (Ollama unreachable 15:50-16:03 UTC → "api call did not succeed, retry at")
+  and bash history (`rm -rf ~/.local/share/opencode/snapshot/*`; ext4magic +
+  raw extent-map reconstruction on /dev/nvme1n1p4 by a prior opencode session).
+  Root cause of the follow-up error: the recovered DB (`opencode_clean.db`,
+  integrity ok) lost its small bookkeeping tables — `migration` 0/38 rows,
+  `project`, `project_directory`, `event_sequence` — so opencode 1.18.25
+  re-ran migration #1 (`CREATE TABLE project`) on existing tables →
+  "table `project` already exists". Schema otherwise 100% identical (20
+  tables, 17 indexes, 0 column mismatches).
+- ROS2K project state verified intact and independent of the DB: git HEAD
+  d5aeb33 on feature/gzweb-experimental, clean tree except untracked
+  core/.opencodeignore; SESSION_CHANGELOG complete through 2026-08-28/29.
+- Surgical fix: safety copy `opencode_main_before_migfix.db` (md5-verified)
+  into pre_recovery_backup_20260829/, then inserted 38 `migration` rows + 1
+  `project` row (id 22d956713ca3350d39913406ce3762017bcf99aa — referenced by
+  all sessions) + 8 `project_directory` rows from the fresh 19:00 reference
+  DB. Integrity ok; 108 sessions / 15,207 messages / 50,910 parts untouched.
+- Verified: `opencode session list` exits 0 with full history (was:
+  "Error: Unexpected error / table `project` already exists").
+- Ollama confirmed running (v0.19.0, reachable on 11434) — original API
+  failure resolved. Corrupt `recovered_opencode.db` (hundreds of
+  btreeInitPage errors) NOT used; kept in backup dir as last resort.
+
+**Files touched:**
+- `docs/SESSION_CHANGELOG.md` (this entry)
+- Outside repo: `~/.local/share/opencode/opencode.db` (bookkeeping rows
+  inserted), `pre_recovery_backup_20260829/opencode_main_before_migfix.db` (NEW)
+
+**Files deleted:**
+- (none)
+
+**Not yet done:**
+- `core/.opencodeignore` still untracked (created during the incident);
+  review + commit on a tools branch
+- Backup dir holds ~2.5 GB (clean + recovered + pre-migfix copies); prune
+  after a few days of normal operation
+- Session running in sandbox (XDG_DATA_HOME=/tmp/opencode_test) must be
+  exited and opencode restarted normally; sandbox history lives in /tmp
+
+**Next:**
+- Restart opencode with the real data dir, then resume the v6.8 plan
+  (previous entry's "Next": V1 clamp alignment).
+
+**Blockers:** None.
+
+---
+<!-- Stub generated by session_entry.sh on 2026-08-29 -->
+<!-- Branch: feature/gzweb-experimental | Modified: 1 | New: 1 | Deleted: 0 -->
+<!-- Last commits:
+  d5aeb33 docs: KB knowledge-base updates — Yahboom addendum, router row, link pass
+  e7f1b86 docs: v6.8 wrap-up content — plans, yahboom/booster knowledge, KB addenda, link pass
+  e3ad6d2 docs: v6.8 planning wrap-up — docs restructure + plans + KB extension
+-->
+
+## 2026-08-30 — Yahboom fleet: pro visibility root-caused (domain register), 1→1/2→2 rename sync
+
+**Goal:** pro (yahboom #2) invisible to ROS2K after the /blue_2 rename; find root cause;
+sync the ROS2K side to the new fleet naming (user decision: hardware mirrors 1→1, 2→2).
+
+**Done:**
+- **Root cause (multi-layer forensics, all layers documented):**
+  1. Pro's ESP32 carried **ROS domain 20** (set by a stale config_robot variant) —
+     XRCE create-participant carries the client's domain; the agent created the pro's
+     entities in domain 20, blind to domain-0 queries. FIXED via USB:
+     `set_ros_domain_id(0)` — read-back verified.
+  2. Renames executed + verified on both bots (config_robot2.py, /dev/ttyUSB0):
+     pro → **/blue_2** (already done), yahboom #1 → **/blue_1** (namespace-only write;
+     full read-back captured FIRST: #1 = fw 2.1.0, domain 0, maker4, 10.42.0.1:8888 —
+     the comparison proving #1-vs-pro differed ONLY in the domain register).
+  3. Environment: host WiFi card = Intel Wi-Fi 7 BE200-class — AP-mode (hotspot)
+     radio resets every ~5-15 min on this desk (journal: supplicant-failed → device
+     removed), and NetworkManager flapped to the Fritzbox repeatedly mid-probe
+     (autoconnect). All earlier "invisible topic" observations were contaminated by
+     this; yahboom #1 proven healthy in a clean window (battery 1.000 Hz, servo
+     subscription live).
+  4. Launch failure for the pro explained: launch wait greps `<ns>/battery` from the
+     relay mapping — relay still said bot1 → timeout by design after the rename.
+- **ROS2K sync (build):** `relay/hardware_mirror.json` → yahboom entries keyed/namespaced
+  **blue_1 + blue_2** (topics shared with sim twins — implicit mirroring, no mirror
+  thread; virtual duplicates removed; blue_2 listed first so the launch wait pollin the
+  pro), `triple_mirror.py` `/bot1/cmd_vel` → `/blue_1/cmd_vel`, `active_relay.json`
+  refreshed; doc sweep (YAHBOOM_KNOWLEDGE fleet table + XRCE-domain lesson + radio note;
+  lab runbook/cards namespace refs). 502 fast tests pass; JSONs valid.
+
+**Files touched:** src/relay/hardware_mirror.json, src/ai_tactics/triple_mirror.py,
+src/ai_tactics/active_relay.json, src/yahboom/YAHBOOM_KNOWLEDGE.md,
+docs/plans/v68_pre_ifa/LAB_SESSION.md, docs/plans/LAB_SESSION_cards.md, this changelog.
+NOT in repo (user-local): ~/yahboom/config_robot*.py (the write tools).
+
+**Not yet done:**
+- Launch test with both bots (needs lab window / stable radio): expect
+  `✅ YAHBOOM BEREIT` (now greps /blue_2/battery)
+- #1 + pro reboot after the writes (user hardware action)
+- 2-bot demo scenario (spawn sim blue_2) for trailer choreography (d-FAKE)
+- Radio hardening (BE200 AP-mode): optional — dmesg/powersave/dedicated USB dongle
+- The pro firmware matches #1 (2.1.0) — no flash needed
+
+**Next:**
+1. Reboot both bots; launch test `./launch_r2k.sh --scenario 1vs0_default --demo --relay hardware_mirror` → expect `🔋 Yahboom Topic erkannt! ✅ YAHBOOM BEREIT` (and ⚙️ K1 if powered)
+2. Dry-run demos a/b with both yahbooms
+
+**Blockers:** None. Radio resets on the desk remain the risk; lab environment was stable for months.
+
+## 2026-08-30 (cont.) — session close: lessons, KB distillation, fleet verification prep
+
+**Session close per protocol.** Misconceptions list → LESSONS_LEARNED.md
+(wrong domain ID missed → DDS/SHM suspect again → forgot U24 has no native
+ROS 2 → stale config file → bot identity misattribution). KB distillation →
+4_EDGE (fleet table, XRCE-domain lesson, radio note, diagnostic order) +
+router row keywords. Overview: A2bot row added. Launch: per-bot wait + correct
+bot-number labels (lab-validated: both bots detected; vision bot moves via
+direct cmd_vel). 2vs0_demo scenario created. NOT committed in earlier pass —
+see commit below. Full detail: LESSONS_LEARNED + 4_EDGE Yahboom addendum.
+
+**Addendum (lab verification + close-out):** two-bot launch test: BOTH bots
+detected (blue_1 + blue_2 batteries in domain 0 — the domain fix verified in
+the launch context). blue_2 detected but NOT moving in the demo flow = the
+A2bot gap (single-bot demo design: targets[blue_2] never exists; sim blue_2
+not spawned in 1vs0) — implementation spec now in plan_demo_ifa A2bot (per-bot
+globals, bot-param strategy writers, task-text bot prefix). Launch label bug
+fixed: the BEREIT lines had hardcoded "#1" (the first label-fix pass missed
+the uppercase variants) — all four lines now derive the bot number from the
+namespace. Verified: blue_2 moves via direct /blue_2/cmd_vel publish (user
+lab test). Rule absorbed: never start launches/bots without asking first.
+
+## 2026-08-30 (cont.) — A2bot 7B syntax probe (probe-only): scope/coords/formation evidence
+
+**Goal:** Probe qwen2.5:7b demo-compiler behavior on advanced A2bot task syntax
+(bot scopes, compound clauses, ball-relative, formations) BEFORE implementing
+per-bot semantics — user decision "probe-only first".
+
+**Done:**
+- Refactor: extracted compiler prompt/world-lines from `_compile_demo_task` into
+  module-level `_build_compiler_world_lines(ents, start_pos)` +
+  `_build_compiler_sys_prompt(world_lines, start_pos)` (src/ai_tactics/r2k_evaluator.py:140-183) —
+  single source of truth, probe reuses the verbatim prompt; no behavior change
+  (26/26 evaluator-adjacent tests pass: test_text_mode + test_prompt_assembly).
+- New probe tool `tools/probe_a2bot_syntax.py`: 18-task corpus (scope/baseline/
+  ballrel/formation/patrol/robust), CLI (--reps/--model/--only), JSONL raw log to
+  src/logs/ (gitignored), markdown report generation, per-task scoring
+  (parse rate, 1st-wp coord error, ball-dist, OOB, scope tokens, n_wp).
+- Full run: 18 tasks × 5 reps = 90 calls, 100% parse rate, fully deterministic.
+  Report: `docs/reference/benchmarks/a2bot_syntax_probe.md`. Key findings:
+  F1 landmark snap ("goto 2,2" → LEFT WING (2,2.5) 5/5 — prompt landmark rule
+  overrides literal coords); F2 multi-bot intent leaks into structure ("both"
+  → 2 identical wps; "blue_1 …, blue_2 …" → 2 wps in bot order — exploitable
+  post-split); F3 ball-relative fails (wrong frame, kicking-distance hijack);
+  F4 formations correct ("line up at x=2, spread 1m" → (2,0.5),(2,-0.5));
+  F5 "stop all bots" compiles hallucinated 7-wp patrol → fast-path mandatory;
+  F6 scope silently dropped (last clause wins) — per-bot routing stays
+  evaluator-side; F7 warm latency 0.4s (1wp)–3.8s (12wp) → coord fast-path
+  worthwhile.
+- Plan updated with probe conclusions (docs/plans/v68_pre_ifa/plan_demo_ifa.md
+  §A2bot): no compiler-prompt changes needed for A2bot scope 1; coord fast-path
+  upgraded to recommended (avoids F1 snap).
+- Offset question answered from code (user observation "goto ball keeps safe
+  distance"): stack of 3 designed offsets — compiler 0.3m kicking-distance rule
+  (r2k_evaluator.py:177), bridge PD deadband 0.15m (ollama_sandbox_bridge.py:526),
+  mirror_of parallel-trajectory displacement (start offset (0,1) vs (0,0)). No
+  anti-collision module in demo path (R2K_TEAMCAPTAIN off, bridge:63).
+
+**Files touched:**
+- core/src/ai_tactics/r2k_evaluator.py (refactor, no behavior change)
+- core/docs/plans/v68_pre_ifa/plan_demo_ifa.md (probe conclusions)
+- core/docs/SESSION_CHANGELOG.md (this entry)
+- (pre-existing uncommitted from earlier session: core/src/relay/hardware_mirror.json)
+
+**New files (untracked):**
+- core/tools/probe_a2bot_syntax.py
+- core/docs/reference/benchmarks/a2bot_syntax_probe.md
+
+**Files deleted:**
+- (none)
+
+**Not yet done:**
+- A2bot implementation itself (per-bot state, prefix parsing, coord fast-path,
+  relay mirror_of removal) — probe evidence complete, build approved in plan
+- Pre-existing test breakage NOT caused by this session (verified identical on
+  clean HEAD via git stash): tests/test_adaptive_horizon.py imports
+  HORIZON_MIN_S/_update_horizon_ema which never existed in any committed
+  r2k_evaluator (git log -S --all: empty) → collection error; plus 20 failing
+  fast tests (test_i3_sweep etc.) at HEAD. Fast tier: 504 passed / 20 failed /
+  11 skipped both with and without my changes.
+- Commit of pending changes (user not asked yet)
+
+**Next:**
+- Implement A2bot scope 1 per plan + probe evidence: per-bot demo state,
+  bot-prefix parsing, coordinate fast-path (regex, bypasses 7B + snap risk),
+  remove mirror_of from hardware_mirror.json blue_2, calib_cli per-bot display,
+  tests/test_demo_multibot.py
+
+**Blockers:**
+- None for implementation. Lab verification needs a lab window (as before).
+
+## 2026-08-30 (cont.) — A2bot scope 1 implemented (evaluation version): per-bot demo targets + coord fast-path
+
+**Goal:** Ship the A2bot evaluation version per plan + probe evidence: per-bot
+waypoint state, bot-prefix/scope task routing, coordinate fast-path (bypasses
+7B compiler and the F1 landmark-snap failure mode), mirror_of removal on blue_2.
+
+**Done:**
+- r2k_evaluator.py: single-bot demo globals (_demo_waypoints/_demo_target_idx/
+  _demo_arrival_time/_demo_stopped_idx/_demo_start_pos) → per-bot `_demo_state`
+  dict (`_demo_bot_state`, ev.py ~line 110) with `fast_cmd` + `start_pos` (captured
+  at first sight) per bot.
+- Task routing: `_parse_task_bot` — bot prefix (`blue_2 go to (2,0)`, `k1`→k1_bot
+  normalization), scope tokens loop-stripped (`(all) yahbooms ...`, `all bots ...`,
+  `both ...` → ALL_BOTS); clauses split on ';' in `_check_task_input` →
+  `_handle_task_clause`.
+- Coordinate fast-path: `DEMO_COORD_RE` ("goto 2,2" / "go to (2,0)" / "move to
+  -1.5,3") → `_demo_direct_move` — instant, no 7B call, immune to landmark snap.
+- Fleet-stop safety: `stop all bots` handled as fast-path, never reaches the
+  compiler (probe F5); verb guard drops scope-only clauses ("simulated bots only").
+- Fast-path persistence: `fast_cmd` (Hold / Move) re-injected into
+  current_strategy.json on every LLM strategy write for parked bots — fixes the
+  bridge stale-target problem (bridge keeps per-bot in-memory targets; without
+  this, a stopped blue_1 would resume its old target once blue_2's LLM cycle
+  overwrites the strategy file).
+- Executor injection (ev.py ~line 940): single active bot → legacy "target" +
+  flat "waypoints" (unchanged 3B prompt); multiple → per-bot prefixed labels
+  (B1_FIRST, B2_FIRST) in a FLAT table — 3B keeps doing flat label→coords lookup.
+- Strategy writers: `_write_assignment(bot, task)` read-modify-write merge;
+  `_write_hold_strategy(bot)` / `_write_move_strategy(bot, x, y)`.
+- waypoints.json schema v2: {"bots": {bot: {"waypoints": [...]}}} with legacy
+  top-level fallback → blue_1 (full backward compat); `_write_waypoints_file()`
+  merges all bots.
+- relay/hardware_mirror.json: removed `mirror_of: blue_1` from blue_2 → per-bot
+  PD from 2vs0_demo sim twin (k1_bot keeps mirror_of blue_1).
+- rules_demo.txt fragment: "target"/"targets" contract for 1..n bots.
+- calib_cli.py: per-bot waypath display (bots schema), prefix-aware instant
+  feedback, two-bot samples (blue_2 go to (2,0), stop all bots).
+- Tests: tests/test_demo_multibot.py — 17 fast tests (prefix/scope parsing,
+  coord regex, per-bot arrival isolation, legacy+new schema, strategy merge,
+  stop-all, coord fast-path routing, verb guard, compile routing, go-home start
+  pos). All pass. Full fast tier: 521 passed / 20 pre-existing failures /
+  11 skipped (identical failure set as clean HEAD). Ollama-call guard in tests
+  (a scope-regex bug initially made a test hit real Ollama — fixed + guarded).
+- Probe regression check: tools/probe_a2bot_syntax.py still works post-refactor.
+
+**Files touched:**
+- core/src/ai_tactics/r2k_evaluator.py (per-bot demo state, routing, fast-path,
+  injection, fast_cmd persistence)
+- core/src/relay/hardware_mirror.json (mirror_of removed from blue_2)
+- core/src/strategy/fragments/rules_demo.txt (multi-bot contract)
+- core/tools/calib_cli.py (per-bot display + prefix feedback + samples)
+- core/docs/SESSION_CHANGELOG.md (this entry)
+
+**New files (untracked):**
+- core/src/tests/test_demo_multibot.py
+
+**Files deleted:**
+- (none)
+
+**Not yet done:**
+- Lab verification (needs lab window): (1) `blue_2 go to (2,0)` moves vision bot
+  while blue_1 holds — incl. 7B prefix compile semantics end-to-end; (2) 3B
+  multi-bot executor with prefixed labels (B1_FIRST/B2_FIRST) — the one
+  untested model-facing change; (3) hardware blue_2 per-bot PD (requires sim
+  blue_2 twin spawned by 2vs0_demo — mirror_of removal makes the twin load-bearing).
+- k1_bot limitation: tasks route to k1_bot state but k1 has no sim entity in
+  2vs0_demo → never injected; K1 hardware still follows blue_1 via relay
+  mirror_of. Documented, not fixed (needs a k1 sim twin or explicit routing).
+- Commit of all pending changes (user not asked yet).
+
+**Next:**
+- Lab dry-run per plan_demo_ifa lab gate; then commit on a feature branch.
+
+**Blockers:**
+- None for code. Lab window needed for hardware verification.
+
+## 2026-08-30 (cont.) — hotfix: quoted input + fleet-wide control verbs (first lab feedback)
+
+**Goal:** Fix the two failures from the first live A2bot lab run.
+
+**Root causes:**
+1. Running calib_cli was the PRE-A2bot version (output format proves it) — it
+   cannot read the new {"bots": ...} waypoints schema → "(no waypoints)" after
+   successful compiles. Fix = restart CLI (and launch) — no code defect.
+2. Real defects: (a) quoted input (`"goto 1,-1"`) defeated the coord fast-path
+   and leaked quotes into the 7B prompt; (b) unprefixed `stop` only stopped
+   blue_1 — the moving vision bot (blue_2) kept going → "stop does not work".
+
+**Done:**
+- Evaluator: task text quote-stripped in _check_task_input
+  (`strip('"').strip("'")`).
+- Evaluator: control verbs (stop/halt/break/exit/resume/continue/restart/redo/
+  go home/return) are FLEET-WIDE when unprefixed (`DEMO_CONTROL_VERBS`,
+  _handle_task_clause routes to all blue bots). Task verbs stay per-bot
+  (unprefixed = blue_1, backward compat). Single-bot scenarios unaffected.
+- calib_cli.py: quote stripping + fleet-aware feedback ("[all bots]").
+- Tests: 3 added (unprefixed stop fleet-wide, unprefixed go-home fleet-wide,
+  quoted task bypasses compiler via _check_task_input). 20/20 demo tests pass;
+  fast tier 524 passed / same 20 pre-existing failures.
+
+**Next:** restart launch + CLI, re-test: `stop` (both bots halt), `"goto 1,-1"`
+(instant, no 7B), `blue_2 go to (2,0)` (7B prefix compile — still untested
+end-to-end).
+
+## 2026-08-30 (cont.) — hotfix 2: 3B assigns-stripped-bots regression killed (live-verified), quiescent boot
+
+**Goal:** User pushback ("production worked for one bot — think broad"): the
+per-bot changes must be strictly additive to the proven single-bot path.
+Forensics on the 21:49 run trace identified the ONE real regression.
+
+**Root cause (trace-proven, llm_trace_..._214914 rec0-26):** my rules_demo.txt
+rewording ("You control one or more blue bots") made the 3B executor assign
+EVERY blue bot it can see — blue_2 got hallucinated Moves while only blue_1
+was targeted, and blue_2's sim twin (+ hardware via shared topic) walked the
+hexagon uninvited. That is the "bots move on their own / stop seems broken"
+phenomenon. Secondary: _write_assignment merge preserved stale latency_ms/
+model_name keys (misleading forensics); hexagon waypoints.json auto-loaded at
+boot = both hardware bots start walking uninvited (lab hazard).
+
+**Done:**
+- rules_demo.txt: unified "targets" contract + "Output assignments ONLY for
+  the bots listed in targets. Never output assignments for any other bot."
+- r2k_evaluator.py: injection extracted to `_demo_inject_targets(min_ents, ents)`
+  — ALWAYS "targets" dict (single bot keeps raw labels, no prefix), flat table,
+  and NON-TARGETED blue bots are STRIPPED from the snapshot (model cannot
+  assign what it cannot see).
+- _write_assignment: writes only {"assignments": ...} — stale metadata dropped.
+- Quiescent boot: waypoints.json no longer auto-loaded at startup
+  (lazy-load on "resume"/"restart"/first task). Bots stand until tasked.
+- LIVE 3B verification (Ollama, exact evaluator payload, 5 reps each,
+  temperature 0.0): single-target → ONLY blue_1 (-1.0,1.5) 5/5; multi-target
+  (B1_FIRST/B2_FIRST) → both bots correct lookups 5/5. Contract holds.
+- Tests: 4 added (inject strip/prefixed/noop, metadata drop). 24/24 demo tests;
+  fast tier 528 passed / same 20 pre-existing failures.
+
+**Not yet done:**
+- Lab retest (user): expect — boot quiescent (no bot moves); "goto 3,3" moves
+  #1 only (instant); "blue_2 goto (2,0)" moves #2 (7B prefix, still unverified
+  end-to-end); "stop" halts BOTH; "both goto 2,2"… n/a — use "all yahbooms goto 2,2".
+- k1_bot limitation unchanged (no sim k1 entity; K1 mirrors blue_1 via relay).
+- Commit pending (user not asked).
+
+## 2026-08-30 (cont.) — session close: A2bot lab-verified, no-commit decision, validation runbook handoff
+
+**Goal:** Close the session after the user's live verification; define the
+validation path before any commit.
+
+**Done:**
+- User lab verification: "ok, worx" — A2bot scope 1 behaves (quiescent boot,
+  coord fast-path, fleet stop, bot-stripping).
+- User decision: NO COMMIT yet — everything stays as working-tree changes for
+  live evaluation first (3 commits prepared but not executed: feat / tools+docs /
+  docs on docs/v68Planning).
+- User correction accepted: the STANDARD demo/calib baseline is not yet
+  systematically validated — no new features (b-FAKE kick, Task A head actions)
+  before that.
+- Validation runbook created: docs/plans/v68_pre_ifa/calib_validation_runbook.md
+  (V1-V9 case cards: control, shapes, circles, coords+pauses, landmarks, ball,
+  patrols/paths/combos, two-bot, latency; defect log; watch items).
+
+**Files touched (session total, all uncommitted):**
+- core/src/ai_tactics/r2k_evaluator.py, core/src/relay/hardware_mirror.json,
+  core/src/strategy/fragments/rules_demo.txt, core/tools/calib_cli.py
+- NEW: core/src/tests/test_demo_multibot.py (24 fast tests),
+  core/tools/probe_a2bot_syntax.py,
+  core/docs/reference/benchmarks/a2bot_syntax_probe.md,
+  core/docs/plans/v68_pre_ifa/calib_validation_runbook.md
+- core/docs/plans/v68_pre_ifa/plan_demo_ifa.md, this changelog
+
+**Not yet done:**
+- V1-V9 validation execution (user drives, phase 1 sim → phase 2 hardware)
+- Commit decision after validation
+- Deferred: b-FAKE kick fast-path, Task A head actions (K1 2004 / Yahboom
+  servo_s1/s2), LIDAR/trailer tracks — all blocked behind baseline validation
+- Pre-existing test breakage (test_adaptive_horizon collection error + 20 fast
+  failures at HEAD) — needs its own bugfix branch
+- k1_bot limitation (no sim k1 entity; K1 mirrors blue_1 via relay)
+
+**Next:**
+- User runs phase 1 (sim, single bot) of the runbook; FAILs go into the defect
+  log; I fix + fast-test per defect; then phase 2 (hardware).
+
+**Blockers:**
+- None.
+
+## 2026-08-30 (cont.) — Drag-Twin (sim drag → hardware mirror walks) + scenario cleanup
+
+**Goal:** User: "Dragging the sim bot in Gazebo first, true bidirectional twin
+later". Implemented one-directional drag-to-twin; removed redundant waypoint
+scenarios. (Context: early-2026 digital-twin POC found in ros2k_unify2/
+ai_tactics.org + rosk2_fusion/wm_fusion2.py — odom-injection approach, retired
+because it conflicts with axiom 2; report delivered in-session.)
+
+**Done:**
+- Scenario cleanup: DELETED src/scenario/1vs0_waypoint/ (git rm) and
+  src/scenario/2vs0_waypoint/ (created earlier today). Canonical demo scenarios:
+  1vs0_default (single bot) + 2vs0_demo (two bots). Doc sweep: AGENTS.md:214,
+  docs/calibration_cheat_sheet.md, tools/calib_cli.py docstring, validation
+  runbook pre-flight.
+- NEW src/ai_tactics/drag_twin.py (standalone node, demo-only, no colcon):
+  DragDetector pure state machine — pose jump > DRAG_JUMP_M (0.5m) in
+  /gazebo/model_states = drag (PD moves ≤0.1m/tick); DRAG_SETTLE_S (0.6s) quiet
+  = drag end; DRAG_COOLDOWN_S (1.0s) post-dispatch; dispatch writes
+  "<bot> goto x,y" to task_input.json (atomic) → evaluator coord fast-path →
+  instant per-bot Move; sim twin + hardware mirror walk to the drop point.
+  Blue bots only (ball ignored); match_state status guard (dispatch only when
+  "playing" — referee warps never misread). Drag interrupts the dragged bot's
+  waypath (operator gesture). rclpy import guarded → pure class testable
+  without ROS.
+- launch_r2k.sh: drag_twin.py started only when --demo (native :351 + docker
+  :479 paths), added to watchdog pkill pattern (:161).
+- NEW tests/test_drag_twin.py — 9 fast tests (non-blue ignored, first-sighting
+  baseline, sub-threshold motion, jump+settle dispatch text, continuous drag
+  single dispatch at drop point, cooldown, status guard, evaluator-contract
+  integration, per-bot independence). Fast tier: 537 passed / same 20
+  pre-existing failures.
+- Runbook V10 Drag-Twin section (5 cases) + cheat sheet Drag-Twin paragraph.
+- Bridge/evaluator: ZERO changes (drag reuses the existing task-input path).
+
+**Not yet done:**
+- V10 lab verification (drag behavior live, incl. K1 mirror propagation)
+- Commit still deferred (live-eval-first decision stands)
+- True bidirectional twin (teleop hardware → sim follows) = future plan
+  (twin-by-teleport node, tracker-authoritative)
+- Pre-existing test breakage (test_adaptive_horizon + 20 failures) — own ticket
+
+**Next:**
+- Lab: re-run runbook incl. V10; then commit decision.
+
+**Blockers:** None.
+
+## 2026-08-31 — hotfix: mixed-identity permission clash on task_input.json (docker root vs user CLI)
+
+**Symptom:** calib_cli PermissionError on task_input.json — the stack runs
+partially as root (docker container: bridge/aggregator/drag_twin), the CLI as
+user; drag_twin's dispatch created the file root-owned.
+
+**Fix:**
+- drag_twin._dispatch: chmod 0o666 after each atomic write (self-healing once
+  the patched node runs) — task_input.json is the only two-way handoff file.
+- calib_cli.send_task: catches PermissionError, prints the exact one-time fix:
+  `sudo chmod 666 src/shared_state/task_input.json` + restart hint.
+- User action: run the sudo chmod once, then restart the launch (old drag_twin
+  process still has the unpatched code).
+
+**Not yet done:** structural unification of execution identity (docker root vs
+native user) — chmod-666 handoff is the pragmatic lab fix; revisit if more
+two-way files appear.
+
+## 2026-08-31 (cont.) — fix: waypath never "finishes" + slow drags escape detection (user lab report)
+
+**Symptom:** after "approach the ball into kicking distance" (bot + twin walking),
+dragging the sim bot away → bot walked BACK to the last waypath position (twin
+mimicked the return).
+
+**Root causes:**
+1. The executor re-issues Move(last_wp) EVERY tick forever — a waypath never
+   ends, so the PD always pulls the bot back to the final target after any
+   perturbation.
+2. Jump-threshold drag detection (0.5m/tick) misses smooth/slow drags entirely —
+   the PD wins the tug-of-war.
+
+**Fixes:**
+- r2k_evaluator.py `_demo_target_for_bot`: final-waypoint arrival PARKS the bot
+  (DEMO_PARK_DIST=0.2: waypath cleared, fast_cmd=Hold, stopped_idx=0 so
+  "resume" replays from start, strategy Hold written) — the executor stops
+  commanding; no more return-to-target. Print: "🏁 [bot] waypath complete — parked".
+- drag_twin.py: second abort channel — external-move watch. Node reads
+  current_strategy.json every TARGET_REFRESH_S (0.5s) and arms per-bot
+  distance-to-target; growth > EXTERNAL_MOVE_M (0.3m) = external move
+  (drag/push) → dispatches "<bot> goto <current>" → parks the bot at the
+  dragged spot (waypath cleared via coord fast-path). Re-arms on target
+  change; status-guard blocked aborts keep the growth pending. Node-level
+  dispatch cooldown (DRAG_COOLDOWN_S) shared by both channels.
+- Tests: +5 drag_twin (abort fire/no-target/re-arm/status-guard, baseline
+  semantics), +2 evaluator (completion parks, resume-after-completion replays
+  from start). Fast tier: 543 passed / same 20 pre-existing failures.
+- Runbook: V10.6 (completion parks), V10.7 (drag after completion stays),
+  V10.8 (slow drag aborts).
+
+**Note:** after completion the sim twin no longer follows drags (bot parked =
+Hold; hardware twin stays at the park point) — hardware-follows-drag is the
+future bidirectional twin, out of scope by decision.
+
+## 2026-08-31 (cont.) — Drag-Twin unified: ONE semantic (twin always walks to the sim bot)
+
+**User feedback:** (1) after waypath completion, dragging the sim bot must send
+the REAL twin to the dragged position (not "twin stays at park point");
+(2) why slow-vs-fast distinction — if there is a reason, just "drag".
+
+**Fix:** drag_twin.py rewritten around one semantic — ANY external move of a
+sim bot (fast or slow, driving or parked) dispatches "<bot> goto <current>"
+→ twin walks to the sim bot. The jump/settle threshold machinery (0.5m/tick,
+0.6s settle) is REMOVED — it was the source of the fast/slow asymmetry.
+Two passive detection channels remain:
+- waypath watch: distance-to-target growth > EXTERNAL_MOVE_M (0.3m) while a
+  Move target is active (works for fast AND slow drags — growth is growth)
+- idle watch: drift > 0.3m from anchor while parked/held (no Move target) —
+  this is what makes the twin follow drags AFTER completion
+Both route through the evaluator coord fast-path (waypath cleared, per-bot,
+instant). Status guard + per-bot dispatch cooldown (1s) unchanged. Node now
+also works when the evaluator is down (strategy file read-only dependency).
+
+**Tests:** test_drag_twin.py rewritten (10 tests, new API); 35 demo+drag pass;
+fast tier 539 passed / same 20 pre-existing failures. Runbook V10.1-V10.8
+wording unified. Constants: DRAG_JUMP_M/DRAG_SETTLE_S removed.
+
+**Next:** lab retest V10 (restart launch — drag_twin changed); especially
+V10.6-V10.8 (completion park + twin-follows-drag).
+
+## 2026-08-31 (cont.) — fix: drag race (twin stopped short) + fake compiler timeouts
+
+**User lab report:** (1) after dragging the sim bot the twin made a very short
+move then stopped; (2) `go 0,0` / `go to 0,0` showed "compiling with 7B ...
+timeout" in the CLI.
+
+**Root causes:**
+1. Drag dispatch fired at DETECTION (+0.3m) — if the user kept dragging, the
+   dispatched target was a stale mid-drag position; the twin walked there and
+   stopped short. Slow drags with a final segment <0.3m never re-fired.
+2. `go to 0,0` hits the coordinate fast-path (instant Move, no compiler call) —
+   the CLI waited 8s for a waypoints.json change that never comes → fake
+   "timeout". `go 0,0` (no "to") didn't match the coord regex at all and fell
+   into the verb guard (ignored).
+
+**Fixes:**
+- drag_twin.py: two-phase dispatch. Detection → "<bot> stop" (instant waypath
+  abort via fast-path); detector then TRACKS the sim bot (STABLE_EPS_M 0.05)
+  until it holds still for TRACK_SETTLE_S (0.6s) → "<bot> goto <final pos>"
+  dispatched urgent (bypasses cooldown). The twin now walks exactly to the
+  sim bot's resting position, no matter how the drag ended.
+- r2k_evaluator.py DEMO_COORD_RE: "go"/"move"/"drive" now work WITHOUT "to"
+  ("go 0,0" instant).
+- calib_cli.py: local COORD_FASTPATH_RE (mirror of the evaluator regex) —
+  coord tasks print "instant Move" instead of waiting for the compiler;
+  timeout message no longer implies an error for fast-path tasks.
+
+**Tests:** test_drag_twin.py rewritten for the two-phase protocol (10 tests:
+stop→goto, parked drag, continued-drag tracking, jitter tolerance, re-arm,
+status guard, per-bot independence, evaluator contract). 35 demo+drag pass;
+fast tier 539 passed / same 20 pre-existing. Runbook V1.1/V10.1 updated.
+
+**Next:** lab retest (restart launch: evaluator + drag_twin + CLI changed).
+
+## 2026-08-31 (cont. 2) — fix: drag-twin never marched (self-referential goto)
+
+**User lab report:** drag sim bot, release → sim bot makes a very short
+movement (slight turn) and stops; twin mimics the small movement but does
+NOT march to the new position.
+
+**Root cause (architectural, NOT a detector race):** a sim bot and its
+hardware mirror share ONE command stream — /blue_N/cmd_vel drives the
+Gazebo diff-drive plugin AND the Yahboom driver ("hardware_mirror"). The
+bridge PD reference is the SIM bot's Gazebo-truth position. Dispatching
+"goto <drop>" for the dragged bot is self-referential: reference ≡ target
+→ PD outputs zeros → the hardware twin never marches. The observed "small
+movement" was the transient toward the STALE previous target before the
+"stop" dispatch landed (plus yaw noise on near-zero dx,dy). The previous
+session's two-phase dispatch fixed a race that wasn't the real problem.
+
+**Fix ("teleport-back + march", drag_twin.py):**
+- On settle, the sim bot is teleported back to its PRE-DRAG position
+  (drag_origin, captured one tick before detection — where the hardware
+  twin stands) via /gazebo/set_entity_state (same service as phantom
+  kicks; gazebo_ros_state plugin confirmed in robocup.world:6).
+- Then "goto <drop>" is dispatched → PD sees reference (origin) → target
+  (drop) → sim bot AND hardware twin march together to the drop; sim bot
+  ends there as the marker.
+- Scoped by relay: teleport only for sim bots WITH a hardware twin
+  (hardware_twins_from_relay: hardware_type != virtual, resolving
+  mirror_of). Virtual-only relays (single_bot) keep the old behavior
+  (dragged position IS the position — no teleport, no rubber band).
+- New detector phase "awaiting_target": after the goto is dispatched,
+  detection is suppressed until the strategy Move lands (note_target) or
+  AWAIT_TARGET_TIMEOUT_S (2.0s) — so the teleport-back + march is never
+  misread as a new drag.
+- Constants tuned: STABLE_EPS_M 0.05→0.08, TRACK_SETTLE_S 0.6→0.4
+  (Gazebo physics settle jitter).
+
+**Tests:** test_drag_twin.py rewritten for the protocol (16 tests: relay
+parsing, drag_origin capture, await_target suppression/release/timeout,
+full-cycle rearm, slow-drift settle). 42 demo+drag pass; fast tier
+546 passed / 20 pre-existing (test_i3_sweep.py, unrelated). Runbook
+V10.1/V10.7/V10.8 updated with the real semantics.
+
+**Next:** lab retest on hardware_mirror (restart launch: drag_twin
+changed). Expected: drag blue_1 → stop → sim bot teleports to twin → both
+march to the drop. Also verify single_bot (no teleport, bot stays).
+
+## 2026-08-31 (cont. 3) — fix: prefixed control verbs executed fleet-wide
+
+**User lab report:** `blue_2 redo` replayed BOTH bots' waypaths (the CLI
+echo even showed "[blue_2]" — only the evaluator's routing was wrong).
+
+**Root cause:** r2k_evaluator.py `_handle_task_clause` made control verbs
+(stop/resume/restart/go home) fleet-wide UNCONDITIONALLY:
+`if bot == "ALL_BOTS" or text in DEMO_CONTROL_VERBS: targets = blue_bots`
+— an explicit bot prefix was parsed but then ignored. The fleet-wide
+default was meant for BARE commands only (safety: "stop" halts the show).
+
+**Fix:** `_parse_task_bot` now returns a 3-tuple `(bot, text, prefixed)`;
+control verbs are fleet-wide only when unprefixed or scope-addressed:
+`if bot == "ALL_BOTS" or (text in DEMO_CONTROL_VERBS and not prefixed)`.
+calib_cli.py needed no change (its display already treated prefixed
+commands as per-bot).
+
+**Tests:** test_demo_multibot.py parse asserts updated for the 3-tuple;
+3 new regression tests (prefixed stop, prefixed redo, bare verb still
+fleet-wide). 45 drag+demo pass; fast tier 549 passed / same 20
+pre-existing (test_i3_sweep.py).
+
+**Next:** lab retest: `blue_2 redo` → only blue_2 replays; bare `redo`
+→ both replay. Restart of the evaluator process required (r2k_evaluator
+changed).

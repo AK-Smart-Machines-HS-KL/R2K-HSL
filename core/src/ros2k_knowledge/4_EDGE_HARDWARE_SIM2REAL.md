@@ -135,7 +135,7 @@ but ROS2K testing/demos use mixed hardware.
 
 | Capability | K1 (biped) | Yahboom (cam variant) | Yahboom (standard) | Trailer | Gazebo (sim) |
 |---|---|---|---|---|---|
-| Kick | Yes (kShoot 2024, autonomous chase) | Yes (metal push, untested, short range) | Yes (metal push, untested) | No | Yes (phantom kick) |
+| Kick | Yes (kShoot 2024, autonomous chase) — **UNVERIFIED, see V6.4 audit note** | Yes (metal push, untested, short range) | Yes (metal push, untested) | No | Yes (phantom kick) |
 | Move sideways | Yes | No (diff-drive) | No (diff-drive) | No | Yes |
 | Rotate in place | Yes | Yes | Yes | No (fixed axle) | Yes |
 | Head rotate | Yes (kRotateHead 2004) | Yes (pan-tilt servo, lousy) | No | No | Yes (if modeled) |
@@ -147,6 +147,17 @@ but ROS2K testing/demos use mixed hardware.
 | Arrival angle control | Yes (can rotate at end) | Yes | Yes | No | Yes |
 
 ### K1 kick pitfalls (critical for real matches)
+
+> [!warning] STATUS 2026-08-28 — UNVERIFIED CLAIM, GATE 0 REQUIRED
+> The "autonomous chase" description below is **KB-internal folklore**: no
+> vendor document and no logged hardware session supports it. Official vendor
+> docs (docs.booster.tech) describe `Shoot()`/`VisualKick()` only as
+> "firmware-configured" actions with no autonomy/chase semantics, and note
+> that Shoot's intended motion is currently **T1-provided** — on K1 `Shoot()`
+> may fail outright. `VisualKick` is K1-supported only from firmware
+> ≥ v1.5.2.1. **The "chase forever" behavior MUST be probed on hardware
+> before any abort design is implemented.** Full audit + probe protocol:
+> `docs/plans/v68_pre_ifa/k1_kick_head_vendor_audit.md`.
 
 The K1's kick skills are **autonomous** — the K1 takes over and chases the
 ball until kick distance is reached:
@@ -174,6 +185,31 @@ The K1 SDK provides `kRotateHead` (api_id 2004) with parameters:
 This is independent from body locomotion (api_id 2001). The bridge can
 publish head rotation commands without affecting cmd_vel / RPC 2001.
 Failsafe: api_id 2000 (kChangeMode) resets head to forward position.
+
+> Vendor-confirmed for K1 (docs.booster.tech, 2026-08-28): `RotateHead`
+> ≥ v1.0.0, absolute angles in **radians**; also `RotateHeadWithTime`
+> (newer SDK, absent from our hpp snapshot) and `RotateHeadWithDirection`
+> (2006, jog via -1/0/+1). K1 joints: `kHeadYaw=0`, `kHeadPitch=1`.
+> No angle limits documented — the "±180°" above and the 2000-reset claim
+> are unsourced; clamp limits must be tuned on hardware.
+
+### Official vendor documentation (audit 2026-08-28)
+
+- **docs.booster.tech** → Developer Guide → C++ SDK → Motion-Control
+  Interfaces — official for K1/T1/T2; `b1_loco_api.hpp` is its B1LocoClient
+  header (our copy = older snapshot)
+- ODT manual title: **"K1 *and* T1 Instruction Manual"** (shared, not T1-only)
+- `Shoot()` (2024): K1-listed, but *"current T1 provides the intended
+  motion"* — may fail on K1; absent from the firmware compat table
+- `VisualKick` (2038): **K1-supported, firmware ≥ v1.5.2.1**, V2 = stronger
+  force; vendor documents NO autonomy/chase/aiming behavior for either
+- **`RobotMode::kSoccer = 4`** (K1 + T1, missing from our hpp snapshot):
+  dedicated soccer mode with `kSoccerGait`, `kSoccerLocomotion/kSoccerKicking`
+  postures, actions `kShoot=9`, `kGoalie=11`, `kVisualKickV1=14`,
+  `RobocupBehaviorStatus RUNNING/SHOOTING/PASSING` — evaluate BEFORE building
+  our own kick-abort machinery
+- Current firmware line: v1.7.2; version check via `GetRobotInfo` (api 2022)
+- Full audit + probe protocol: `docs/plans/v68_pre_ifa/k1_kick_head_vendor_audit.md`
 
 ### K1 trajectory replay (api_id 2027/2028)
 
@@ -213,3 +249,57 @@ bots (K1, sim). No kick, no camera, no head rotation.
 - Kick direction override: blue_1 (goalie) always kicks toward +X
 - PD gain boost: lin_x = 1.2 (was 0.8) when distance > 1.0m
 - `GOALIE_DEADBAND_PCT`: 0.022 → 0.015 (tighter Y tracking)
+
+
+### Yahboom addendum (2026-08-29 — local-resource audit)
+
+Our Yahboom = **MicroROS-Pi5 class** (ESP32 microROS board, 4x 370 encoder motors,
+MS200 2D-TOF lidar, 2MP cam on 2-DOF gimbal, diff-drive — NOT Mecanum; the
+ROSMASTER X3 sim references are Mecanum = wrong kinematics for us).
+- **Gimbal ("pro" head)**: microROS topics `<ns>/servo_s1`/`servo_s2` (Int angles),
+  confirmed at ESP32-firmware level (servo_subscriber sample)
+- **Odometry**: `<ns>/odom` published by the ESP32 (odom_publisher sample; wm.py POC
+  displays bot1+bot2 live) — odometry flows; bridge does not consume it yet
+- **Board-side PID registers** (serial config tool): MOTOR_PID (0x09), IMU_YAW_PID
+  (0x0A), SERVO_OFFSET (0x08) — rotation/distance variations may be curable board-side
+- ESP32 firmware images V1.1.3/V2.0.0/V2.1.0 exist locally; installed version via 0x51
+- **LIDAR ball detection pipeline** (v6.8 pre-IFA): LaserScan -> adaptive jump
+  segmentation -> cluster size-gate (ball diameter band) -> arc centroid -> Kalman ->
+  `vision_interface/msg/Ball.msg` schema; same node on Gazebo ray-sensor scans
+  (sim2real-identical). Team POCs: lidar_view/heatmap (QoS Best-Effort gotcha)
+- Driver/ROS source is LOCAL: `~/yahboom/ROS_Source_Code/` (yahboomcar_ws, imu_ws,
+  gmapping_ws); ESP32 samples: `~/yahboom/Samples microros/`; config tool:
+  `~/yahboom/config_robot.py`; details: `src/yahboom/YAHBOOM_KNOWLEDGE.md`
+- **UNVERIFIED third-party source**: roboticscenter.ai K1 "software guide" contradicts
+  official specs (vx ±0.5 vs 1.1 m/s, head ±90° vs ±59°, nonexistent PyPI SDK) — do not use
+- udp camera stream (udp_cam/direct_view) remains the known problem child — demos use
+  LIDAR-only perception until the rework lands
+
+### micro-ROS fleet: domains, naming, radio (2026-08-30 — USB-verified)
+
+**Fleet table (after the 1→1/2→2 rename):**
+| Bot | ESP32 namespace | Domain | Role |
+|---|---|---|---|
+| yahboom #1 | **/blue_1** (was /bot1) | 0 | drive |
+| yahboom #2 ("vision", 2-DOF cam) | **/blue_2** (was /bot1 — collided!) | 0 (was 20) | camera |
+Both fw 2.1.0, maker4/nao12345, agent 10.42.0.1:8888, CAR_TYPE_COMPUTER.
+
+- **XRCE domain is NOT inert:** the client's domain rides the
+  create-participant payload; the agent creates entities in the CLIENT's
+  domain. A domain-20 bot is invisible to every domain-0 query — and to the
+  launch's hardware wait. Fix = one register write (config tool, USB).
+- **Namespace-aligned mirroring:** with /blue_N matching the sim twin names,
+  `/blue_N/cmd_vel` is consumed by BOTH the Gazebo plugin and the ESP32 —
+  implicit mirroring, no bridge mirror thread for Yahbooms. K1 keeps
+  `mirror_of: blue_1`. Sim bots are never renamed (scenario naming fixed).
+- **Radio instability (desk):** the host's Intel Wi-Fi 7 BE200-class card
+  resets in AP mode every ~5-15 min (journal: supplicant-failed → device
+  removed); NM then falls back to the Fritzbox. Lab sessions were stable.
+  Mitigations: `connection.autoconnect no` on ALL competing wifi profiles,
+  re-raise the hotspot, or a dedicated USB wifi dongle for AP duty.
+- **Diagnostic order when "no topics" from a bot:** (1) hotspot up?
+  `ip -4 -br addr` (2) agent running? `docker ps | grep uros_agent` (3) client
+  session in `docker logs uros_agent`? (4) domain match? (5) graph theories —
+  never skip 1-3 (each failed here before the register read).
+- Config tool references: `~/yahboom/config_robot2.py` (bot #2/current) —
+  the older `config_robot.py` is a STALE copy (26-char PSK, Fritzbox IP).

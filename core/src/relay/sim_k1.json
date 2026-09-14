@@ -1,0 +1,7 @@
+{
+  "relay_id": "sim_k1",
+  "requires_hardware_sync": false,
+  "mapping": {
+    "k1": {"hardware_type": "virtual", "topic": "/blue_2/cmd_vel", "sim_bot": "blue_2"}
+  }
+}
