@@ -151,8 +151,9 @@ DEMO_COMPILER_MODEL = "qwen2.5:7b"
 # executor hammered Ollama at ~5.5 calls/s — 85ms calls with the hash-skip
 # disabled — starving task-input processing and saturating the GPU; commands
 # typed during the hammering were delayed/lost). Match mode is naturally
-# rate-limited by its ~700ms calls.
-DEMO_MIN_CYCLE_S = 1.0
+# rate-limited by its ~700ms calls. 3Hz per user tuning 2026-09-14 (the
+# 1s stepping felt too coarse in the demo — visible sprint/pause bursts).
+DEMO_MIN_CYCLE_S = 0.33
 
 # --- Demo head/face routing (calibration showcase) ---
 # ALL bare commands default to blue_1 (uniform mental model, user 2026-09-06):

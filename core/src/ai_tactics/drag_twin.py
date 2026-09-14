@@ -205,9 +205,14 @@ if ROS_AVAILABLE:
                 return set()
 
         def _match_status(self):
+            # Demo sessions carry match_state.status = None (the referee
+            # nodes don't run in --demo) — the drag watches must still arm
+            # (live 2026-09-14: status None disarmed the detector entirely).
+            # None/missing -> "playing" (the demo semantic is always-playing).
             try:
                 with open(WORLD_STATE_PATH, 'r') as f:
-                    return json.load(f).get("match_state", {}).get("status", "playing")
+                    status = json.load(f).get("match_state", {}).get("status")
+                return status or "playing"
             except Exception:
                 return "unknown"
 
