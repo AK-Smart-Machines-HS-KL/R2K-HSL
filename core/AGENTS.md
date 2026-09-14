@@ -165,6 +165,16 @@ Renderer is brittle. Subgraph IDs: alphanumeric + underscores only, no brackets.
 with special chars (`/`, `.`, parens) MUST be double-quoted. `[/.../]` shape syntax crashes the parser.
 See `META_KNOWLEDGE_ROUTER.md` §3.
 
+## Writing style (permanent rule, 2026-09-14)
+
+Avoid project-internal abbreviations and phase-relative labels in docs/plans/changelogs —
+no bare "i3", "v0", "B1", "fast tier", "Slice 2" without explanation. Use standard
+software-engineering wording ("fast regression tests", "baseline prompt snapshot") or spell
+out the reference on first use ("project phase v6.5, the inter-lingua prompt-variant experiment").
+Every introduced term must be defined at first use or linked to the glossary
+(`post_field_test_plan.md`, Appendix B). Same discipline inside the bridge/tests: named
+constants with comments, no phase jargon in log messages.
+
 ## Gotchas
 
 - `launch_r2k.sh` wipes `shared_state/current_strategy.json` and `Worldstate.json` on every start.
