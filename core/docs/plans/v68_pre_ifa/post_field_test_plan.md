@@ -190,6 +190,8 @@ Slots as Phase 2.5 (after 2.1 tape measure, same hardware sessions). Risks ranke
 - **R2K_WING_STAGE** (Slice 2, requires TEAMCAPTAIN) — wing staging: ball deep in attack + no wide blue bot → send the farthest field bot to the wing (bridge:1580). Formation change, opt-in.
 - **Goalie wandering** — the LLM assigns its goalie non-goalie behavior (chase/move upfield): measured blue_1 |x| 0.01–6.0 m across runs (goal line is |x|=4.5). The TC goalie-Y smoothing only stabilizes lateral wobble ON the line — it cannot prevent upfield orders. Deterministic fix (goalie position gate) = TeamCaptain node scope (role locks, ADR-A07).
 - **kick-FAKE (B1)** — the IFA demo kick: `kick ball` fast-path → waypoints with push-through overshoot (the bot walks INTO the ball — looks like a kick, is a drive-through). **Worked at the IFA**; tuning note: the Yahboom needs high speed for a nicely moving ball (calib speeds too slow for the demo push).
+- **Silent prompt-change detection** — the fast regression tier fails whenever prompt fragments change without the frozen v6.3 prompt-variant experiment baseline (internally tracked as i3_sweep) being refreshed. The only protection against unacknowledged prompt edits; the refresh belongs in every intentional prompt commit (snapshot = last acknowledged prompt version). Pit item P8; wording rule: not "drift" (reserved for odometry/sensor error).
+- **Yahboom camera (udp-cam)** — the ROBOT's own camera stream, distinct from GZWeb (the sim-stream viewer). Reliability problems documented; rework is pit item P7.
 
 ---
 

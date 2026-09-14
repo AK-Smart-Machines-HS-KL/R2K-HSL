@@ -161,3 +161,29 @@ command reference and model capabilities.
 - Grid-cell symbolic approach rejected (3B scored 0/20)
 - Time-indexed CSV schedule rejected (boundary failures at thresholds)
 - Wing = opponent half (Y positive = left from own goal POV)
+---
+
+## 9. Consolidated pit — v7 backlog table (2026-09-14)
+
+> Merges: the displaced 6.8 items (13/15/16), the overview v2 parked list, and
+> the 09-14 audit leftovers. Branch names follow git_rules (prefix/Name, one
+> coherent change each); none exist yet unless noted. Writing rule applies:
+> no phase-relative labels without reference.
+
+| # | Idea | What & why | Branch (status) |
+|---|---|---|---|
+| P1 | LIDAR ball-detection node | MS200 and sim LIDAR share identical code feeding ball position into the Worldstate, so "kick ball" stops needing a fixed demo spot. Pre-IFA design exists (plan_v68 V4); ball-size candidates picked at the lab session. | `feature/LidarBallNode` — not started |
+| P2 | Trailer choreography + LIDAR frame detection | Demo sequence (fork entry, 0° push, 45° rotation) plus LIDAR-only 2-post trailer pose detection, decoupled from the flaky udp-cam. Displaced from 6.8 by the field-day pivot; design written (plan_demo_ifa Task D). | `feature/TrailerDemo` — not started |
+| P3 | K1 camera vision (ONNX segmentation) | Vendor stack gives real ball/goal perception for field autonomy without Gazebo ground truth. Blocked on PR-#17 merge decision (booster-msgs reconciliation — Trello card 09-14). | `feature/import_vision` — exists, PR #17 open (team) |
+| P4 | Score-function leftovers | `last_toucher` (referee-truth) instead of nearest-bot possession; non-linear position gain to avoid clamping; goal-bonus race condition (score_node should read the aggregated Worldstate). Small isolated score_node changes. | `refactor/ScoreLeftovers` — not started |
+| P5 | Per-bot state unification | The bridge carries 5 parallel per-bot dicts (k1_odom, y_odom, y_est, y_last_raw_t, y_last_pub_t); one record kills the copy seams every new feature duplicated. Audit item C5 — deferred past the field day (medium risk, cosmetic payoff). | `refactor/BotStateUnification` — not started |
+| P6 | Team-message protocol | The vendor brain broadcasts skill state to teammates ("I'm in VisualKick", cost sharing) so bots coordinate without a central planner. Our analog is the shared Worldstate + LLM; study the pattern for multi-K1 fleets. | `feature/TeamMessages` — not started (vendor pattern documented 09-12) |
+| P7 | Yahboom camera (udp-cam) stream rework | The ROBOT's camera stream (udp-cam on the Yahboom — NOT the GZWeb sim stream) is unreliable (documented problems); separate track if the IFA demo returns. Low priority while LIDAR/vision alternatives exist. | `tools/UdpCamRework` — not started |
+| P8 | Silent prompt-change detection | The fast regression tier fails whenever prompt fragments change without the frozen v6.3 prompt-variant experiment baseline (internally tracked as i3_sweep) being refreshed — the only protection against unacknowledged prompt edits. Refresh belongs in every intentional prompt commit (snapshot = last acknowledged prompt version). One-time refresh + rule adoption = cleanup session. | `tests/SweepSnapshotRefresh` — not started |
+| P9 | opencode favorites cleanup | Drop the underperforming NVIDIA nemotron models from the opencode favorites (project phase v6.3 model-comparison leftovers; format:json confound). Cosmetic config cleanup. | `tools/OpencodeFavorites` — not started |
+| P10 | GZWeb/GUI POC follow-ups | Still under development: supervisor hardening, widget follow-ups. The POC (supervisor, frontend, launcher) lives on branch feature/gzweb-experimental (commit 63b678e) and is already merged into the working line. | `feature/gzweb-experimental` — exists, in development |
+| P11 | User-docs pass | The 40-file technical reference drifted from reality (e.g. the 4_06 BoosterK1 spec still claims the relayed-odom folklore). One documentation pass aligned to the field-day reality. | `docs/UserDocsPass` — not started |
+| P12 | Behavioral priorities (reference — owned by v7 item 26) | Goalie kick 0/100 matches, blue_3 never receives, defensive recovery gaps, 42% draw rate — the 100-match evidence; resolves via TeamCaptain role locks. Kept here so the evidence is not lost. | — (v7 item 26) |
+
+**Dropped:** the --odom CSV watch (user decision 2026-09-14 — superseded by per-bot odom state files + belief feedback).
+**Merged out:** the goalie-distribution sub-rule → v6.9 item 21b (same code site as kick-aim quality, `resolve_pass_target`).
