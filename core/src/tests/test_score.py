@@ -20,7 +20,11 @@ import logging
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-# Mock rclpy and std_msgs before importing score_node
+# Mock rclpy and std_msgs before importing score_node.
+# Force-install (not setdefault) so the mock takes effect even if the real
+# rclpy was already imported by another test module. Save originals so we
+# can restore them after importing score_node (which binds Node at import
+# time via `from rclpy.node import Node`).
 _rclpy = types.ModuleType('rclpy')
 _rclpy.init = lambda: None
 _rclpy.spin = lambda n: None
@@ -42,12 +46,21 @@ _stdmsg_msg = types.ModuleType('std_msgs.msg')
 _stdmsg_msg.String = str
 _stdmsg.msg = _stdmsg_msg
 
-sys.modules.setdefault('rclpy', _rclpy)
-sys.modules.setdefault('rclpy.node', _rclpy_node)
-sys.modules.setdefault('std_msgs', _stdmsg)
-sys.modules.setdefault('std_msgs.msg', _stdmsg_msg)
+_saved = {k: sys.modules.get(k) for k in
+          ('rclpy', 'rclpy.node', 'std_msgs', 'std_msgs.msg')}
+sys.modules['rclpy'] = _rclpy
+sys.modules['rclpy.node'] = _rclpy_node
+sys.modules['std_msgs'] = _stdmsg
+sys.modules['std_msgs.msg'] = _stdmsg_msg
 
 import score_node as sn
+
+# Restore originals so other test modules see the real rclpy if it was there.
+for k, v in _saved.items():
+    if v is not None:
+        sys.modules[k] = v
+    else:
+        sys.modules.pop(k, None)
 
 
 def _make_node():

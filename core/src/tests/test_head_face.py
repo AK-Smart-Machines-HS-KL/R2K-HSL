@@ -472,6 +472,26 @@ def test_gesture_body_bots_constant():
 
 # --- Bridge strategy passthrough + Face snapshot semantics (skip w/o rclpy) ---
 
+
+def _fb_mock(bridge_mod):
+    """Create a minimal FB mock with _face_target_yaw, _advance_seq, and
+    _seq_effective wired to the real HalBridge methods (unbound calls pass
+    self=fb). Also includes get_logger and _publish_odom_states for
+    read_llm_strategy."""
+    import logging
+    fb = type("FB", (), {
+        "_face_target_yaw": bridge_mod.HalBridge._face_target_yaw,
+        "_advance_seq": bridge_mod.HalBridge._advance_seq,
+        "_seq_effective": bridge_mod.HalBridge._seq_effective,
+        "get_logger": lambda self: logging.getLogger("test_bridge"),
+        "_publish_odom_states": lambda self: None,
+        "TARGET_EXTRA_KEYS": bridge_mod.HalBridge.TARGET_EXTRA_KEYS,
+    })()
+    fb._seq_state = {}
+    fb._face_state = {}
+    return fb
+
+
 def test_bridge_face_snapshot_semantics(tmp_path):
     """Relative turns must snapshot the target yaw ONCE per command id:
     re-deriving (cyaw + relative) every tick made the target move with the
@@ -481,7 +501,7 @@ def test_bridge_face_snapshot_semantics(tmp_path):
         import ollama_sandbox_bridge as bridge
     except ImportError:
         pytest.skip("gazebo_msgs/booster_msgs not available (no ROS env)")
-    fb = type("FB", (), {})()
+    fb = _fb_mock(bridge)
     fb._face_state = {}
     # first sight at cyaw=0.0: snapshot = 0 + pi/2
     t1 = {"action": "face", "relative_angle": math.pi / 2, "id": 1}
@@ -507,9 +527,7 @@ def test_bridge_seq_cursor_and_forks(tmp_path):
         import ollama_sandbox_bridge as bridge
     except ImportError:
         pytest.skip("gazebo_msgs/booster_msgs not available (no ROS env)")
-    fb = type("FB", (), {})()
-    fb._seq_state = {}
-    fb._face_state = {}
+    fb = _fb_mock(bridge)
     seq = {"action": "Seq", "id": 1.0,
            "steps": [{"action": "Face", "yaw": math.pi},
                      {"action": "Pause", "duration": 5.0}]}
@@ -541,9 +559,7 @@ def test_bridge_seq_say_step_forks_by_hardware(tmp_path):
         import ollama_sandbox_bridge as bridge
     except ImportError:
         pytest.skip("gazebo_msgs/booster_msgs not available (no ROS env)")
-    fb = type("FB", (), {})()
-    fb._seq_state = {}
-    fb._face_state = {}
+    fb = _fb_mock(bridge)
     seq = {"action": "Seq", "id": 9.0,
            "steps": [{"action": "Head", "gesture": "no", "cycles": 3}]}
 
@@ -567,9 +583,7 @@ def test_bridge_seq_effective_look_step_advances(tmp_path):
         import ollama_sandbox_bridge as bridge
     except ImportError:
         pytest.skip("gazebo_msgs/booster_msgs not available (no ROS env)")
-    fb = type("FB", (), {})()
-    fb._seq_state = {}
-    fb._face_state = {}
+    fb = _fb_mock(bridge)
     seq = {"action": "Seq", "id": 5.0,
            "steps": [{"action": "Head", "pan_deg": 30.0, "tilt_deg": 0.0},
                      {"action": "Face", "yaw": 0.0}]}
@@ -597,7 +611,7 @@ def test_bridge_read_llm_strategy_passthrough(tmp_path):
             {"action": "Face", "yaw": 1.5708},
         ]},
     }}))
-    fb = type("FB", (), {})()
+    fb = _fb_mock(bridge)
     fb.strategy_file = str(strat)
     fb.targets = {"blue_9": {"action": "Move", "x": 9.0, "y": 9.0}}   # stale entry
     bridge.HalBridge.read_llm_strategy(fb)
@@ -632,11 +646,9 @@ def test_bridge_seq_production_roundtrip(tmp_path):
     strat.write_text(json.dumps({"assignments": {
         "blue1": {"action": "Seq", "id": 99.0, "steps": [
             {"action": "Face", "yaw": 3.14}]}}}))
-    fb = type("FB", (), {})()
+    fb = _fb_mock(bridge)
     fb.strategy_file = str(strat)
     fb.targets = {}
-    fb._seq_state = {}
-    fb._face_state = {}
     bridge.HalBridge.read_llm_strategy(fb)
     eff = bridge.HalBridge._seq_effective(fb, "blue1", "yahboom", "blue1",
                                           fb.targets["blue1"], 0.0, 0.0, 0.0)

@@ -50,8 +50,8 @@
 | 17e | Say yes/no on hardware (y1 = Seq of closed-loop swings, y2 = servo), compass (+ = clockwise) | ✅ |
 | 17f | Overnight regression harness + analysis — verdict: platform green; composite gate structurally flaky on 0-0 (goal-weight 0.4); kick-aims 74% non-goalward with flags OFF | ✅ |
 | 17g | Field-day docs: runbook §V11, cheat-sheet overhaul, post_field_test_plan v2 (glossary/audit/kick plan), U22 runbook (Appendix C) | ✅ |
-| 17h | **U22 regression** (Appendix C: fast tier 251 expected / battery 12-12 / full tier) | ⬜ **awaiting results on the U22 machine** |
-| 17i | Merge to main: PR per topic branch — **only after 17h green**; branches pushed: `refactor/CalibCleanup`, `feature/K1KickSkill`, `feature/ExecStepperHardening`, `docs/FieldDayLessons` (all at 830fb3b) | ⬜ |
+| 17h | **U22 regression** (Appendix C) — fast tier 255/0/11 (rclpy native → bridge tests run), battery 12/12, slow tier 6/5 (KPI platform deltas — both platforms miss → recalibration = item 22); 3 test-file bugs fixed & integrated; report: `u22_regression_20260913.md` | ✅ |
+| 17i | **Merge to main** — BOTH platforms green (U24 overnight + U22 native) → PR `docs/v68Planning` → `main` ready to file (GitHub web; gh unauthenticated here). Tag `v6.8-field-day` = the regression reference | ⬜ **READY — file the PR** |
 
 ## 6.9 — two modes + K1 skills (entry: 17h green)
 

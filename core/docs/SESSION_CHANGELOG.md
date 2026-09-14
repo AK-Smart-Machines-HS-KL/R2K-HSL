@@ -74,6 +74,47 @@ directive). No hardware needed for the code-only phases.
 
 ---
 
+## 2026-09-13 — U22 regression (performed on the U22 machine, integrated 09-14)
+
+**Goal:** Execute the U22 native regression runbook (Appendix C) before any
+main merge. Full report: `docs/reference/benchmarks/u22_regression_20260913.md`
+(integrated from the U22 tarball; 3 test-file fixes included).
+
+**Results:**
+- Build: first native `booster_interface` build, 6 packages, no numpy issues
+- Fast tier: **255 passed, 0 failed, 11 skipped** (rclpy system-installed →
+  the 6 bridge tests RUN instead of skip)
+- Sim battery: **12/12**
+- Slow tier: **6 passed / 5 failed** — all KPI threshold misses (composite
+  0.296-0.406 vs mins 0.333-0.427; cluster +6.9/+14.1 over max) = platform
+  deltas, consistent with the U24 overnight verdict (single-sample gates on
+  goal-luck metrics are flaky → recalibration = v6.9 item 22)
+
+**3 test bugs found & fixed by the U22 session (test files only):**
+1. test_score.py rclpy mock isolation — `setdefault` is a no-op when real
+   rclpy is importable (system ROS on U22); fix = force-install mock →
+   import → restore originals (save/restore pattern)
+2. test_head_face.py FB mock incomplete — bare `type("FB")` lacked the
+   methods `_seq_effective` calls; fix = `_fb_mock()` factory wiring the
+   real HalBridge methods (never caught on U24: rclpy missing → bridge
+   tests skip there)
+3. test_non_functional relay — same `sim_only` fix as U24's 830fb3b
+   (independently found — the rename regression confirmed on both platforms)
+
+**i3_sweep note (corrected):** the "20 pre-existing failures" are
+byte-identity assertions of the LIVE prompt fragments against FROZEN v0
+experiment snapshots — they fail by design after any legitimate prompt
+evolution (e.g. the FIELD LIMITS block). Not code bugs; refresh the
+snapshots when prompts change intentionally (cleanup-session item).
+
+**Integration (09-14):** U22 versions of test_score.py + test_head_face.py
+adopted (U24 tree untouched since 14179d2 in those files); U24's
+test_non_functional kept (identical relay fix); fast tier re-verified
+251 passed / battery 12-12 with the integrated files; report archived to
+docs/reference/benchmarks/.
+
+---
+
 ## 2026-09-12 — Match-mode slot fix: blue bots braked since the relay rename
 
 **Goal:** Diagnose `./launch_r2k.sh` (defaults): blue bots motionless while
