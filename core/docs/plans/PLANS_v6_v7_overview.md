@@ -52,7 +52,7 @@
 | 17f | Overnight regression harness + analysis — verdict: platform green; composite gate structurally flaky on 0-0 (goal-weight 0.4); kick-aims 74% non-goalward with flags OFF | ✅ |
 | 17g | Field-day docs: runbook §V11, cheat-sheet overhaul, post_field_test_plan v2 (glossary/audit/kick plan), U22 runbook (Appendix C) | ✅ |
 | 17h | **U22 regression** (Appendix C) — fast tier 255/0/11 (rclpy native → bridge tests run), battery 12/12, slow tier 6/5 (KPI platform deltas — both platforms miss → recalibration = item 22); 3 test-file bugs fixed & integrated; report: `u22_regression_20260913.md` | ✅ |
-| 17i | **Merge to main** — BOTH platforms green at the rewind point (`fef67d4`, 09-14: demo-fix work parked on `parked/demo-mirror-f1f2-20260914` after field verification; see changelog 09-14). Remaining before the PR: the D2 demo pair-motion semantics decision (pair-mirror mechanics vs independent actuators — the parked fix works mechanically but the motion quality is bad). MR = GitHub web | ⬜ file PR (documented deltas) |
+| 17i | **Merge to main — DONE 2026-09-14**: PR #20 merged (local `git merge --no-ff` + push after the GitHub web UI failed to render; GitHub auto-marked the PR merged). Merge commit `c358baf`, tag `v6.9-baseline`. Demo-fix work parked on `parked/demo-mirror-f1f2-20260914` pending the D2 pair-motion semantics decision | ✅ merged |
 
 ## 6.9 — two modes + K1 skills (entry: 17h green)
 
