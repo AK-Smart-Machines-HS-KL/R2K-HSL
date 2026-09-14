@@ -2,7 +2,7 @@
 
 **Status:** ✅ done · 🔶 in progress/partial · ⬜ to do · ❌ retired · **🧪 Lab** = hardware required | **Date:** 2026-09-14
 **Superseded:** the 2026-08-29 version (IFA-era planning — archived content below stays valid as history).
-**Detail docs:** [post_field_test_plan](v68_pre_ifa/post_field_test_plan.md) (ACTIVE execution plan: Phase 0-2.5 + audit/glossary appendices) · [calib_validation_runbook](v68_pre_ifa/calib_validation_runbook.md) (§V11 + Appendix C U22 runbook in post_field_test_plan) · [k1_kick_head_vendor_audit](v68_pre_ifa/k1_kick_head_vendor_audit.md) (GATE 0) · [plan_v7_coarse](v7/plan_v7_coarse.md) · [ADR-A07](../adr/ADR-A07-team-captain-architecture.md) · [pit_of_nice_ideas](v7/pit_of_nice_ideas.md)
+**Detail docs:** [post_field_test_plan](v68_pre_ifa/post_field_test_plan.md) (ACTIVE execution plan: Phase 0-2.5 + audit/glossary appendices) · [calib_validation_runbook](v68_pre_ifa/calib_validation_runbook.md) (§V11) · [k1_kick_head_vendor_audit](v68_pre_ifa/k1_kick_head_vendor_audit.md) (GATE 0) · [plan_v7_coarse](v7/plan_v7_coarse.md) · [ADR-A07](../adr/ADR-A07-team-captain-architecture.md) · [pit_of_nice_ideas](v7/pit_of_nice_ideas.md) · archived IFA-era docs: `docs/outdated/ifa_planning/`
 **Session evidence:** SESSION_CHANGELOG 2026-09-08 (calib field day) + 2026-09-12 (match-slot fix) + 2026-09-13/14 (overnight regression + analysis: `overnight_analysis_20260913.md`).
 
 ## Binding naming decisions (2026-09-12)
@@ -79,13 +79,21 @@
 | 30 | Calibration/hardening: Llama 100-match, 15-scenario probe, U22/U24 parity, dead-code batch | ⬜ |
 | 31 | **Pit of nice ideas** — consolidated table P1-P12: LIDAR ball node, trailer choreography + LIDAR, K1 camera vision, score leftovers, per-bot state unification, team-message protocol, Yahboom camera (udp-cam) rework, silent prompt-change detection, opencode favorites cleanup, GUI follow-ups, user-docs pass, behavioral-priorities reference — [pit §9](v7/pit_of_nice_ideas.md) | ⬜ |
 
-## Planning-doc cleanup (separate session — task list)
+## Planning-doc cleanup — DONE 2026-09-14
 
-| Doc | Action |
-|---|---|
-| mgt_v68.md, plan_v68.md, plan_demo_ifa.md, mgt_demo_ifa.md, LAB_SESSION.md | IFA-era — archive to `outdated/` (keep: B1 high-speed note extracted first) |
-| post_field_test_plan.md + PLANS_v6_v7_overview.md | the only living plans going forward |
-| k1_kick_head_vendor_audit.md, ADR-A07, phase_w_decision_report.md, proposal_edge_llm_k1.md | keep as references |
-| SESSION_CHANGELOG.md | archival pass (item 9: 209 KB → archive file) |
+Archived to `docs/outdated/ifa_planning/` (IFA-era, superseded by this
+overview + the changelog): mgt_v68.md, plan_v68.md, plan_demo_ifa.md,
+mgt_demo_ifa.md, LAB_SESSION.md, LAB_SESSION_cards.md, scratch.md,
+notes_hardware_search.md. mgt_v7.md → `docs/outdated/` (superseded by the
+v7 section above; phase_w_decision_report.md carries the Phase-W detail).
 
-**Parked:** GUI follow-ups · user-docs pass (40 files) · udp-cam rework.
+**Living documents:** PLANS_v6_v7_overview.md (this index) ·
+post_field_test_plan.md (execution plan: Phase 0-2.5 + appendices) ·
+calib_validation_runbook.md (§V11) · k1_kick_head_vendor_audit.md (GATE 0) ·
+calibration_rotation_design.md (implemented-feature reference) ·
+plan_v7_coarse.md + phase_w_decision_report.md + proposal_edge_llm_k1.md (v7) ·
+pit_of_nice_ideas.md + pit_of_nice_ideas_trello.md (backlog) ·
+student_projects_autumn_fair.md (separate track).
+
+**Still open:** SESSION_CHANGELOG archival pass (item 9: 209 KB → archive
+file) · GUI follow-ups · user-docs pass (40 files) · udp-cam rework.
