@@ -74,6 +74,63 @@ directive). No hardware needed for the code-only phases.
 
 ---
 
+## 2026-09-14 — Field-verification day: mode matrix, demo problems documented, session close
+
+**Goal:** Verify the rewound state (`fef67d4`, pre-demo-fixes) on all three
+modes, document every open problem, close the session for the merge request.
+
+**Verification matrix (user-executed, hardware live):**
+
+| Mode | Result |
+|---|---|
+| `--scenario 3vs3_default` (match, U24 sim) | blue bots drive in Gazebo ✅ — "no movement of physical bot" is EXPECTED (sim_only relay has no hardware entries; nothing to move on the floor) |
+| `--calib --relay hardware_yahboom --scenario 2vs0_demo` | **everything works** ✅ (the full calib vocabulary) |
+| `--relay hardware_mirror --demo` | **rubbish** ❌ — documented below |
+
+### Demo-mode problems found today (all preserved on branch
+`parked/demo-mirror-f1f2-20260914` — commits de82732/6bc82bc/61c7dad/9bb31ac):
+
+| # | Problem | Root cause (analysis) | Idea for better |
+|---|---|---|---|
+| D1 | Demo+mirror: NO movement at all (the pre-merge bug) | mirror-mode slot lookup (canon `blue1` via mirror_of) never matched the evaluator's direct `y1` slots / ents-world fleet slots (`blue_1`) — the third naming-split leg, demo leg | FIXED in parked commits (Option A pair-mirror redirect at the write boundary + bridge slot fallback). Mechanism choice itself (one topic = one stream) is the deeper question — see D4 |
+| D2 | Pair-motion quality: hopping (move ~1s, stop, hop), creeping, sprint-pause bursts | pair-mirror = ONE topic carrying ONE stream for two VERY different consumers (Gazebo diff-drive vs Yahboom firmware PID with ~1s spin-up and 0.27 rad/s yaw authority); plus the demo executor's re-decision cadence (5.5Hz→1s→3Hz tuning chased the symptom) | Rethink: Option B (independent actuators — y1 drives only the Yahboom, sim twin freezes/shadows) vs leaving pair-motion to a proper position-mirror loop (the deferred sim-puppet design, TeamCaptain v7 scope) |
+| D3 | "say yes" worked once then bot ALSO drove forward; drag: bots stayed dropped; later commands ignored | (a) drag detector DISARMED in demo — match_state.status=None (referee absent) failed the 'playing' gate (fixed in parked 61c7dad); (b) command blackhole: the demo executor hammered Ollama at 5.5 calls/s (fixed in parked 6bc82bc F1) AND the first compile task stalled the evaluator 72s (3B→7B disk swap; fixed in parked F2); (c) single-slot task channel: drag dispatches COALESCE with concurrently-typed user tasks (F3, designed not built) | Land F1+F2+drag-arming from the parked branch in the next session; add task-channel priority (user > drag) |
+| D4 | Y#1/Y#2 XRCE client stalls mid-motion (3 motion sessions, 3 stalls: never recovers in-session, power-cycle required) | vendor micro-ROS client fragility under sustained cmd_vel load; the quarantine defense works (safe freeze) but recovery = power-cycle | v6.9 mitigation item: measure stall rate vs cmd_vel rate (12Hz→lower?), per-bot power-cycle procedure documented; battery field is RAW (~81 = 8.1V), not BatteryState |
+
+### Known bugs / limitations at the rewind point (merge-relevant, documented)
+
+1. **Demo+mirror inert** (D1) — original bug, live at `fef67d4`. Fix exists on
+   the parked branch; decision D2 (pair-motion semantics) pending.
+2. **XRCE stalls** (D3/D4) — vendor firmware; defenses live; recovery =
+   power-cycle; rate correlation unquantified.
+3. **Composite/cluster KPI gates flaky on both platforms** (0-0 matches land
+   ~0.33 structurally; U22+U24 both miss) — recalibration = v6.9 item 22.
+4. **i3_sweep 20 failures** = silent prompt-change detection vs frozen
+   v6.3-era snapshots — by design; refresh = pit P8.
+5. **Stale relay refs** in batch_evaluator/tournament/rebaseline_collect
+   (only_sim_bots) — dead tools, cleanup session.
+6. **K1 DAMP hint + say/face (RPC 2004)** — untested live (v6.9 items).
+
+### Merge-request status
+
+BOTH platforms green at the rewind point (U24 overnight + U22 native 255/0).
+The rewind REMOVED the only un-verified-in-production change (the demo fix)
+from the merge. Remaining TBD before the MR: (a) user decision on demo
+pair-motion semantics (D2) — either merge WITHOUT demo-fix (demo+mirror
+documented-broken, fix lands in v6.9 with the semantics decision) or cherry-pick
+the parked pair-mirror commit after D2 resolution; (b) PR text from the overview
+field-day section; (c) file via GitHub web.
+
+**Next session entry point:** v6.9 item 18 (--mode pure-llm/algorithm-enhanced)
+and/or the D2 semantics decision. The pit (P1-P12), the overview, and
+post_field_test_plan carry everything.
+
+**Blockers:** none for the merge decision itself (documented deltas); demo+mirror
+quality = the open design question (D2), NOT a merge blocker per user
+priority ("blue may underperform slightly").
+
+---
+
 ## 2026-09-13 — U22 regression (performed on the U22 machine, integrated 09-14)
 
 **Goal:** Execute the U22 native regression runbook (Appendix C) before any

@@ -51,7 +51,7 @@
 | 17f | Overnight regression harness + analysis — verdict: platform green; composite gate structurally flaky on 0-0 (goal-weight 0.4); kick-aims 74% non-goalward with flags OFF | ✅ |
 | 17g | Field-day docs: runbook §V11, cheat-sheet overhaul, post_field_test_plan v2 (glossary/audit/kick plan), U22 runbook (Appendix C) | ✅ |
 | 17h | **U22 regression** (Appendix C) — fast tier 255/0/11 (rclpy native → bridge tests run), battery 12/12, slow tier 6/5 (KPI platform deltas — both platforms miss → recalibration = item 22); 3 test-file bugs fixed & integrated; report: `u22_regression_20260913.md` | ✅ |
-| 17i | **Merge to main** — BOTH platforms green (U24 overnight + U22 native) → PR `docs/v68Planning` → `main` ready to file (GitHub web; gh unauthenticated here). Tag `v6.8-field-day` = the regression reference | ⬜ **READY — file the PR** |
+| 17i | **Merge to main** — BOTH platforms green at the rewind point (`fef67d4`, 09-14: demo-fix work parked on `parked/demo-mirror-f1f2-20260914` after field verification; see changelog 09-14). Remaining before the PR: the D2 demo pair-motion semantics decision (pair-mirror mechanics vs independent actuators — the parked fix works mechanically but the motion quality is bad). MR = GitHub web | ⬜ file PR (documented deltas) |
 
 ## 6.9 — two modes + K1 skills (entry: 17h green)
 
@@ -72,7 +72,7 @@
 | 25 | **Watchdog module** (NEW, 09-12 directive): supervises the LLM — Kalman ball prediction vs reality → divergence-triggered failsafe/re-prompt (W1-W6 scenarios from [phase_w_decision_report](v7/phase_w_decision_report.md)) | ⬜ |
 | 26 | **TeamCaptain ROS 2 node** (ADR-A07, name reserved): path executor + optimized_path.json + arrival yaw, role locks (goalie), augmented world model (lane facts → LLM payload), bridge fallback compat | ⬜ |
 | 27 | World model extensions (mode-independent): bot yaw (tracker 3a), ball velocity, Kalman filter — pure-llm improves with zero rules | ⬜ |
-| 28 | K1 integration: vision stack (PR #17), Soccer-mode-4 eval, odom refinement | ⬜ 🧪 |
+| 28 | K1 integration: vision stack (PR #17 — see the booster-msgs reconciliation card), Soccer-mode-4 eval, odom refinement | ⬜ 🧪 |
 | 29 | Edge-LLM: quality probes → Professional acquisition decision | ⬜ |
 | 30 | Calibration/hardening: Llama 100-match, 15-scenario probe, U22/U24 parity, dead-code batch | ⬜ |
 | 31 | **Pit of nice ideas**: LIDAR ball node (13), trailer choreography (15-16), camera vision (ONNX), goalie-distribution sub-rule (goalie 0 passes in 200), per-bot state unification (5 dicts), team-message protocol (vendor pattern), --odom CSV watch (14) — [pit](v7/pit_of_nice_ideas.md) | ⬜ |
