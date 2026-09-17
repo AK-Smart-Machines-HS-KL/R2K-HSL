@@ -1,12 +1,13 @@
 # Utils Scripts
 
-Helper scripts for building, recording, and replaying camera data on the K1 robot.
+Helper scripts for building, deploying, recording, and replaying camera data on the K1 robot.
 
 ## Files
 
 | File | Description |
 |---|---|
-| `build_vision.sh` | Clean rebuild of vision + interface packages. Removes `build/`/`install/`/`log/` in `utils/`, runs `colcon build --packages-select vision_interface booster_interface booster_msgs vision`. Accepts extra colcon args (e.g. `./build_vision.sh --cmake-args -DBUILD_CALIBRATION=ON`). |
+| `build_vision.sh` | Clean rebuild of vision + interface packages on the dev machine. Symlinks msg packages from `core/src/ros2_ws/src/` into `utils/`, then runs `colcon build --packages-select vision_interface booster_interface booster_msgs vision`. Accepts extra colcon args (e.g. `./build_vision.sh --cmake-args -DBUILD_CALIBRATION=ON`). |
+| `deploy_vision.sh` | Deploys the vision node + `vision_interface` msg package to a K1 robot. Copies source + model engines via rsync, then builds on-robot via colcon (sourcing vendor SDK from `/opt/booster/`). No auto-start — run `ros2 launch vision launch.py` manually after deploy. Usage: `./deploy_vision.sh <Robot_IP> [Robot_User]`. |
 | `n12_converter.py` | ROS 2 node that subscribes to `/boostercamera/head/rgb` (NV12 encoding), converts to `rgb8` via OpenCV, and publishes on `/boostercamera/head/rgb_converted`. Needed because `rqt_image_view` cannot display NV12-encoded images directly. |
 | `record_vision.py` | Records 15 seconds of `/boostercamera/head/rgb`, `/boostercamera/head/depth`, `/boostercamera/head/rgb/camera_info` to a ros2 bag directory named `booster_camera_recording/`. Sends SIGINT for clean bag closure. Edit `DURATION` and `OUTPUT_NAME` constants at the top of the file to customize. |
 | `booster_camera_recording/` | Sample ros2 bag recording (14.3s, 879 messages, ~250MB). Contains `booster_camera_recording_0.db3` (sqlite3 storage) + `metadata.yaml`. 293 messages per topic. Gitignored (large binary) — record fresh bags with `record_vision.py` as needed. |

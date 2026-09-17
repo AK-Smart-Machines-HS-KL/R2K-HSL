@@ -76,18 +76,29 @@ Install ONNX Runtime (no-CUDA builds only):
 ### Quick (from `utils/`)
 
 ```bash
-./build_vision.sh
+./scripts/build_vision.sh
 ```
+
+This symlinks the ros2_ws msg packages (`booster_msgs`, `booster_ros2_interface`, `vision_interface` from `core/src/ros2_ws/src/`) into `utils/`, then runs `colcon build` for all four packages in one workspace.
 
 ### Manual
 
 ```bash
 source /opt/ros/humble/setup.bash
+cd utils
+
+# Symlink msg packages from ros2_ws
+ln -sf ../core/src/ros2_ws/src/booster_msgs booster_msgs
+ln -sf ../core/src/ros2_ws/src/booster_ros2_interface booster_ros2_interface
+ln -sf ../core/src/ros2_ws/src/vision_interface vision_interface
+
+# Build all packages (colcon resolves order from package.xml dependencies)
 colcon build --symlink-install \
-  --packages-select vision_interface booster_interface booster_msgs vision
+  --packages-select vision_interface booster_interface booster_msgs vision \
+  --cmake-args -Wno-dev
 ```
 
-The interface packages must be built first (or in the same colcon invocation — colcon resolves order from `package.xml` dependencies).
+The msg packages live in `core/src/ros2_ws/src/` — the symlinks make them visible to the colcon workspace at `utils/`. The symlinks are gitignored (see root `.gitignore`).
 
 ### CMake Options
 
@@ -100,15 +111,17 @@ The interface packages must be built first (or in the same colcon invocation —
 Example — no-CUDA build with debug symbols:
 
 ```bash
-colcon build --symlink-install --packages-select vision \
-  --cmake-args -DNO_CUDA=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo
+colcon build --symlink-install \
+  --packages-select vision_interface booster_interface booster_msgs vision \
+  --cmake-args -DNO_CUDA=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo -Wno-dev
 ```
 
 Example — with calibration (aarch64 + Ceres installed):
 
 ```bash
-colcon build --symlink-install --packages-select vision \
-  --cmake-args -DBUILD_CALIBRATION=ON
+colcon build --symlink-install \
+  --packages-select vision_interface booster_interface booster_msgs vision \
+  --cmake-args -DBUILD_CALIBRATION=ON -Wno-dev
 ```
 
 ## Configuration
