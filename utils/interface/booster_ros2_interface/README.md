@@ -1,1 +1,0 @@
-#booster_ros2_interface
