@@ -6,6 +6,11 @@ core/src/ros2_ws/build/
 core/src/ros2_ws/install/
 core/src/ros2_ws/log/
 
+# Vision build symlinks (created by utils/scripts/build_vision.sh)
+utils/booster_msgs
+utils/booster_ros2_interface
+utils/vision_interface
+
 # Python cache
 __pycache__/
 *.pyc
