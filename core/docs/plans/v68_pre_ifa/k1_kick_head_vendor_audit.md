@@ -15,7 +15,7 @@ Six ROS2K KB/docs sites state (v6.4 era, no source):
 
 Sites: `4_EDGE_HARDWARE_SIM2REAL.md` §V6.4 (+ capability matrix),
 `8_C3_SOCCER_KNOWLEDGE.md` §6 (kick matrix + chase problem),
-`ROS2K_GEM_FAQ.md` Q28, `LESSONS_LEARNED.md`, `scrum_tasks.md` (K1 story),
+`ROS2K_GEM_FAQ.md` Q28, `LESSONS_LEARNED.md`, `docs/outdated/scrum_tasks.md` (K1 story, archived 2026-09-15),
 `gui_v67_discussion.md`.
 
 **Audit result (2026-08-28):** the claim exists ONLY inside our own files.

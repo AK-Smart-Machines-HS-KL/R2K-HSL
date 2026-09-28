@@ -8,6 +8,7 @@ from rclpy.serialization import serialize_message, deserialize_message
 
 from booster_msgs.msg import RpcReqMsg
 from booster_msgs.msg import RpcRespMsg
+from brain.msg import Kick
 
 # =====================================================================
 # VENDOR AUDIT 2026-09-04 (k1_kick_head_vendor_audit.md section 5):
@@ -24,6 +25,7 @@ from booster_interface.msg import Odometer as OdomMsg
 PORT_REQ = 6000  # Sending Requests to internal
 PORT_RESP = 6001 # Receiving Responses from internal
 PORT_ODOM = 6002 # Receiving Odometer from internal
+PORT_KICK = 6003 # Sending kick commands to internal (brain/Kick)
 
 class ExternalRelayNode(Node):
     def __init__(self, prefix: str):
@@ -32,6 +34,7 @@ class ExternalRelayNode(Node):
         
         # ROS Setup
         self.sub_req = self.create_subscription(RpcReqMsg, f'/{prefix}/LocoApiTopicReq', self.req_callback, 10)
+        self.sub_kick = self.create_subscription(Kick, f'/{prefix}/kick_ball', self.kick_callback, 10)
         
         self.pub_resp = self.create_publisher(RpcRespMsg, f'/{prefix}/LocoApiTopicResp', 10)
         self.pub_odom = self.create_publisher(OdomMsg, f'/{prefix}/odometer_state', 10)
@@ -60,6 +63,14 @@ class ExternalRelayNode(Node):
         # Forward Request from Fleet to internal node
         serialized_msg = serialize_message(msg)
         self.sock_send.sendto(serialized_msg, ('127.0.0.1', PORT_REQ))
+
+    def kick_callback(self, msg):
+        # Forward kick command (brain/Kick) to internal node.
+        # The internal relay publishes it on the robot-local /kick_ball
+        # topic consumed by the vendor soccer agent kick controller
+        # (com.boosterobotics.soccer, booster_agent_data on the K1).
+        serialized_msg = serialize_message(msg)
+        self.sock_send.sendto(serialized_msg, ('127.0.0.1', PORT_KICK))
 
     def udp_listener_resp(self):
         # Listen for Responses from internal node and publish to Fleet

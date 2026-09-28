@@ -16,7 +16,7 @@ Environment="RMW_IMPLEMENTATION=rmw_fastrtps_cpp"
 
 # 3. Simplify ExecStart now that variables are handled above
 ExecStartPre=/bin/sleep 15
-ExecStart=/bin/bash -c "source /opt/booster/BoosterRos2/install/local_setup.bash && source /opt/booster/BoosterRos2Interface/install/setup.bash && /usr/bin/python3 internal_relay.py"
+ExecStart=/bin/bash -c "source /opt/booster/BoosterRos2/install/local_setup.bash && source /opt/booster/BoosterRos2Interface/install/setup.bash && source /opt/booster/booster_agent_data/data/agents/extract/com.boosterobotics.soccer/agent/local_setup.bash && /usr/bin/python3 internal_relay.py"
 
 Restart=on-failure
 RestartSec=5

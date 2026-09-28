@@ -13,7 +13,7 @@ NOTE:once we move the LLM into the K1 bots, this relay will render useless.
 This is a loosely coupled set of python code. Main purposes:
 * Runnning olllama bridge on host requires K1 listening 
 * this code will list specific ros2 topics for DOMAIN 0
-* Eg: K1<robot name>/<rLoCoAPITopicReq/>, ~~<robot name>/Odometer_States~~
+* Eg: K1<robot name>/<rLoCoAPITopicReq/>, <robot name>/kick_ball, ~~<robot name>/Odometer_States~~
   **[CORRECTION 2026-09-04 — vendor audit §5, k1_kick_head_vendor_audit.md]** the
   odometer leg is a NON-FUNCTIONAL placeholder: Booster exposes odom only as the
   SDK-internal DDS channel `rt/odometer_state` (booster_interface/Odometer), never
@@ -21,6 +21,18 @@ This is a loosely coupled set of python code. Main purposes:
   exist on the robot. No data has ever been observed (zero logged sessions).
   Verified working: only LocoApiTopicReq/Resp. ROS-standard path for the future:
   `rt/odom` (nav_msgs/Odometry) via the ROS bridge, fw >= v1.7.1.0 — probe pending.
+* **kick_ball** (v6.8 kick POC): `brain/Kick` on `/<prefix>/kick_ball` (fleet-facing).
+  The external relay forwards via UDP 6003 to the internal relay, which publishes
+  the robot-local `/kick_ball` topic consumed by the vendor soccer agent kick
+  controller (com.boosterobotics.soccer). Both relay services source the agent's
+  install for the `brain` package:
+  `/opt/booster/booster_agent_data/data/agents/extract/com.boosterobotics.soccer/agent/local_setup.bash`
+  (Kick.msg ground truth on the K1, verified via `find` 2026-09-25 — the
+  `~/Workspace/robocup_demo` checkout is reference material, NOT the robot
+  install). Msg semantics: `feature/skill/GoToBallAndKick` (`utils/skills/goToBallAndKick.py`).
+  Host-side abort: RPC 2038 `{"start": false}` via the existing
+  `/LocoApiTopicReq` leg. Probe matrix: see
+  `core/docs/plans/v68_pre_ifa/k1_kick_head_vendor_audit.md` §3.
 * refresh rate:
 **  Installation**
 0. Start network "maker4", nao12345
