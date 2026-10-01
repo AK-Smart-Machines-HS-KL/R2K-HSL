@@ -1,8 +1,9 @@
 # K1 Kick — Übergabe
 
-**Stand 2026-09-28:** Relay-Kick-Kanal gebaut und auf dem K1 deployt
-(2026-09-25). 3/5 Validierungs-Gates grün. Gate 5 (Terminal A sendet,
-Terminal B empfängt) offen. Bridge, Evaluator und CLI noch nicht gebaut.
+**Stand 2026-10-01:** Relay-Kick-Kanal gebaut, auf dem K1 deployt
+(2026-09-25) und End-to-End validiert (2026-10-01). 5/6 Validierungs-Gates
+grün. Gate 6 (Live-Kick, `power: 6.0`, Ständer) offen. Bridge, Evaluator
+und CLI noch nicht gebaut.
 
 ## Was gemacht wurde (2026-09-25)
 
@@ -24,20 +25,26 @@ Terminal B empfängt) offen. Bridge, Evaluator und CLI noch nicht gebaut.
 history"): std_msgs/String → neues kick_ball.msg → bestehendes brain/Kick
 als Pass-through (final — trivial auf der Robot-Seite, null colcon dort).
 
-## Wo freitags stehen geblieben wurde
+## Wo freitags stehen geblieben wurde → nachgeliefert 2026-10-01
 
-**Gate 5 — der Terminal-A→Terminal-B-Test:**
+**Gate 4+5 nachgeliefert (2026-10-01):**
 
-- Terminal A: `ros2 topic pub` aus dem Docker-Container auf `/Kev1n/kick_ball`.
-- Terminal B: `ros2 topic echo /kick_ball` auf dem Roboter.
-- Ergebnis: Terminal B zeigte nichts. Gate 4 (Host sieht das Topic) wurde
-  übersprungen.
+- Gate 4: `ros2 topic list` auf nativem U22 zeigt `/Kev1n/kick_ball`;
+  `ros2 topic info` bestätigt 1 Subscription (external_relay). ✅
+- Gate 5: `ros2 topic pub --times 5` von nativem U22 → 4/5 Nachrichten
+  empfangen auf `ros2 topic echo /kick_ball` auf dem K1. ✅
+- Root cause für den ursprünglichen Fehlschlag: Publish lief aus
+  `docker exec core_gazebo` (DDS-Env-Mismatch). Nativer U22-Publish
+  funktioniert; U24/Docker noch nicht vollständig getestet — **nicht**
+  als nicht-funktionierend einstufen.
 
-**Hauptverdächtiger:** DDS-Env-Mismatch zwischen dem Host-Container und
-der Relay-Fleet-Seite (Domain-ID / RMW). Nächster Schritt: erst Gate 4
-laufen lassen (`docker exec core_gazebo ... ros2 topic list | grep Kev1n`),
-dann die DDS-Env beider Seiten vergleichen, dann `--times 5` statt
-`--once` neu testen.
+> [!note] brain-Source auf dem K1
+> Für manuelle SSH-Sessions: `source /opt/booster/booster_agent_data/
+> data/agents/extract/com.boosterobotics.soccer/agent/local_setup.bash`
+> ausführen, sonst kann `brain/msg/Kick` nicht aufgelöst werden.
+
+**Nächster Schritt:** Gate 6 — Live-Kick (`power: 6.0`, K1 auf dem Ständer,
+Abort `kick stop` / RPC 2038 `{"start": false}` bereit).
 
 ## Validierungs-Gates
 
@@ -46,9 +53,9 @@ dann die DDS-Env beider Seiten vergleichen, dann `--times 5` statt
 | 1 — Service-Health (journalctl) | ✅ |
 | 2 — Kick.msg Typ-Identität (Robot ↔ Repo) | ✅ |
 | 3 — Controller-Subscriber auf `/kick_ball` | ✅ (2 bare-DDS Vendor-Subscriber) |
-| 4 — Host sieht `/Kev1n/kick_ball` | ⬜ übersprungen — zuerst nachholen |
-| 5 — End-to-End Round-Trip (Terminal A→B) | ❌ offen — siehe oben |
-| 6 — Live Kick (`power: 6.0`, Ständer) | ⬜ blockiert auf Gate 5 |
+| 4 — Host sieht `/Kev1n/kick_ball` | ✅ (2026-10-01, nativer U22) |
+| 5 — End-to-End Round-Trip (Terminal A→B) | ✅ (2026-10-01, nativer U22, 4/5 Nachrichten; U24/Docker noch nicht vollständig getestet) |
+| 6 — Live Kick (`power: 6.0`, Ständer) | ⬜ offen — nächste Aktion |
 
 ## Noch nicht gebaut (Steps 2–4)
 

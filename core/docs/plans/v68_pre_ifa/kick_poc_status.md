@@ -56,35 +56,36 @@ Files modified (uncommitted, on `main`):
 
 Deployed to the K1 at 192.168.0.69 via `./deploy_relay.sh 192.168.0.69 Kev1n`. Both services `active` and logged `Relay Active` lines (the RCLError traceback in the journal is the OLD instance's teardown noise — double `rclpy.shutdown()` in the `finally` block; cosmetic, pre-existing pattern, not caused by our change).
 
-## Validation results (2026-09-25)
+## Validation results (2026-09-25; Gates 4+5 nachgeliefert 2026-10-01)
 
 | Gate | Check | Result |
 |---|---|---|
 | 1 | Service health (journalctl) | PASS — both `active`; `Relay Active` lines present; brain import succeeded (the log line only prints after `from brain.msg import Kick` resolves at module load) |
 | 2 | Kick.msg type identity (robot vs repo) | PASS — byte-identical, including the `disired` vendor typo on both sides → DDS typehash match guaranteed for the host↔robot leg |
 | 3 | Kick controller present on `/kick_ball` | PASS — 2 subscribers (vendor soccer agent, bare-DDS participants); our internal relay is the 1 publisher |
-| 4 | Host-side fleet topic visible | NOT YET RUN — pending `docker exec core_gazebo ... ros2 topic list \| grep Kev1n` |
-| 5 | End-to-end chain round-trip (host pub → robot echo) | **FAILED / INCONCLUSIVE** — the user published a `power: 0.0` test message from the host container; nothing appeared in `ros2 topic echo /kick_ball` on the robot. Cause under investigation — see "Open issues" §A. |
-| 6 | Live kick (power 6.0, stand) | NOT YET ATTEMPTED — blocked on Gate 5 resolving first |
+| 4 | Host-side fleet topic visible | PASS (2026-10-01) — `ros2 topic list` auf nativem U22 zeigt `/Kev1n/kick_ball`; `ros2 topic info` bestätigt 1 Subscription (external_relay) |
+| 5 | End-to-end chain round-trip (host pub → robot echo) | PASS (2026-10-01) — 4/5 `--times 5` Nachrichten empfangen auf `ros2 topic echo /kick_ball` auf dem K1; ursprünglicher Fehlschlag war ein Publish aus dem Docker-Container (`docker exec core_gazebo`) — DDS-Env-Mismatch. Nativer U22-Publish funktioniert; U24/Docker noch nicht vollständig getestet (nicht als nicht-funktionierend einstufen) |
+| 6 | Live kick (power 6.0, stand) | NOT YET ATTEMPTED — jetzt frei nach Gate 5 |
+
+> [!note] brain-Source auf dem K1
+> Für manuelle SSH-Sessions auf dem K1: vor `ros2 topic echo /kick_ball`
+> `source /opt/booster/booster_agent_data/data/agents/extract/com.boosterobotics.soccer/agent/local_setup.bash`
+> ausführen — sonst kann der `brain/msg/Kick`-Typ nicht aufgelöst werden. In den
+> Systemd-Units (`internal-relay.service`) steht diese Source-Zeile bereits.
 
 ## Open issues
 
-### A. End-to-end chain test produced nothing on the robot echo (Gate 5) — INVESTIGATE
+### A. End-to-end chain test produced nothing on the robot echo (Gate 5) — RESOLVED (2026-10-01)
 
-Symptom: host published one `brain/Kick` on `/Kev1n/kick_ball`; the robot's `ros2 topic echo /kick_ball` showed nothing.
+Symptom (2026-09-25): host published one `brain/Kick` on `/Kev1n/kick_ball` from inside `docker exec core_gazebo`; the robot's `ros2 topic echo /kick_ball` showed nothing.
 
-Candidate causes (in priority order):
+**Root cause:** DDS-Env-Mismatch zwischen dem Docker-Container und der Relay-Fleet-Seite (ROS_DOMAIN_ID / rmw-Profile). Der Publish aus dem Container erreichte die external_relay-Subscription nicht.
 
-1. **Host env / DDS discovery mismatch.** The host `ros2 topic pub` ran inside `docker exec core_gazebo`. If the container's ROS_DOMAIN_ID or rmw profile differs from the relay's fleet-side env, the pub never reaches the external relay's subscription. Verify: `docker exec core_gazebo bash -c "echo DOM=\$ROS_DOMAIN_ID RMW=\$RMW_IMPLEMENTATION"` and compare with the external-relay.service env (FASTRTPS_DEFAULT_PROFILES_FILE is cleared there; DOMAIN defaults to 0). The container compose may set a non-zero domain or CycloneDDS.
-2. **The host didn't actually see `/Kev1n/kick_ball` (Gate 4 was skipped).** If `ros2 topic list | grep Kev1n` doesn't show the new topic, the pub went nowhere. Run Gate 4 first before re-attempting the round-trip.
-3. **QoS incompatibility on the fleet leg (unlikely but check).** The external relay's subscription uses default QoS (RELIABLE/VOLATILE, depth 10). `ros2 topic pub --once` defaults to RELIABLE. Compatible. Not the prime suspect.
-4. **`--once` exit racing the DDS write.** `ros2 topic pub --once` can exit before the writer is matched. Try without `--once` (steady stream, Ctrl+C after a second) or `--times 5` to rule this out.
-5. **Type hash mismatch across ROS distros (host container = humble; if the host used jazzy natively the typehash negotiation could drop the sample).** The container uses humble — should be fine. But verify the host pub was issued INSIDE the container, not against the host's `/opt/ros/jazzy` (which would be a different distro → rmw_fastrtps typehash mismatch with the humble-built relay types). The provided command uses `docker exec core_gazebo` — confirm that's where it actually ran.
+**Auflösung (2026-10-01):** Publish von nativem U22 (nicht Docker) — `ros2 topic pub --times 5 /Kev1n/kick_ball brain/msg/Kick '{...}'` — lieferte 4/5 Nachrichten auf dem K1-Echo. Gate 4 (`ros2 topic list` auf U22) und Gate 5 sind damit grün. U24/Docker ist noch nicht vollständig getestet und wird **nicht** als nicht-funktionierend eingestuft (separater Test später möglich).
 
-Recommended next probe (after confirming Gate 4 shows the topic):
-- On host: `docker exec core_gazebo bash -c "source /opt/ros/humble/setup.bash && source /workspace/ros2_ws/install/setup.bash && ros2 topic pub --times 5 /Kev1n/kick_ball brain/msg/Kick '{x: 0.0, y: 0.0, dir: 0.0, goal_x: 5.0, goal_y: 0.0, robot_theta_to_field: 0.0, power: 0.0}'"`
-- Watch the robot echo in parallel.
-- Also check the external relay's own log for any kick_callback hits: `ssh booster@192.168.0.69 "journalctl -u external-relay --since '2 min ago' --no-pager | tail -20"`.
+**Manual für künftige Round-Trip-Tests:**
+- Host (nativ U22, ros2_ws gesourced): `ros2 topic pub --times 5 /Kev1n/kick_ball brain/msg/Kick '{x: 0.0, y: 0.0, dir: 0.0, goal_x: 5.0, goal_y: 0.0, robot_theta_to_field: 0.0, power: 0.0}'`
+- K1 (SSH, brain-Source siehe Gate-Tabelle-Notiz): `ros2 topic echo /kick_ball`
 
 ### B. Cosmetic RCLError traceback on relay teardown
 
@@ -146,6 +147,6 @@ Topic name: started as `/{prefix}/kick_ball`, user changed to `/{prefix}/kick`, 
 
 ## Blockers / next session entry point
 
-1. **Resolve Gate 5** — why the host→robot round-trip showed nothing. Start with Gate 4 (host topic visibility) and the env-discovery probe in §A. Most likely cause: host container DDS env (domain/rmw) mismatch with the relay's fleet side.
-2. Once the chain round-trips, run Phase 7 (live kick, `power: 6.0`, robot on stand, abort command ready) — fills the vendor-audit §3 probe matrix row for the controller path.
-3. Then proceed to Step 2 (bridge `hw_kick` action) — the chain being verified first de-risks the bridge work.
+1. **Gate 6 — Live-Kick** (`power: 6.0`, K1 auf dem Ständer, Abort `kick stop` / RPC 2038 `{"start": false}` bereit). Füllt die vendor-audit §3 Probe-Matrix-Zeile für den Controller-Pfad. Gates 4+5 sind grün (2026-10-01, nativer U22-Publish); die Kette steht.
+2. Dann **Step 2 — Bridge `hw_kick` Action** (`ollama_sandbox_bridge.py`): lazy `brain/Kick`-Publisher, id-keyed one-shot, calib/demo-only. Die verifizierte Kette de-riskt die Bridge-Arbeit.
+3. **U24/Docker-Publish** separat nachtesten (nicht blockierend — U22-nativ funktioniert; U24/Docker noch nicht vollständig getestet, nicht als nicht-funktionierend eingestufen).
