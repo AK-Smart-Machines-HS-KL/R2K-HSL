@@ -143,8 +143,9 @@ DEMO_FAST_STOP = ("stop", "break", "exit", "halt")
 DEMO_FAST_RESUME = ("resume", "continue")
 DEMO_FAST_RESTART = ("restart", "re-start", "redo", "repeat")
 DEMO_FAST_HOME = ("go home", "return", "return to start", "go to start", "home")
+DEMO_KICK_VERBS = ("kick", "kick stop")
 DEMO_CONTROL_VERBS = frozenset(DEMO_FAST_STOP + DEMO_FAST_RESUME +
-                               DEMO_FAST_RESTART + DEMO_FAST_HOME)
+                               DEMO_FAST_RESTART + DEMO_FAST_HOME + DEMO_KICK_VERBS)
 
 DEMO_COMPILER_MODEL = "qwen2.5:7b"
 
@@ -236,7 +237,7 @@ DEMO_PAUSE_STEP_RE = re.compile(
 # Instant-command words that must never reach the 7B compiler (it would
 # guess coordinates for facing/head parts of a compound)
 DEMO_INSTANT_WORD_RE = re.compile(
-    r'\b(?:face|turn|rotate|look|say)\b')
+    r'\b(?:face|turn|rotate|look|say|kick)\b')
 
 # Comma-only separator (UNLESS followed by digit — coordinate guard, or by
 # "then"/"next" — chain guard). Each sub-clause is routed independently.
@@ -827,6 +828,21 @@ def _demo_face_cmd(bot, yaw=None, relative=None):
     _demo_set_fast_cmd(bot, cmd, note)
 
 
+def _demo_kick_cmd(bot, kind='vk1'):
+    """K1 kick fast-path (calib/demo only). Bare 'kick' → k1 slot (like
+    bare 'turn'). The bridge starts a 2Hz brain/Kick timer stream on
+    /Kev1n/kick_ball until abort, timeout, or a different action.
+    kind='vk1' → VisualKick V1 (power=6.0, goalshot force)
+    kind='abort' → kick stop (RPC 2038 {'start': false} + hold)"""
+    if kind == 'abort':
+        cmd = {"action": "hw_kick", "kind": "abort", "id": time.time()}
+        note = "kick abort (RPC 2038 stop)"
+    else:
+        cmd = {"action": "hw_kick", "kind": "vk1", "id": time.time()}
+        note = "kick vk1 (power 6.0, goalshot)"
+    _demo_set_fast_cmd(bot, cmd, note)
+
+
 def _handle_compound_task(clause, ents):
     """Split on comma-only (digit/chain guards). Sub-clauses containing
     instant verbs (control, look/say, face/turn) route independently.
@@ -1080,6 +1096,16 @@ def _handle_task_clause(clause, ents):
     if m:
         for b in face_targets:
             _demo_face_cmd(b, relative=math.radians(float(m.group(1))))
+        return
+
+    # --- Kick fast-path (calib/demo only): bare 'kick'/'kick stop' → k1
+    # slot (like bare 'turn'). Explicit prefix (k1/k1_bot/y1/y2) routes
+    # to that bot; the bridge warns if the target is not a K1. ---
+    if text in DEMO_KICK_VERBS:
+        kick_targets = [DEMO_K1_ALIASES[0]] if not prefixed else targets
+        kind = 'abort' if text == 'kick stop' else 'vk1'
+        for b in kick_targets:
+            _demo_kick_cmd(b, kind)
         return
 
     # --- Facing/instant words must not reach the 7B: it has no facing

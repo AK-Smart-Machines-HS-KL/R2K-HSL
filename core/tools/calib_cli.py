@@ -37,7 +37,8 @@ os.makedirs(os.path.dirname(task_path), exist_ok=True)
 FAST_COMMANDS = {"stop", "break", "exit", "halt",
                  "resume", "continue",
                  "restart", "re-start", "redo", "repeat",
-                 "go home", "return", "return to start", "go to start", "home"}
+                 "go home", "return", "return to start", "go to start", "home",
+                 "kick", "kick stop"}
 
 # Mirror of r2k_evaluator head/face fast-paths — these execute instantly, so
 # the CLI must not wait on the 7B compiler. Sign convention (model frame):
@@ -46,6 +47,7 @@ FAST_COMMANDS = {"stop", "break", "exit", "halt",
 HEAD_LOOK_COMMANDS = ("look left", "look right", "look center", "look straight",
                       "look up", "look down")
 HEAD_GESTURE_COMMANDS = ("say yes", "say no")
+KICK_COMMANDS = ("kick", "kick stop")
 FACE_ABS_COMMANDS = ("face north", "face south", "face east", "face west",
                      "face opponent goal", "face own goal", "face left", "face right")
 FACE_REL_COMMANDS = ("turn left", "turn right", "turn around")
@@ -70,7 +72,7 @@ CHAIN_STEP_FAST = re.compile(
 CHAIN_PAUSE_RE = re.compile(r'^(?:pause|wait)\s+\d')
 # Mirror of r2k_evaluator.DEMO_INSTANT_WORD_RE: facing/head words must not
 # reach the 7B compiler (it guesses coordinates for them)
-INSTANT_WORD_RE = re.compile(r'\b(?:face|turn|rotate|look|say)\b')
+INSTANT_WORD_RE = re.compile(r'\b(?:face|turn|rotate|look|say|kick)\b')
 # Mirror of r2k_evaluator._DEMO_COMMA_SEP_RE — CLI-side recognition only
 _COMMA_SEP_CLI_RE = re.compile(r',\s+(?!\d)(?!(?:then|next)\b)')
 
@@ -116,6 +118,8 @@ SAMPLE_COMMANDS = [
     "all say no",
     "k1 go to (1,0)",
     "y1 go to (1,0)",
+    "k1 kick",
+    "k1 kick stop",
     "stop",
     "resume",
     "restart",
@@ -342,6 +346,28 @@ def send_task(task_text):
                           f"{abs(diff):.0f}° to {core_cmd.split()[-1]}")
                     if abs(diff) < 6:
                         print("     ⚠ ALREADY FACING that way — nothing to do.")
+        print()
+        return
+
+    # Kick fast-path (calib only): bare 'kick' → k1 slot (like bare 'turn').
+    # Bridge starts a 2Hz brain/Kick timer stream on /Kev1n/kick_ball.
+    # 'kick stop' → RPC 2038 abort + hold. Safety: robot must be on STAND.
+    if core_cmd in KICK_COMMANDS:
+        if _detect_mode() != "calib":
+            print("  -> kick only available in calibration mode (--calib / --demo)")
+            print()
+            return
+        bot = bot_label if bot_label else "k1 (default)"
+        if core_cmd == "kick stop":
+            print(f"  -> instant Kick abort [{bot}] (RPC 2038 stop, no compiler)")
+        else:
+            print(f"  -> instant Kick vk1 [{bot}] (power 6.0, goalshot, no compiler)")
+        print("     Safety: robot must be on STAND. Abort: 'kick stop' (RPC 2038).")
+        if bot_label is None:
+            print("     ⚠ calib: bare 'kick' targets K1 — prefix y1/y2 to")
+            print("       drive the Yahboos (Yahboom has no kick).")
+        elif bot_label and not bot_label.startswith("k1"):
+            print(f"     ⚠ {bot_label} has no kick hardware — bridge will warn 'not K1'.")
         print()
         return
 
