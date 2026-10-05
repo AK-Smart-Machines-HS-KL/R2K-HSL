@@ -3,8 +3,8 @@
 **Stand 2026-10-05:** Relay-Kick-Kanal gebaut, auf dem K1 deployt
 (2026-09-25) und End-to-End validiert (2026-10-01). 5/6 Validierungs-Gates
 grün (Gate 6 = Live-Kick, via `GoToBallAndKick.py` bereits getestet).
-Step 2 (Bridge `hw_kick`) implementiert (2026-10-05). Step 3 (Evaluator +
-CLI) und Step 4 (Tests + Doku) noch offen.
+Step 2 (Bridge `hw_kick`) und Step 3 (Evaluator + CLI) implementiert
+(2026-10-05). Step 4 (Tests + Doku) noch offen.
 
 ## Was gemacht wurde (2026-09-25)
 
@@ -58,10 +58,8 @@ Abort `kick stop` / RPC 2038 `{"start": false}` bereit).
 | 5 — End-to-End Round-Trip (Terminal A→B) | ✅ (2026-10-01, nativer U22, 4/5 Nachrichten; U24/Docker noch nicht vollständig getestet) |
 | 6 — Live Kick (`power: 6.0`, Ständer) | ⬜ offen — nächste Aktion |
 
-## Noch nicht gebaut (Steps 3–4)
+## Noch nicht gebaut (Step 4)
 
-- **Step 3 — Evaluator + CLI:** `kick` / `kick stop` Fast-Path-Verben
-  (bare `kick` → k1 slot, wie bare `turn`). Separate Session.
 - **Step 4 — Tests + Doku:** Fast-Tier-Test, Cheat-Sheet-Sektion,
   Vokabular-Eintrag.
 

@@ -112,11 +112,31 @@ Implemented in `core/src/ai_tactics/ollama_sandbox_bridge.py` (calib/demo path o
 - Match mode untouched (GATE 0: mode-1 placeholder stays until probe results clear).
 - 316 fast-tier tests pass (`pytest tests/ --skip-slow`).
 
-## Step 3 — Evaluator + calib CLI: PENDING
+## Step 3 — Evaluator + calib CLI: DONE ✅ (2026-10-05)
 
-- `core/src/ai_tactics/r2k_evaluator.py`: kick fast-path verbs `kick` / `kick stop`; bare verb → k1 slot (calib convention like bare `turn`); `_demo_set_fast_cmd(bot, {"action": "hw_kick", "kind": "vk1"|"abort", "id": <fresh>}, note)`.
-- `core/tools/calib_cli.py`: mirror the verbs, instant feedback, sample list entries (`k1 kick`, `k1 kick stop`), help text. Dead-slot warning when no k1 in relay (existing pattern).
-- Sim mode / no k1 in relay → dead-slot warning (existing pattern from `_detect_mode`).
+### Evaluator (`core/src/ai_tactics/r2k_evaluator.py`)
+- Added `DEMO_KICK_VERBS = ("kick", "kick stop")` + extended `DEMO_CONTROL_VERBS`.
+- Updated `DEMO_INSTANT_WORD_RE` to include `kick` (so `"face west, then kick"` gets split, not compiled).
+- Added `_demo_kick_cmd(bot, kind='vk1')` handler: `kind='vk1'` → `hw_kick` assignment with fresh id; `kind='abort'` → `hw_kick` abort assignment.
+- Kick routing in `_handle_compound_task` (after face/turn/rotate handlers): bare `kick`/`kick stop` → `DEMO_K1_ALIASES[0]` (k1 slot, like bare `turn`); explicit prefix → that bot.
+
+### CLI (`core/tools/calib_cli.py`)
+- Added `KICK_COMMANDS = ("kick", "kick stop")` + extended `FAST_COMMANDS` + updated `INSTANT_WORD_RE`.
+- Kick handler in `_handle_task` (after face/turn/rotate handlers): calib-only gate, instant feedback, safety hint ("robot must be on STAND"), dead-slot warnings:
+  - Bare `kick` in calib → "⚠ calib: bare 'kick' targets K1 — prefix y1/y2 to drive the Yahbooms (Yahboom has no kick)."
+  - `y1 kick` / `y2 kick` → "⚠ {bot} has no kick hardware — bridge will warn 'not K1'."
+- Sample commands: `k1 kick`, `k1 kick stop` added to `SAMPLE_COMMANDS`.
+
+### Routing summary
+| Input | Evaluator | Bridge |
+|---|---|---|
+| `kick` (bare) | → k1 slot, `kind='vk1'` | 2Hz timer on `/Kev1n/kick_ball` |
+| `kick stop` (bare) | → k1 slot, `kind='abort'` | Timer stop + RPC 2038 + hold |
+| `k1 kick` | → k1 slot, `kind='vk1'` | 2Hz timer |
+| `y1 kick` | → y1 slot, `kind='vk1'` | Bridge warns "not K1" (no kick publisher) |
+| `kick` in demo (non-calib) | Evaluator rejects via `CALIB` guard | — |
+
+316 fast-tier tests pass (`pytest tests/ --skip-slow`).
 
 ## Step 4 — Tests + docs: PENDING
 
@@ -154,7 +174,6 @@ Topic name: started as `/{prefix}/kick_ball`, user changed to `/{prefix}/kick`, 
 
 ## Blockers / next session entry point
 
-1. **Step 3 — Evaluator + calib CLI** (`r2k_evaluator.py` + `tools/calib_cli.py`): fast-path verbs `kick` / `kick stop` (bare `kick` → k1 slot, like bare `turn`). Mirror the verbs in both files, sample list entries, help text, dead-slot warning when no k1 in relay.
-2. **Step 4 — Tests + Doku**: fast-tier test (`test_head_face.py` pattern), `calibration_cheat_sheet.md` + `vocabulary_cheat_sheet.md` sections, session changelog entry.
-3. **Live-Test** (sobald Step 3 fertig): `./launch_r2k.sh --demo --no-visualizer --relay single_bot` → `python3 tools/calib_cli.py` → `k1 kick` (Bridge loggt "🦵 [k1] kick timer STARTED") → `k1 kick stop` (Abort + Hold). Vendor-Kick-Path wurde bereits via `GoToBallAndKick.py` als Standalone validiert.
-4. **U24/Docker-Publish** separat nachtesten (nicht blockierend — U22-nativ funktioniert; U24/Docker noch nicht vollständig getestet, nicht als nicht-funktionierend eingestuft).
+1. **Step 4 — Tests + Doku**: fast-tier test (`test_head_face.py` pattern → `test_kick_fastpath.py`), `calibration_cheat_sheet.md` + `vocabulary_cheat_sheet.md` sections, session changelog entry.
+2. **Live-Test**: `./launch_r2k.sh --demo --no-visualizer --relay single_bot` → `python3 tools/calib_cli.py` → `k1 kick` (Bridge loggt "🦵 [k1] kick timer STARTED") → `k1 kick stop` (Abort + Hold). Vendor-Kick-Path wurde bereits via `GoToBallAndKick.py` als Standalone validiert.
+3. **U24/Docker-Publish** separat nachtesten (nicht blockierend — U22-nativ funktioniert; U24/Docker noch nicht vollständig getestet, nicht als nicht-funktionierend eingestuft).
