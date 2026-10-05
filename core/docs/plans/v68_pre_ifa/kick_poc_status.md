@@ -95,15 +95,22 @@ The old relay instance's `finally: rclpy.shutdown()` double-calls shutdown and t
 
 The K1's hostname is `Kevin` (journalctl `Sep 25 ... Kevin systemd...`); the systemd unit + topic prefix use `Kev1n`. Not a problem (they're independent strings) but worth documenting in the cheat sheet so future skill additions don't confuse the two.
 
-## Step 2 — Bridge: PENDING
+## Step 2 — Bridge: DONE ✅ (2026-10-05)
 
-Add a `hw_kick` action to `core/src/ai_tactics/ollama_sandbox_bridge.py` (calib/demo path only — match mode keeps the `{"mode": 1}` placeholder until the GATE 0 probe results land):
+Implemented in `core/src/ai_tactics/ollama_sandbox_bridge.py` (calib/demo path only — match mode keeps the `{"mode": 1}` placeholder until GATE 0 probe results land):
 
-- `_ensure_kick_pub(hw_name, hw_info)` — lazy `brain/Kick` publisher on `<ns>/kick_ball`, ns derived from the k1 relay topic like `_ensure_odom_watch` (`rsplit('/', 1)[0]` → `/Kev1n`).
-- New dispatch branch `action == 'hw_kick'` (distinct from match-mode `action == 'kick'` at bridge:1498, which requires `self.ball_pos`). Pose-independent, id-keyed one-shot (done-set like `_head_done`). k1-only; other hw types → warn.
-- Field fill for the POC: `x=0, y=0, dir=0, goal_x=5.0, goal_y=0.0, robot_theta_to_field=0.0, power=6.0` (ball-at-feet, goalshot force — mirroring `goToBallAndKick.py`'s goalshot power). Real geometry from Worldstate/vision later.
+- **Import** `brain.msg.Kick` + `HAS_BRAIN_KICK` flag (graceful fallback if not built).
+- **Constants** (parameterized for quick tuning): `K1_KICK_POWER=6.0`, `K1_KICK_GOAL_X=5.0`, `K1_KICK_GOAL_Y=0.0`, `K1_KICK_MAX_DURATION_S=8.0`, `K1_KICK_PUB_HZ=2.0`.
+- **`_ensure_kick_pub(hw_name, hw_info)`** — lazy `brain/Kick` publisher on `<ns>/kick_ball`, ns derived from the K1 relay topic like `_ensure_odom_watch` (`rsplit('/', 1)[0]` → `/Kev1n`).
+- **`_stop_kick_timer(hw_name, reason)`** — helper: cancel timer + clean up state + log.
+- **Dispatch branch `action == 'hw_kick'`** (distinct from match-mode `action == 'kick'`):
+  - `kind='vk1'` → starts a **2Hz timer** that publishes `Kick` msg continuously (vendor controller expects ~2Hz stream — a single message yields only a half-step). Static POC fields: `x=0, y=0, dir=0, goal_x=5.0, goal_y=0.0, robot_theta_to_field=0.0, power=K1_KICK_POWER`.
+  - `kind='abort'` → timer stop + RPC 2038 `{"start": false}` via existing `LocoApiTopicReq` leg + zero-twist hold (safety: stop everything).
+  - **Safety timeout** (`K1_KICK_MAX_DURATION_S=8.0`): auto-abort + hold after timeout.
+  - **Timer cleanup on other actions**: any non-`hw_kick` action for a bot with an active kick timer stops the timer (safety).
+  - **`stop_all_hardware()`**: stops all kick timers on full hardware stop (Gazebo pause / watchdog).
 - Match mode untouched (GATE 0: mode-1 placeholder stays until probe results clear).
-- "kick stop" verb → bridge sends RPC 2038 `{"start": false}` via the existing `/Kev1n/LocoApiTopicReq` leg (the abort pattern from `goToBallAndKick.py` `manual_cancel_callback`). No relay change needed.
+- 316 fast-tier tests pass (`pytest tests/ --skip-slow`).
 
 ## Step 3 — Evaluator + calib CLI: PENDING
 
@@ -147,6 +154,7 @@ Topic name: started as `/{prefix}/kick_ball`, user changed to `/{prefix}/kick`, 
 
 ## Blockers / next session entry point
 
-1. **Gate 6 — Live-Kick** (`power: 6.0`, K1 auf dem Ständer, Abort `kick stop` / RPC 2038 `{"start": false}` bereit). Füllt die vendor-audit §3 Probe-Matrix-Zeile für den Controller-Pfad. Gates 4+5 sind grün (2026-10-01, nativer U22-Publish); die Kette steht.
-2. Dann **Step 2 — Bridge `hw_kick` Action** (`ollama_sandbox_bridge.py`): lazy `brain/Kick`-Publisher, id-keyed one-shot, calib/demo-only. Die verifizierte Kette de-riskt die Bridge-Arbeit.
-3. **U24/Docker-Publish** separat nachtesten (nicht blockierend — U22-nativ funktioniert; U24/Docker noch nicht vollständig getestet, nicht als nicht-funktionierend eingestufen).
+1. **Step 3 — Evaluator + calib CLI** (`r2k_evaluator.py` + `tools/calib_cli.py`): fast-path verbs `kick` / `kick stop` (bare `kick` → k1 slot, like bare `turn`). Mirror the verbs in both files, sample list entries, help text, dead-slot warning when no k1 in relay.
+2. **Step 4 — Tests + Doku**: fast-tier test (`test_head_face.py` pattern), `calibration_cheat_sheet.md` + `vocabulary_cheat_sheet.md` sections, session changelog entry.
+3. **Live-Test** (sobald Step 3 fertig): `./launch_r2k.sh --demo --no-visualizer --relay single_bot` → `python3 tools/calib_cli.py` → `k1 kick` (Bridge loggt "🦵 [k1] kick timer STARTED") → `k1 kick stop` (Abort + Hold). Vendor-Kick-Path wurde bereits via `GoToBallAndKick.py` als Standalone validiert.
+4. **U24/Docker-Publish** separat nachtesten (nicht blockierend — U22-nativ funktioniert; U24/Docker noch nicht vollständig getestet, nicht als nicht-funktionierend eingestuft).
