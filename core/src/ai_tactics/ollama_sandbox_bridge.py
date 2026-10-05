@@ -352,6 +352,7 @@ class HalBridge(Node):
         self._kick_timers = {}       # {hw_name: Timer}
         self._kick_params = {}       # {hw_name: Kick_msg}
         self._kick_start_t = {}      # {hw_name: start_time} for timeout
+        self._kick_ids = {}          # {hw_name: id} — re-arm guard (same id = skip)
         self._kick_pubs = {}         # {hw_name: Publisher} — lazy, per K1 bot
 
         # --- Demo head control state (calibration mode only) ---
@@ -493,7 +494,7 @@ class HalBridge(Node):
     # Extra keys forwarded from strategy JSON to the per-bot target
     # (demo Face/Head actions carry no x/y and would otherwise be dropped)
     TARGET_EXTRA_KEYS = ('yaw', 'relative_angle', 'pan_deg', 'tilt_deg',
-                         'gesture', 'cycles', 'id', 'steps',
+                         'gesture', 'cycles', 'id', 'steps', 'kind',
                          'vx', 'vyaw', 'duration_s')
 
     def read_llm_strategy(self):
@@ -770,6 +771,7 @@ class HalBridge(Node):
             timer.cancel()
         self._kick_params.pop(hw_name, None)
         self._kick_start_t.pop(hw_name, None)
+        self._kick_ids.pop(hw_name, None)
         if reason:
             self.get_logger().info(f"🦵 [{hw_name}] kick timer stopped ({reason})")
 
@@ -1215,7 +1217,8 @@ class HalBridge(Node):
                 if bot_idx is None:
                     if not (CALIB and target_action in ('goto', 'timedmove',
                                                         'hold', 'face',
-                                                        'head', 'seq')):
+                                                        'head', 'seq',
+                                                        'hw_kick')):
                         continue
                     cx, cy, cyaw = 0.0, 0.0, 0.0
                 else:
@@ -1314,6 +1317,15 @@ class HalBridge(Node):
 
                     # VK1 (VisualKick V1): start 2Hz timer stream
                     if kind == 'vk1':
+                        # Re-arm guard: if a timer is already running for the
+                        # SAME id, the strategy file just persists — don't
+                        # re-create the timer (would cancel+recreate every
+                        # 20Hz tick, the callback never fires). Only a NEW
+                        # id (new kick command) re-arms.
+                        if hw_name in self._kick_timers and \
+                           self._kick_ids.get(hw_name) == g_id:
+                            continue
+
                         self._ensure_kick_pub(hw_name, hw_info)
                         pub = self._kick_pubs.get(hw_name)
                         if not pub:
@@ -1326,7 +1338,7 @@ class HalBridge(Node):
                         # Build the Kick message (static POC for calib/demo)
                         msg = Kick()
                         msg.header.frame_id = ''
-                        msg.x = 0.0
+                        msg.x = 1.0
                         msg.y = 0.0
                         msg.dir = 0.0
                         msg.goal_x = K1_KICK_GOAL_X
@@ -1335,6 +1347,7 @@ class HalBridge(Node):
                         msg.power = K1_KICK_POWER
                         self._kick_params[hw_name] = msg
                         self._kick_start_t[hw_name] = time.time()
+                        self._kick_ids[hw_name] = g_id
 
                         # Stop any existing timer for this bot (re-arm on new id)
                         old_timer = self._kick_timers.pop(hw_name, None)
