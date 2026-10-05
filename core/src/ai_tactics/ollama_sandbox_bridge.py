@@ -27,6 +27,12 @@ try:
 except ImportError:
     HAS_BOOSTER_ODOM = False
 
+try:
+    from brain.msg import Kick
+    HAS_BRAIN_KICK = True
+except ImportError:
+    HAS_BRAIN_KICK = False
+
 # === Calib mode (direct hardware addressing, no mirror_of resolution) ===
 # Mode merge (2026-09-08): calib = the Gazebo-free field stack — the
 # hardware dispatch runs on a wall-clock timer (state_cb never dispatches
@@ -41,6 +47,16 @@ CALIB = os.getenv('R2K_CALIB') == '1'
 # deliberately excludes k1 (executor hallucinates assignments for visible bots).
 K1_ODOM_DRIFT_M = 0.25          # warn when K1 strays this far from its sim twin
 K1_DRIFT_WARN_DEBOUNCE_S = 1.0  # min seconds between drift warnings
+
+# === K1 kick (calib/demo hw_kick action, 2Hz brain/Kick stream) ===
+# Vendor soccer controller (com.boosterobotics.soccer) expects a continuous
+# ~2Hz stream on /kick_ball — a single message yields only a half-step.
+# Timer publishes until abort, timeout, or a different action for the bot.
+K1_KICK_POWER = 6.0              # goalshot force (mirrors goToBallAndKick.py)
+K1_KICK_GOAL_X = 5.0             # static POC: opponent goal from origin
+K1_KICK_GOAL_Y = 0.0
+K1_KICK_MAX_DURATION_S = 8.0     # safety timeout — abort + hold after this
+K1_KICK_PUB_HZ = 2.0             # vendor controller stream rate
 
 # === Yahboom calib (open-loop timed drive) ===
 # Encoder odom unreliable on real floors (slip) — calibration drives by TIME,
@@ -331,6 +347,13 @@ class HalBridge(Node):
         self.hardware_mapping = {}
         self.last_kick_time = {}
 
+        # --- K1 kick state (calib/demo hw_kick, 2Hz brain/Kick stream) ---
+        # Timer publishes until abort, timeout, or a different action for the bot.
+        self._kick_timers = {}       # {hw_name: Timer}
+        self._kick_params = {}       # {hw_name: Kick_msg}
+        self._kick_start_t = {}      # {hw_name: start_time} for timeout
+        self._kick_pubs = {}         # {hw_name: Publisher} — lazy, per K1 bot
+
         # --- Demo head control state (calibration mode only) ---
         # Gesture runtime keyed by mirrored bot: {"id", "gesture", "t0"}
         self._head_gesture = {}
@@ -448,6 +471,9 @@ class HalBridge(Node):
         self._seq_state.clear()
         self._body_gesture.clear()
         self._goto_state.clear()
+        # Stop all active kick timers (safety: full hardware stop)
+        for hw_name in list(self._kick_timers.keys()):
+            self._stop_kick_timer(hw_name, "stop_all_hardware")
         for hw_name, hw_info in self.hardware_mapping.items():
             hw_type = hw_info.get('hardware_type', 'virtual').lower()
             if hw_name not in self.pubs: continue
@@ -721,6 +747,31 @@ class HalBridge(Node):
             self._y_odom_subs[hw_name] = sub  # keep reference alive
             self._y_odom[hw_name] = {'x': 0.0, 'y': 0.0, 'theta': 0.0, 't': 0.0}
             self.get_logger().info(f"📍 Yahboom odom subscription active for {hw_name} on {ns}/odom_raw (rehearsal)")
+
+    def _ensure_kick_pub(self, hw_name, hw_info):
+        """Lazy brain/Kick publisher on <ns>/kick_ball for K1.
+        ns derived from the K1 relay topic like _ensure_odom_watch
+        (rsplit('/', 1)[0] -> '/Kev1n')."""
+        if hw_name in self._kick_pubs:
+            return
+        hw_type = hw_info.get('hardware_type', 'virtual').lower()
+        if hw_type != 'k1' or not HAS_BRAIN_KICK:
+            return
+        ns = hw_info.get('topic', f'/{hw_name}/cmd_vel').rsplit('/', 1)[0]
+        pub = self.create_publisher(Kick, f'{ns}/kick_ball', 10)
+        self._kick_pubs[hw_name] = pub
+        self.get_logger().info(f"🦵 K1 kick publisher active for {hw_name} on {ns}/kick_ball")
+
+    def _stop_kick_timer(self, hw_name, reason=""):
+        """Stop the 2Hz kick timer for a bot and clean up state.
+        Sends RPC 2038 abort + zero-twist hold for safety."""
+        timer = self._kick_timers.pop(hw_name, None)
+        if timer:
+            timer.cancel()
+        self._kick_params.pop(hw_name, None)
+        self._kick_start_t.pop(hw_name, None)
+        if reason:
+            self.get_logger().info(f"🦵 [{hw_name}] kick timer stopped ({reason})")
 
     @staticmethod
     def _odom_from_nav(m):
@@ -1186,6 +1237,12 @@ class HalBridge(Node):
                 action = target.get('action', '').lower()
                 is_attacking = False
 
+                # Kick-timer safety cleanup: stop any active 2Hz kick stream
+                # when a different action arrives for this bot (hold/face/
+                # goto/timedmove/etc). 'hw_kick' handles its own timer lifecycle.
+                if action != 'hw_kick' and hw_name in self._kick_timers:
+                    self._stop_kick_timer(hw_name, f"new action: {action}")
+
                 # Sequence execution: the cursor synthesizes the effective
                 # per-tick target from the current step (bridge owns yaw,
                 # position and time — the only complete observer).
@@ -1225,7 +1282,98 @@ class HalBridge(Node):
                     # Active brake: publish zero velocity to stop the bot
                     # (not just skip -- skipping lets the bot coast on its
                     # last velocity command, which is unsafe on hardware)
+                    if hw_name in self._kick_timers:
+                        self._stop_kick_timer(hw_name, "hold")
                     self._publish_motion(hw_name, hw_type, 0.0, 0.0)
+                    continue
+
+                if action == 'hw_kick':
+                    # K1 kick (calib/demo only): 2Hz brain/Kick stream on
+                    # <ns>/kick_ball. Vendor soccer controller expects a
+                    # continuous ~2Hz stream — a single message yields only
+                    # a half-step. Timer publishes until abort, timeout, or
+                    # a different action for the bot. Match-mode 'kick'
+                    # (line ~1546) keeps the {"mode": 1} placeholder until
+                    # GATE 0 probe results land.
+                    kind = target.get('kind', 'vk1')   # 'vk1' | 'abort'
+                    g_id = target.get('id')
+
+                    # ABORT (kick stop): timer stop + RPC 2038 + hold (safety)
+                    if kind == 'abort':
+                        self._stop_kick_timer(hw_name, "abort")
+                        if HAS_BOOSTER_MSGS and hw_name in self.pubs:
+                            rpc = RpcReqMsg()
+                            rpc.uuid = f"kick_stop_{int(time.time()*1000)}"
+                            rpc.header = json.dumps({"api_id": 2038})
+                            rpc.body = json.dumps({"start": False})
+                            self.pubs[hw_name].publish(rpc)
+                        self._publish_motion(hw_name, hw_type, 0.0, 0.0)
+                        self.get_logger().info(
+                            f"🦵 [{hw_name}] kick ABORT (RPC 2038 stop + hold)")
+                        continue
+
+                    # VK1 (VisualKick V1): start 2Hz timer stream
+                    if kind == 'vk1':
+                        self._ensure_kick_pub(hw_name, hw_info)
+                        pub = self._kick_pubs.get(hw_name)
+                        if not pub:
+                            self.get_logger().warn(
+                                f"🦵 [{hw_name}] hw_kick refused — no kick publisher "
+                                f"(not K1 or brain.msg.Kick unavailable)")
+                            self._publish_motion(hw_name, hw_type, 0.0, 0.0)
+                            continue
+
+                        # Build the Kick message (static POC for calib/demo)
+                        msg = Kick()
+                        msg.header.frame_id = ''
+                        msg.x = 0.0
+                        msg.y = 0.0
+                        msg.dir = 0.0
+                        msg.goal_x = K1_KICK_GOAL_X
+                        msg.goal_y = K1_KICK_GOAL_Y
+                        msg.robot_theta_to_field = 0.0
+                        msg.power = K1_KICK_POWER
+                        self._kick_params[hw_name] = msg
+                        self._kick_start_t[hw_name] = time.time()
+
+                        # Stop any existing timer for this bot (re-arm on new id)
+                        old_timer = self._kick_timers.pop(hw_name, None)
+                        if old_timer:
+                            old_timer.cancel()
+
+                        # 2Hz timer callback: publish Kick + check timeout
+                        def _kick_tick(_n=hw_name):
+                            now = time.time()
+                            # Safety timeout
+                            if now - self._kick_start_t.get(_n, now) > K1_KICK_MAX_DURATION_S:
+                                self._stop_kick_timer(_n, f"timeout ({K1_KICK_MAX_DURATION_S}s)")
+                                if HAS_BOOSTER_MSGS and _n in self.pubs:
+                                    rpc = RpcReqMsg()
+                                    rpc.uuid = f"kick_timeout_{int(now*1000)}"
+                                    rpc.header = json.dumps({"api_id": 2038})
+                                    rpc.body = json.dumps({"start": False})
+                                    self.pubs[_n].publish(rpc)
+                                self._publish_motion(_n,
+                                    self.hardware_mapping.get(_n, {}).get(
+                                        'hardware_type', 'virtual').lower(),
+                                    0.0, 0.0)
+                                self.get_logger().warn(
+                                    f"🦵 [{_n}] kick TIMEOUT "
+                                    f"({K1_KICK_MAX_DURATION_S}s) -> abort + hold")
+                                return
+                            msg = self._kick_params.get(_n)
+                            if msg is None:
+                                return
+                            msg.header.stamp.sec = int(now)
+                            msg.header.stamp.nanosec = int((now % 1) * 1e9)
+                            self._kick_pubs[_n].publish(msg)
+
+                        timer = self.create_timer(1.0 / K1_KICK_PUB_HZ, _kick_tick)
+                        self._kick_timers[hw_name] = timer
+                        self.get_logger().info(
+                            f"🦵 [{hw_name}] kick timer STARTED "
+                            f"({K1_KICK_PUB_HZ}Hz, power={K1_KICK_POWER}, "
+                            f"max={K1_KICK_MAX_DURATION_S}s)")
                     continue
 
                 if action == 'timedmove':
