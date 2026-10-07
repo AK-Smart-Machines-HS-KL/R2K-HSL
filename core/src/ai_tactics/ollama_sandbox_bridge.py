@@ -1335,6 +1335,19 @@ class HalBridge(Node):
                             self._publish_motion(hw_name, hw_type, 0.0, 0.0)
                             continue
 
+                        # Arm VisualKick V1 via RPC 2038 (one-shot, before the
+                        # 2Hz /kick_ball stream). The vendor firmware needs this
+                        # trigger to activate the visual-kick skill — without it
+                        # /kick_ball messages are received but no motion happens.
+                        if HAS_BOOSTER_MSGS and hw_name in self.pubs:
+                            rpc = RpcReqMsg()
+                            rpc.uuid = f"vk1_arm_{int(time.time()*1000)}"
+                            rpc.header = json.dumps({"api_id": 2038})
+                            rpc.body = json.dumps({"start": True, "version": 0})
+                            self.pubs[hw_name].publish(rpc)
+                            self.get_logger().info(
+                                f"🦵 [{hw_name}] VisualKick V1 armed (RPC 2038)")
+
                         # Build the Kick message (static POC for calib/demo)
                         msg = Kick()
                         msg.header.frame_id = ''
