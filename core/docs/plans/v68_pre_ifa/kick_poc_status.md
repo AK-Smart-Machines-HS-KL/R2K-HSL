@@ -56,7 +56,7 @@ Files modified (uncommitted, on `main`):
 
 Deployed to the K1 at 192.168.0.69 via `./deploy_relay.sh 192.168.0.69 Kev1n`. Both services `active` and logged `Relay Active` lines (the RCLError traceback in the journal is the OLD instance's teardown noise — double `rclpy.shutdown()` in the `finally` block; cosmetic, pre-existing pattern, not caused by our change).
 
-## Validation results (2026-09-25; Gates 4+5 nachgeliefert 2026-10-01)
+## Validation results (2026-09-25; Gates 4+5 2026-10-01; Gate 6 2026-10-05)
 
 | Gate | Check | Result |
 |---|---|---|
@@ -64,8 +64,8 @@ Deployed to the K1 at 192.168.0.69 via `./deploy_relay.sh 192.168.0.69 Kev1n`. B
 | 2 | Kick.msg type identity (robot vs repo) | PASS — byte-identical, including the `disired` vendor typo on both sides → DDS typehash match guaranteed for the host↔robot leg |
 | 3 | Kick controller present on `/kick_ball` | PASS — 2 subscribers (vendor soccer agent, bare-DDS participants); our internal relay is the 1 publisher |
 | 4 | Host-side fleet topic visible | PASS (2026-10-01) — `ros2 topic list` auf nativem U22 zeigt `/Kev1n/kick_ball`; `ros2 topic info` bestätigt 1 Subscription (external_relay) |
-| 5 | End-to-end chain round-trip (host pub → robot echo) | PASS (2026-10-01) — 4/5 `--times 5` Nachrichten empfangen auf `ros2 topic echo /kick_ball` auf dem K1; ursprünglicher Fehlschlag war ein Publish aus dem Docker-Container (`docker exec core_gazebo`) — DDS-Env-Mismatch. Nativer U22-Publish funktioniert; U24/Docker noch nicht vollständig getestet (nicht als nicht-funktionierend einstufen) |
-| 6 | Live kick (power 6.0, stand) | NOT YET ATTEMPTED — jetzt frei nach Gate 5 |
+| 5 | End-to-end chain round-trip (host pub → robot echo) | PASS (2026-10-01) — 4/5 `--times 5` Nachrichten empfangen auf `ros2 topic echo /kick_ball` auf dem K1; ursprünglicher Fehlschlag war ein Publish aus dem Docker-Container (`docker exec core_gazebo`) — DDS-Env-Mismatch. Nativer U22-Publish funktioniert; U24/Docker noch nicht vollständig getestet (nicht als nicht-funktionierend eingestufen) |
+| 6 | Live kick (power 6.0, K1 on stand) | PASS (2026-10-05) — K1 führte Kick-Bewegung aus nach `k1 kick` via calib_cli. **Drei Bedingungen nötig:** (1) Soccer Mode aktiv via RPC 2000 `{"mode": 4}`, (2) VisualKick V1 armed via RPC 2038 `{"start": true, "version": 0}` (einmalig pro Kick-Kommando, Bridge sendet diesen Trigger jetzt automatisch), (3) 2Hz `brain/Kick`-Stream auf `/kick_ball` mit `x=1.0, y=0.0, power=6.0`. `kick stop` → RPC 2038 `{"start": false}` + Hold. Vendor-Kick-Path wurde zusätzlich via `GoToBallAndKick.py` als Standalone validiert. |
 
 > [!note] brain-Source auf dem K1
 > Für manuelle SSH-Sessions auf dem K1: vor `ros2 topic echo /kick_ball`
@@ -95,22 +95,33 @@ The old relay instance's `finally: rclpy.shutdown()` double-calls shutdown and t
 
 The K1's hostname is `Kevin` (journalctl `Sep 25 ... Kevin systemd...`); the systemd unit + topic prefix use `Kev1n`. Not a problem (they're independent strings) but worth documenting in the cheat sheet so future skill additions don't confuse the two.
 
-## Step 2 — Bridge: DONE ✅ (2026-10-05)
+## Step 2 — Bridge: DONE ✅ (2026-10-05, updated 2026-10-07)
 
 Implemented in `core/src/ai_tactics/ollama_sandbox_bridge.py` (calib/demo path only — match mode keeps the `{"mode": 1}` placeholder until GATE 0 probe results land):
 
 - **Import** `brain.msg.Kick` + `HAS_BRAIN_KICK` flag (graceful fallback if not built).
 - **Constants** (parameterized for quick tuning): `K1_KICK_POWER=6.0`, `K1_KICK_GOAL_X=5.0`, `K1_KICK_GOAL_Y=0.0`, `K1_KICK_MAX_DURATION_S=8.0`, `K1_KICK_PUB_HZ=2.0`.
 - **`_ensure_kick_pub(hw_name, hw_info)`** — lazy `brain/Kick` publisher on `<ns>/kick_ball`, ns derived from the K1 relay topic like `_ensure_odom_watch` (`rsplit('/', 1)[0]` → `/Kev1n`).
-- **`_stop_kick_timer(hw_name, reason)`** — helper: cancel timer + clean up state + log.
+- **`_stop_kick_timer(hw_name, reason)`** — helper: cancel timer + clean up state (`_kick_timers`, `_kick_params`, `_kick_start_t`, `_kick_ids`) + log.
 - **Dispatch branch `action == 'hw_kick'`** (distinct from match-mode `action == 'kick'`):
-  - `kind='vk1'` → starts a **2Hz timer** that publishes `Kick` msg continuously (vendor controller expects ~2Hz stream — a single message yields only a half-step). Static POC fields: `x=0, y=0, dir=0, goal_x=5.0, goal_y=0.0, robot_theta_to_field=0.0, power=K1_KICK_POWER`.
+  - `kind='vk1'` → **three-step sequence**:
+    1. **VisualKick V1 arm** (one-shot): RPC 2038 `{"start": true, "version": 0}` via `LocoApiTopicReq` — the vendor firmware needs this trigger to activate the visual-kick skill. Without it, `/kick_ball` messages are received but no motion happens (verified live 2026-10-05).
+    2. **2Hz timer** that publishes `Kick` msg continuously (vendor controller expects ~2Hz stream — a single message yields only a half-step). POC fields: `x=1.0, y=0.0, dir=0, goal_x=5.0, goal_y=0.0, robot_theta_to_field=0.0, power=K1_KICK_POWER`.
+    3. **Re-arm guard** (id-keyed): if a timer is already running for the same `id`, skip (prevents 20Hz dispatch loop from canceling+recreating the timer every tick — the callback would never fire).
   - `kind='abort'` → timer stop + RPC 2038 `{"start": false}` via existing `LocoApiTopicReq` leg + zero-twist hold (safety: stop everything).
   - **Safety timeout** (`K1_KICK_MAX_DURATION_S=8.0`): auto-abort + hold after timeout.
   - **Timer cleanup on other actions**: any non-`hw_kick` action for a bot with an active kick timer stops the timer (safety).
   - **`stop_all_hardware()`**: stops all kick timers on full hardware stop (Gazebo pause / watchdog).
+- **`TARGET_EXTRA_KEYS`** extended with `'kind'` (was stripped by `read_llm_strategy`, breaking the `vk1`/`abort` routing).
+- **Calib allowlist** (line ~1216): `hw_kick` added to `('goto', 'timedmove', 'hold', 'face', 'head', 'seq')` — without it, `hw_kick` was silently skipped in `--calib` mode (`bot_idx=None` gate).
 - Match mode untouched (GATE 0: mode-1 placeholder stays until probe results clear).
 - 316 fast-tier tests pass (`pytest tests/ --skip-slow`).
+
+### Bugs found & fixed during live validation (2026-10-05)
+1. **`kind` field stripped** by `read_llm_strategy` → added `'kind'` to `TARGET_EXTRA_KEYS`.
+2. **`hw_kick` not in calib allowlist** → `bot_idx=None` gate silently skipped it → added `'hw_kick'` to the allowlist.
+3. **Timer recreated every 20Hz tick** (re-arm guard missing) → added `_kick_ids` dict + id-keyed guard: skip if timer already running for same id.
+4. **VisualKick not armed** → `/kick_ball` messages received but no motion. Fix: RPC 2038 `{"start": true, "version": 0}` sent once before the 2Hz stream starts.
 
 ## Step 3 — Evaluator + calib CLI: DONE ✅ (2026-10-05)
 
@@ -175,5 +186,6 @@ Topic name: started as `/{prefix}/kick_ball`, user changed to `/{prefix}/kick`, 
 ## Blockers / next session entry point
 
 1. **Step 4 — Tests + Doku**: fast-tier test (`test_head_face.py` pattern → `test_kick_fastpath.py`), `calibration_cheat_sheet.md` + `vocabulary_cheat_sheet.md` sections, session changelog entry.
-2. **Live-Test**: `./launch_r2k.sh --demo --no-visualizer --relay single_bot` → `python3 tools/calib_cli.py` → `k1 kick` (Bridge loggt "🦵 [k1] kick timer STARTED") → `k1 kick stop` (Abort + Hold). Vendor-Kick-Path wurde bereits via `GoToBallAndKick.py` als Standalone validiert.
-3. **U24/Docker-Publish** separat nachtesten (nicht blockierend — U22-nativ funktioniert; U24/Docker noch nicht vollständig getestet, nicht als nicht-funktionierend eingestuft).
+2. **Soccer Mode Pre-Condition**: `k1 kick` requires the K1 to be in Soccer Mode (RPC 2000 `{"mode": 4}`). Currently this must be set manually before the calib session. Future: auto-set in the bridge on first K1 contact, or in `launch_r2k.sh` hardware-gate.
+3. **Abort id-keyed guard**: the `kind='abort'` branch fires RPC 2038 every 20Hz tick (no id-keyed done-set like `vk1`). Cosmetic (RPC 2038 stop is idempotent), but should be guarded for log cleanliness.
+4. **U24/Docker-Publish** separat nachtesten (nicht blockierend — U22-nativ funktioniert; U24/Docker noch nicht vollständig getestet, nicht als nicht-funktionierend eingestuft).
