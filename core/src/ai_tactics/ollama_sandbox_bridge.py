@@ -27,6 +27,8 @@ try:
 except ImportError:
     HAS_BOOSTER_ODOM = False
 
+
+#instead GotoBallAndKickMsg
 try:
     from brain.msg import Kick
     HAS_BRAIN_KICK = True
@@ -48,6 +50,7 @@ CALIB = os.getenv('R2K_CALIB') == '1'
 K1_ODOM_DRIFT_M = 0.25          # warn when K1 strays this far from its sim twin
 K1_DRIFT_WARN_DEBOUNCE_S = 1.0  # min seconds between drift warnings
 
+### This was a proof of concept istead we will make a skill based system of a GoToBallAndKick node that is given this task ####
 # === K1 kick (calib/demo hw_kick action, 2Hz brain/Kick stream) ===
 # Vendor soccer controller (com.boosterobotics.soccer) expects a continuous
 # ~2Hz stream on /kick_ball — a single message yields only a half-step.
@@ -346,7 +349,10 @@ class HalBridge(Node):
         self.ball_pos = None
         self.hardware_mapping = {}
         self.last_kick_time = {}
-
+	
+	
+	### this will be diverted to the GoToBallAndKick node ###
+	### instead hust one msg to <robot_name>/GoToBallAndKick and the rest is handled by this node ###
         # --- K1 kick state (calib/demo hw_kick, 2Hz brain/Kick stream) ---
         # Timer publishes until abort, timeout, or a different action for the bot.
         self._kick_timers = {}       # {hw_name: Timer}
@@ -472,6 +478,8 @@ class HalBridge(Node):
         self._seq_state.clear()
         self._body_gesture.clear()
         self._goto_state.clear()
+        
+        ### only one kicker should be active at all times so no need to stop multiple kicks ###
         # Stop all active kick timers (safety: full hardware stop)
         for hw_name in list(self._kick_timers.keys()):
             self._stop_kick_timer(hw_name, "stop_all_hardware")
@@ -749,6 +757,8 @@ class HalBridge(Node):
             self._y_odom[hw_name] = {'x': 0.0, 'y': 0.0, 'theta': 0.0, 't': 0.0}
             self.get_logger().info(f"📍 Yahboom odom subscription active for {hw_name} on {ns}/odom_raw (rehearsal)")
 
+
+	### switch to Skill based GoToBallAndKick topic ###
     def _ensure_kick_pub(self, hw_name, hw_info):
         """Lazy brain/Kick publisher on <ns>/kick_ball for K1.
         ns derived from the K1 relay topic like _ensure_odom_watch
@@ -1239,7 +1249,8 @@ class HalBridge(Node):
                     dist_to_ball = float('inf')
                 action = target.get('action', '').lower()
                 is_attacking = False
-
+                
+		### To Be removed kick stream will be handled by the GoToBallAndKick node active on K1 ###
                 # Kick-timer safety cleanup: stop any active 2Hz kick stream
                 # when a different action arrives for this bot (hold/face/
                 # goto/timedmove/etc). 'hw_kick' handles its own timer lifecycle.
@@ -1291,6 +1302,10 @@ class HalBridge(Node):
                     continue
 
                 if action == 'hw_kick':
+                
+                	### Placeholder for GoToBallAndKick which will instead handle everything neccesary for kick controll ###
+			### read GoToBallAndKick.msg for details ###
+			### GoToBallAndKick.py located in /utils/skills folder will also set head controll to look at ball ###
                     # K1 kick (calib/demo only): 2Hz brain/Kick stream on
                     # <ns>/kick_ball. Vendor soccer controller expects a
                     # continuous ~2Hz stream — a single message yields only
