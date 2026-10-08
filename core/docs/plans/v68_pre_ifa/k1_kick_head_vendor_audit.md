@@ -69,6 +69,18 @@ K1 joint indices: `kHeadYaw=0`, `kHeadPitch=1` (2 head DoF). **No angle limits
 documented** — clamp constants in bridge code must be tuned on hardware.
 Required `RobotMode` for head control is undocumented — probe on hardware.
 
+**[PROBE COMPLETE 2026-10-07]** Hardware probe run on Kev1n (fw v1.8.0.9):
+- **Sign conventions VERIFIED:** `+yaw` (RPC) → head turns LEFT; `+pitch` (RPC) → head UP.
+  `head_cmds.py` `K1_SIGN_YAW = +1.0`, `K1_SIGN_PITCH = +1.0` (was `-1.0` pre-probe, flipped).
+- **Mechanical stops:** yaw clamps tightened to ±1.0 rad (vendor spec ±1.03 —
+  physical stop hits at 1.0). Pitch limits -0.33..+0.86 unchanged (no stop observed).
+- **Required mode:** `kWalking` (mode 2) only — `kPrepare` (mode 1) rejects
+  `RotateHead`. Bridge must ensure K1 is in walking mode before head commands.
+- **Teardown:** on failsafe (RPC 2000 `clear_buffer`/`lock_drive`), head
+  HOLDS last pose (does not return to neutral). Vision-loss handling: head
+  holds — no sweep risk.
+- Probe script: `utils/scripts/probe_k1_head.py`.
+
 ### 2.3 What stands (not affected by the audit)
 
 - `Move(vx, vy, vyaw)` (2001) + `ChangeMode` (2000): K1-supported, ≥ v1.0.0,
