@@ -13,7 +13,7 @@ NOTE:once we move the LLM into the K1 bots, this relay will render useless.
 This is a loosely coupled set of python code. Main purposes:
 * Runnning olllama bridge on host requires K1 listening 
 * this code will list specific ros2 topics for DOMAIN 0
-* Eg: K1<robot name>/<rLoCoAPITopicReq/>, <robot name>/kick_ball, ~~<robot name>/Odometer_States~~
+* Eg: K1<robot name>/<rLoCoAPITopicReq/>, <robot name>/GoToBallAndKick, ~~<robot name>/Odometer_States~~
   **[CORRECTION 2026-09-04 — vendor audit §5, k1_kick_head_vendor_audit.md]** the
   odometer leg is a NON-FUNCTIONAL placeholder: Booster exposes odom only as the
   SDK-internal DDS channel `rt/odometer_state` (booster_interface/Odometer), never
@@ -21,18 +21,27 @@ This is a loosely coupled set of python code. Main purposes:
   exist on the robot. No data has ever been observed (zero logged sessions).
   Verified working: only LocoApiTopicReq/Resp. ROS-standard path for the future:
   `rt/odom` (nav_msgs/Odometry) via the ROS bridge, fw >= v1.7.1.0 — probe pending.
-* **kick_ball** (v6.8 kick POC): `brain/Kick` on `/<prefix>/kick_ball` (fleet-facing).
-  The external relay forwards via UDP 6003 to the internal relay, which publishes
-  the robot-local `/kick_ball` topic consumed by the vendor soccer agent kick
-  controller (com.boosterobotics.soccer). Both relay services source the agent's
-  install for the `brain` package:
-  `/opt/booster/booster_agent_data/data/agents/extract/com.boosterobotics.soccer/agent/local_setup.bash`
-  (Kick.msg ground truth on the K1, verified via `find` 2026-09-25 — the
-  `~/Workspace/robocup_demo` checkout is reference material, NOT the robot
-  install). Msg semantics: `feature/skill/GoToBallAndKick` (`utils/skills/goToBallAndKick.py`).
-  Host-side abort: RPC 2038 `{"start": false}` via the existing
-  `/LocoApiTopicReq` leg. Probe matrix: see
-  `core/docs/plans/v68_pre_ifa/k1_kick_head_vendor_audit.md` §3.
+* **GoToBallAndKick** (K1 kick migration, 2026-10-12):
+  `k1_skills_msgs/GoToBallAndKickCmd` on `/<prefix>/GoToBallAndKick` (fleet-facing).
+  The external relay forwards via UDP 6004 to the internal relay, which publishes
+  the robot-local `/GoToBallAndKick` topic consumed by the on-robot
+  `GoToBallAndKick` node (`utils/skills/goToBallAndKick.py`). That node closes the
+  loop locally: subscribes `/booster_soccer/ball` (vision_interface/Ball, from the
+  `utils/vision` perception node), publishes `brain/Kick` to the robot-local
+  `/kick_ball` at the system limit (no rate cap — the stream is robot-internal,
+  never crosses the relay), and arms/aborts VisualKick via RPC 2038 on
+  `/LocoApiTopicReq`. Both relay services source `ros2_ws/install/setup.bash`
+  (our workspace overlay with `k1_skills_msgs`) on top of the vendor
+  `BoosterRos2` + `BoosterRos2Interface` installs. The vendor `brain` package is
+  NOT sourced by the relay anymore (the relay no longer imports brain/Kick — only
+  the on-robot kick node does, via its own service unit).
+  Msg: `core/src/ros2_ws/src/k1_skills_msgs/msg/GoToBallAndKickCmd.msg`
+  (target_x, target_y, power, is_goalshot, abort — power=0.0 = node auto-computes).
+  Host-side abort: `GoToBallAndKickCmd.abort=true` (the node sends RPC 2038 stop).
+  Probe matrix: see `core/docs/plans/v68_pre_ifa/k1_kick_head_vendor_audit.md` §3.
+  Retired: the former `brain/Kick` relay leg (UDP 6003, `/<prefix>/kick_ball`)
+  was removed — the kick stream is now robot-local, eliminating the 2 Hz network
+  bottleneck.
 * refresh rate:
 **  Installation**
 0. Start network "maker4", nao12345
