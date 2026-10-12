@@ -1,7 +1,8 @@
 #!/bin/bash
-# Deploy the GoToBallAndKick skill node + k1_skills_msgs msg package
-# to a K1 robot. Copies the node script, builds the msg package on-robot
-# via colcon, and installs a systemd service for auto-start.
+# Deploy the GoToBallAndKick + HeadControl skill nodes and the
+# k1_skills_msgs msg package to a K1 robot. Copies the node scripts,
+# builds the msg package on-robot via colcon, and installs systemd
+# services for auto-start.
 #
 # Prerequisites (must be deployed first):
 #   - deploy_relay.sh  — relay pair (external + internal) for /GoToBallAndKick
@@ -27,6 +28,8 @@ ROBOT_NAME=""
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 SKILL_SRC="${REPO_ROOT}/utils/skills/goToBallAndKick.py"
 SKILL_SERVICE="${REPO_ROOT}/utils/skills/system/goto-ball-and-kick.service"
+HEAD_SRC="${REPO_ROOT}/utils/skills/headControl.py"
+HEAD_SERVICE="${REPO_ROOT}/utils/skills/system/head-control.service"
 K1_SKILLS_MSGS_SRC="${REPO_ROOT}/core/src/ros2_ws/src/k1_skills_msgs"
 
 # =====================================================================
@@ -35,9 +38,9 @@ K1_SKILLS_MSGS_SRC="${REPO_ROOT}/core/src/ros2_ws/src/k1_skills_msgs"
 show_help() {
     echo "Usage: $0 [OPTIONS] <Robot_IP> <Robot_Name>"
     echo ""
-    echo "Deploy the GoToBallAndKick skill node to a K1 robot."
-    echo "Copies the node script + k1_skills_msgs msg package, builds"
-    echo "the msg package on-robot via colcon, and installs a systemd service."
+    echo "Deploy the GoToBallAndKick + HeadControl skill nodes to a K1 robot."
+    echo "Copies the node scripts + k1_skills_msgs msg package, builds"
+    echo "the msg package on-robot via colcon, and installs systemd services."
     echo ""
     echo "Prerequisites (deploy first):"
     echo "  deploy_relay.sh   — relay pair for /GoToBallAndKick transport"
@@ -108,6 +111,14 @@ if [ ! -f "${SKILL_SERVICE}" ]; then
     echo "Error: systemd unit not found at ${SKILL_SERVICE}"
     exit 1
 fi
+if [ ! -f "${HEAD_SRC}" ]; then
+    echo "Error: HeadControl node not found at ${HEAD_SRC}"
+    exit 1
+fi
+if [ ! -f "${HEAD_SERVICE}" ]; then
+    echo "Error: head-control systemd unit not found at ${HEAD_SERVICE}"
+    exit 1
+fi
 if [ ! -d "${K1_SKILLS_MSGS_SRC}" ]; then
     echo "Error: k1_skills_msgs package not found at ${K1_SKILLS_MSGS_SRC}"
     exit 1
@@ -117,74 +128,83 @@ fi
 # Deploy
 # =====================================================================
 echo "========================================================"
-echo "Deploying GoToBallAndKick skill to ${ROBOT_NAME} at ${ROBOT_IP}"
+echo "Deploying GoToBallAndKick + HeadControl skills to ${ROBOT_NAME} at ${ROBOT_IP}"
 echo "Auto-Start: ${AUTO_START} | Build msg package: ${DO_BUILD}"
 echo "========================================================"
 
 SSH_SOCKET="/tmp/skill_deploy_mux_${ROBOT_IP}"
 
-echo "[1/7] Opening SSH connection to ${ROBOT_USER}@${ROBOT_IP}..."
+echo "[1/8] Opening SSH connection to ${ROBOT_USER}@${ROBOT_IP}..."
 ssh -M -S "${SSH_SOCKET}" -f -N "${ROBOT_USER}@${ROBOT_IP}"
 
 # 2. Create remote directories
-echo "[2/7] Creating remote directories..."
+echo "[2/8] Creating remote directories..."
 ssh -S "${SSH_SOCKET}" "${ROBOT_USER}@${ROBOT_IP}" \
     "mkdir -p ${SKILL_REMOTE_DIR} ${MSG_WS_REMOTE_DIR}/src"
 
-# 3. Copy the skill node script
-echo "[3/7] Copying GoToBallAndKick node..."
+# 3. Copy the skill node scripts (GoToBallAndKick + HeadControl)
+echo "[3/8] Copying GoToBallAndKick + HeadControl nodes..."
 scp -o "ControlPath=${SSH_SOCKET}" \
-    "${SKILL_SRC}" \
+    "${SKILL_SRC}" "${HEAD_SRC}" \
     "${ROBOT_USER}@${ROBOT_IP}:${SKILL_REMOTE_DIR}/"
 
 # 4. Copy k1_skills_msgs msg package (for on-robot colcon build)
-echo "[4/7] Copying k1_skills_msgs msg package..."
+echo "[4/8] Copying k1_skills_msgs msg package..."
 scp -r -o "ControlPath=${SSH_SOCKET}" \
     "${K1_SKILLS_MSGS_SRC}" \
     "${ROBOT_USER}@${ROBOT_IP}:${MSG_WS_REMOTE_DIR}/src/"
 
 # 5. Build k1_skills_msgs on-robot (colcon)
 if [ "${DO_BUILD}" = true ]; then
-    echo "[5/7] Building k1_skills_msgs on K1..."
+    echo "[5/8] Building k1_skills_msgs on K1..."
     ssh -S "${SSH_SOCKET}" -t "${ROBOT_USER}@${ROBOT_IP}" "
         cd ${MSG_WS_REMOTE_DIR}
         source /opt/ros/humble/setup.bash
         colcon build --packages-select k1_skills_msgs --symlink-install
     "
 else
-    echo "[5/7] Skipping colcon build (--no_build)"
+    echo "[5/8] Skipping colcon build (--no_build)"
 fi
 
-# 6. Copy + install systemd service
-echo "[6/7] Installing systemd service..."
+# 6. Copy + install systemd services
+echo "[6/8] Installing systemd services..."
 scp -o "ControlPath=${SSH_SOCKET}" \
     "${SKILL_SERVICE}" \
     "${ROBOT_USER}@${ROBOT_IP}:/tmp/goto-ball-and-kick.service"
+scp -o "ControlPath=${SSH_SOCKET}" \
+    "${HEAD_SERVICE}" \
+    "${ROBOT_USER}@${ROBOT_IP}:/tmp/head-control.service"
 
 ssh -S "${SSH_SOCKET}" -t "${ROBOT_USER}@${ROBOT_IP}" "
     echo '-> Substituting robot name (${ROBOT_NAME})...'
     sed -i 's/<Robot_Name>/${ROBOT_NAME}/g' /tmp/goto-ball-and-kick.service
+    sed -i 's/<Robot_Name>/${ROBOT_NAME}/g' /tmp/head-control.service
 
-    echo '-> Moving service file to /etc/systemd/system/...'
+    echo '-> Moving service files to /etc/systemd/system/...'
     sudo mv /tmp/goto-ball-and-kick.service /etc/systemd/system/
+    sudo mv /tmp/head-control.service /etc/systemd/system/
     sudo chown root:root /etc/systemd/system/goto-ball-and-kick.service
+    sudo chown root:root /etc/systemd/system/head-control.service
     sudo chmod 644 /etc/systemd/system/goto-ball-and-kick.service
+    sudo chmod 644 /etc/systemd/system/head-control.service
 
     echo '-> Reloading systemd daemon...'
     sudo systemctl daemon-reload
 "
 
 # 7. Enable + start (or just install)
-echo "[7/7] Configuring service..."
+echo "[7/8] Configuring services..."
 if [ "${AUTO_START}" = true ]; then
     ssh -S "${SSH_SOCKET}" -t "${ROBOT_USER}@${ROBOT_IP}" "
         sudo systemctl enable goto-ball-and-kick.service
         sudo systemctl restart goto-ball-and-kick.service
+        sudo systemctl enable head-control.service
+        sudo systemctl restart head-control.service
     "
-    echo "Service enabled (auto-start on boot) + started."
+    echo "Both services enabled (auto-start on boot) + started."
 else
-    echo "Service installed but not enabled. Start manually:"
-    echo "  ssh ${ROBOT_USER}@${ROBOT_IP} sudo systemctl start goto-ball-and-kick"
+    echo "Services installed but not enabled. Start manually:"
+    echo "  ssh ${ROBOT_USER}@${ROBOT_IP} sudo systemctl start goto-ball-and-kick head-control"
 fi
 
 # Cleanup
@@ -200,10 +220,12 @@ echo ""
 echo "Verify on the K1:"
 echo "  journalctl -u goto-ball-and-kick -f"
 echo "  -> expect: 'Listening for commands on: /${ROBOT_NAME}/GoToBallAndKick'"
+echo "  journalctl -u head-control -f"
+echo "  -> expect: 'Listening for commands on: /${ROBOT_NAME}/HeadControl'"
 echo ""
 echo "Verify from the host (maker4 PC):"
-echo "  ros2 topic list | grep GoToBallAndKick"
-echo "  -> expect: /${ROBOT_NAME}/GoToBallAndKick"
+echo "  ros2 topic list | grep -E 'GoToBallAndKick|HeadControl'"
+echo "  -> expect: /${ROBOT_NAME}/GoToBallAndKick  /${ROBOT_NAME}/HeadControl"
 echo ""
 echo "Prerequisites check:"
 echo "  - Relay pair:  journalctl -u internal-relay -u external-relay (on K1)"
