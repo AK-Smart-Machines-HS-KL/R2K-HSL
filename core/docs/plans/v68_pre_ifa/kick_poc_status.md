@@ -149,12 +149,137 @@ Implemented in `core/src/ai_tactics/ollama_sandbox_bridge.py` (calib/demo path o
 
 316 fast-tier tests pass (`pytest tests/ --skip-slow`).
 
-## Step 4 — Tests + docs: PENDING
+## Step 4 — Tests + docs: PARTIALLY DONE (2026-10-12)
 
-- Fast tier: extend `core/src/tests/test_head_face.py` pattern with a kick fast-path test (evaluator verb → hw_kick cmd). Run `python3 -m pytest tests/ --skip-slow`.
-- `core/docs/calibration_cheat_sheet.md`: kick command section (verbs, probe matrix pointer, safety: `kick stop` + manual RPC 2038 abort, stand/clearance preconditions).
-- `core/docs/vocabulary_cheat_sheet.md`: CLI verbs → parsing layers entry for `kick`/`kick stop`.
-- Session changelog entry (per AGENTS.md protocol) at session end via `./docs/session_entry.sh`.
+- ✅ Fast tier: `core/src/tests/test_kick_fastpath.py` (5 tests — evaluator
+  verb → hw_kick cmd, vk1/abort routing, waypoint clearing, compound-task
+  routing). 320 fast-tier tests pass (`pytest tests/ --skip-slow`).
+- ⬜ `core/docs/calibration_cheat_sheet.md`: kick command section (verbs,
+  probe matrix pointer, safety: `kick stop` + `GoToBallAndKickCmd.abort=true`,
+  stand/clearance preconditions).
+- ⬜ `core/docs/vocabulary_cheat_sheet.md`: CLI verbs → parsing layers entry
+  for `kick`/`kick stop`.
+- ⬜ Session changelog entry (per AGENTS.md protocol) at session end.
+
+## Step 5 — Host→robot migration: DONE ✅ (2026-10-12)
+
+The kick execution migrated from the host bridge to an on-robot node. The
+bridge now publishes a single high-level `GoToBallAndKickCmd`; the on-robot
+`GoToBallAndKick` node closes the loop locally using `utils/vision` ball
+data. The high-frequency `brain/Kick` stream stays robot-local (never
+crosses the relay), eliminating the former 2 Hz network bottleneck.
+
+### Architecture (after migration)
+
+```
+host bridge                       relay pair                    K1 robot
+─────────                         ───────────                    ────────────
+hw_kick action                                                   head-control node (Phase 0a, TODO)
+  │ publish GoToBallAndKickCmd                                   ├── RPC 2004 → /LocoApiTopicReq (head move)
+  └─► /Kev1n/GoToBallAndKick ───► UDP 6004 ──────────────────►  └── pub /head_pose (geometry_msgs/Pose)
+                                                                          │
+                                                                 utils/vision node (Phase 0b, C++ TensorRT)
+                                                                 ├── sub /boostercamera/head/rgb + depth
+                                                                 ├── sub /head_pose
+                                                                 └── pub /booster_soccer/ball (vision_interface/Ball)
+                                                                          │
+                                                                 GoToBallAndKick node (Phase 1, this step)
+                                                                 ├── sub /GoToBallAndKick (k1_skills_msgs/GoToBallAndKickCmd)
+                                                                 ├── sub /booster_soccer/ball (vision_interface/Ball)
+                                                                 ├── pub /kick_ball (brain/Kick @ max rate, LOCAL)
+                                                                 └── RPC 2038 arm/abort → /LocoApiTopicReq (LOCAL)
+                                                                          │
+                                                                          ▼
+                                                                 vendor soccer controller (sub /kick_ball)
+```
+
+### What changed
+
+**New msg package — `k1_skills_msgs`**
+(`core/src/ros2_ws/src/k1_skills_msgs/`): contains
+`GoToBallAndKickCmd.msg` (target_x, target_y, power, is_goalshot, abort).
+The vendor `brain` package stays byte-identical on the K1 — our msg
+lives in a separate package sourced from the ros2_ws workspace overlay.
+`power=0.0` → the on-robot node auto-computes power from distance +
+is_goalshot (goalshot: 6.0 if dist > 6 m else 1.5; pass: min(dist*0.8, 4.0)).
+
+**On-robot node — `utils/skills/goToBallAndKick.py`** (promoted from POC):
+- Subscribes `/{prefix}/GoToBallAndKick` (k1_skills_msgs/GoToBallAndKickCmd)
+  + `/booster_soccer/ball` (vision_interface/Ball, from `utils/vision`).
+- Publishes `brain/Kick` to robot-local `/kick_ball` in a tight thread loop
+  (no rate cap — `time.sleep(0)`, runs to the system limit; expected several
+  hundred Hz on local DDS).
+- Arms VisualKick V1 via RPC 2038 on first ball detection; aborts via RPC
+  2038 `{"start": false}` on cmd.abort, safety timeout (8 s), or ball-lost
+  (2 s no vision).
+- **Removed from POC:** `DetectionMsgs` subscription
+  (`/yolo_detection_server/detection_results`), RPC 3000 YOLO activation
+  (`/VisionApiTopicReq`) — the `utils/vision` node is self-contained
+  (TensorRT/ONNX inference, no external service to arm).
+
+**Relay — `utils/ros2_relay/`**:
+- Removed: UDP 6003 / `kick_ball` leg (brain/Kick) from both relay files +
+  the `brain` source line from both systemd service files.
+- Added: UDP 6004 / `GoToBallAndKick` leg (k1_skills_msgs/GoToBallAndKickCmd)
+  in both relay files. Systemd services now source
+  `/home/booster/Workspace/ros2_ws/install/setup.bash` (our workspace
+  overlay with `k1_skills_msgs`) instead of the vendor `brain` agent install.
+
+**Bridge — `core/src/ai_tactics/ollama_sandbox_bridge.py`**:
+- Removed: `K1_KICK_POWER`, `K1_KICK_PUB_HZ`, `K1_KICK_MAX_DURATION_S`,
+  `_kick_timers`, `_kick_params`, `_kick_start_t`, `_kick_ids`, `_kick_pubs`,
+  `_ensure_kick_pub`, `_stop_kick_timer`, the 2 Hz timer callback, the RPC
+  2038 arm/abort code, the `brain/Kick` import + `HAS_BRAIN_KICK` flag.
+- Added: `k1_skills_msgs.GoToBallAndKickCmd` import + `HAS_GOTO_KICK_CMD`
+  flag, `_ensure_goto_kick_pub`, `_goto_kick_pubs`, `_goto_kick_active`,
+  `_goto_kick_ids`.
+- `action == 'hw_kick'` is now a one-shot publish: `kind='vk1'` →
+  `GoToBallAndKickCmd(target=goal, power=0, is_goalshot=true, abort=false)`;
+  `kind='abort'` → `GoToBallAndKickCmd(abort=true)`. Re-arm guard by id
+  (same id = skip — the on-robot node keeps streaming until abort/timeout).
+- `stop_all_hardware()` + non-hw_kick actions send `abort=true` for any
+  active kick.
+
+**Evaluator — `core/src/ai_tactics/r2k_evaluator.py`**: docstring updated
+to reflect the new architecture (one-shot GoToBallAndKickCmd, not a 2 Hz
+timer stream). Routing logic unchanged (`kick` → k1 slot, `kick stop` →
+abort).
+
+### Prerequisites (Phase 0, separate work — block live testing)
+
+| Phase | What | Status |
+|---|---|---|
+| 0a | Head-control node (on K1, publishes `/head_pose` + RPC 2004) | TODO — separate session |
+| 0b | `utils/vision` built + running on K1 (TensorRT, systemd unit) | TODO — separate work |
+
+Until Phase 0a + 0b land, the on-robot kick node cannot be tested live
+(no `/booster_soccer/ball` without the vision node, no accurate ball pose
+without `/head_pose`). The host-side code (bridge, relay, evaluator, msg
+package, tests) is complete and fast-tier-verified.
+
+### K1 deployment (after Phase 0)
+
+- `goto-ball-and-kick.service` systemd unit (`utils/skills/system/`): sources
+  `/opt/ros/humble/setup.bash` + `BoosterRos2` + `BoosterRos2Interface` +
+  `ros2_ws/install/setup.bash` (k1_skills_msgs) +
+  `vision_ws/install/setup.bash` (vision_interface) +
+  vendor `brain` `local_setup.bash` (for Kick.msg). Runs
+  `python3 goToBallAndKick.py --robot-prefix <Robot_Name>`.
+- `utils/scripts/deploy_skill.sh`: scp the node to
+  `/home/booster/Workspace/skills/`, colcon-build `k1_skills_msgs` in the
+  on-robot `ros2_ws`, install + enable the systemd unit. Prerequisites:
+  `deploy_relay.sh` + `deploy_vision.sh` must run first. Flags:
+  `--no_auto_start` (install only), `--no_build` (skip colcon if msg
+  package already built).
+- Health check: `journalctl -u goto-ball-and-kick -f` →
+  "Listening for commands on: /Kev1n/GoToBallAndKick".
+
+### Retired
+
+- UDP 6003 / `kick_ball` relay leg — the kick stream is robot-local now.
+- The 2 Hz network bottleneck — the stream runs at the system limit locally.
+- The host bridge's VisualKick arm (RPC 2038) — the on-robot node arms on
+  first ball detection.
 
 ## Planned cheat sheet: "Adding a new skill as ROS 2 topic to ROS2K"
 

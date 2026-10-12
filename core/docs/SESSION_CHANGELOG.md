@@ -5571,3 +5571,101 @@ pre-existing (test_i3_sweep.py).
 **Next:** lab retest: `blue_2 redo` → only blue_2 replays; bare `redo`
 → both replay. Restart of the evaluator process required (r2k_evaluator
 changed).
+
+## 2026-10-12 — K1 kick migration: host bridge → on-robot GoToBallAndKick node
+
+**Goal:** Migrate the K1 kick execution from the host bridge (2 Hz
+`brain/Kick` stream over the relay) to a local on-robot node that closes
+the loop with `utils/vision` ball data and publishes the kick stream at
+the system limit (no network bottleneck).
+
+**Done:**
+- New msg package `k1_skills_msgs`
+  (`core/src/ros2_ws/src/k1_skills_msgs/`) with
+  `GoToBallAndKickCmd.msg` (target_x, target_y, power, is_goalshot,
+  abort). Vendor `brain` package untouched on the K1 — our msg lives in a
+  separate package. Colcon-built on host (3.7 s, clean).
+- Promoted `utils/skills/goToBallAndKick.py` from POC to production:
+  subscribes `/{prefix}/GoToBallAndKick` (k1_skills_msgs/GoToBallAndKickCmd)
+  + `/booster_soccer/ball` (vision_interface/Ball from `utils/vision`);
+  publishes `brain/Kick` to robot-local `/kick_ball` in a tight thread loop
+  (`time.sleep(0)`, no rate cap — runs to system limit); arms VisualKick V1
+  via RPC 2038 on first ball detection; aborts on cmd.abort, 8 s timeout,
+  or 2 s ball-lost. Removed from POC: DetectionMsgs subscription, RPC 3000
+  YOLO activation (vision node is self-contained).
+- Relay: removed UDP 6003 / `kick_ball` leg (brain/Kick) from both
+  `external_relay.py` + `internal_relay.py`; added UDP 6004 /
+  `GoToBallAndKick` leg (k1_skills_msgs/GoToBallAndKickCmd). Systemd
+  service files: replaced vendor `brain` source line with
+  `ros2_ws/install/setup.bash` (our workspace overlay).
+- Bridge (`ollama_sandbox_bridge.py`): removed all kick timer/stream/RPC
+  2038 state (`_kick_timers`, `_kick_params`, `_kick_start_t`, `_kick_ids`,
+  `_kick_pubs`, `_ensure_kick_pub`, `_stop_kick_timer`, `K1_KICK_POWER`,
+  `K1_KICK_PUB_HZ`, `K1_KICK_MAX_DURATION_S`, `HAS_BRAIN_KICK`,
+  `brain/Kick` import). `hw_kick` is now a one-shot
+  `GoToBallAndKickCmd` publish (vk1 → goalshot cmd, abort → abort=true).
+  Re-arm guard by id; `stop_all_hardware()` + non-hw_kick actions send
+  abort=true for active kicks.
+- Evaluator (`r2k_evaluator.py`): `_demo_kick_cmd` docstring updated to
+  reflect the new architecture (one-shot cmd, not 2 Hz timer). Routing
+  logic unchanged.
+- Fast-tier test `core/src/tests/test_kick_fastpath.py` (5 tests): vk1
+  writes hw_kick goalshot, abort writes hw_kick abort, waypoints cleared,
+  compound-task routing for `kick` + `kick stop`. All pass.
+- Full fast-tier: 320 passed, 322 skipped, 1 pre-existing failure
+  (`test_k1_head_clamps` — head sign-convention flip from 2026-10-07
+  probe, test not updated; unrelated to kick).
+- Docs: `kick_poc_status.md` Step 5 (architecture diagram, what changed,
+  prerequisites, retired components); `k1_kick_handover_brief.md` Gate 6
+  updated with migration note; `utils/ros2_relay/README.md` GoToBallAndKick
+  section replaces kick_ball section.
+
+**Files touched:**
+- core/docs/plans/v68_pre_ifa/k1_kick_handover_brief.md
+- core/docs/plans/v68_pre_ifa/kick_poc_status.md
+- core/docs/SESSION_CHANGELOG.md
+- core/src/ai_tactics/ollama_sandbox_bridge.py
+- core/src/ai_tactics/r2k_evaluator.py
+- utils/ros2_relay/README.md
+- utils/ros2_relay/external_relay.py
+- utils/ros2_relay/internal_relay.py
+- utils/ros2_relay/system/external-relay.service
+- utils/ros2_relay/system/internal-relay.service
+- utils/scripts/README.md
+- utils/skills/goToBallAndKick.py
+
+**New files (untracked):**
+- core/src/ros2_ws/src/k1_skills_msgs/CMakeLists.txt
+- core/src/ros2_ws/src/k1_skills_msgs/msg/GoToBallAndKickCmd.msg
+- core/src/ros2_ws/src/k1_skills_msgs/package.xml
+- core/src/tests/test_kick_fastpath.py
+- utils/scripts/deploy_skill.sh
+- utils/skills/system/goto-ball-and-kick.service
+
+**Files deleted:**
+- (none)
+
+**Not yet done:**
+- Phase 0a (head-control node on K1, publishes `/head_pose` + RPC 2004) —
+  separate session. The head-control probe is complete
+  (`k1_kick_head_vendor_audit.md` §2.2: sign conventions verified, limits
+  ±1.0 rad yaw / -0.33..+0.86 pitch, requires kWalking mode 2) but the
+  node itself doesn't exist yet.
+- Phase 0b (`utils/vision` built + running on K1 as a systemd unit) —
+  separate work. The vision package is ready (C++ TensorRT node, builds
+  via `utils/vision/scripts/build_vision.sh`) but not deployed on the K1.
+- K1 deployment: `goto-ball-and-kick.service` systemd unit +
+  `deploy_skill.sh` — blocked on Phase 0a + 0b.
+- `calibration_cheat_sheet.md` + `vocabulary_cheat_sheet.md` kick sections.
+- Pre-existing `test_k1_head_clamps` failure (head sign-convention test
+  not updated after the 2026-10-07 probe flip).
+
+**Next:** Phase 0a — design + build the head-control node (separate
+session). It publishes `/head_pose` (geometry_msgs/Pose) from K1 joint
+state + sends RPC 2004 to `/LocoApiTopicReq`. Until it exists, the
+on-robot kick node cannot be tested live (no `/head_pose` → vision node
+can't estimate ball pose → no `/booster_soccer/ball`).
+
+**Blockers:**
+- Live testing blocked on Phase 0a (head-control node) + 0b (vision on
+  K1). All host-side code is complete and fast-tier-verified.

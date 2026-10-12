@@ -56,7 +56,7 @@ Abort `kick stop` / RPC 2038 `{"start": false}` bereit).
 | 3 — Controller-Subscriber auf `/kick_ball` | ✅ (2 bare-DDS Vendor-Subscriber) |
 | 4 — Host sieht `/Kev1n/kick_ball` | ✅ (2026-10-01, nativer U22) |
 | 5 — End-to-End Round-Trip (Terminal A→B) | ✅ (2026-10-01, nativer U22, 4/5 Nachrichten; U24/Docker noch nicht vollständig getestet) |
-| 6 — Live Kick (`power: 6.0`, Ständer) | ✅ (2026-10-05, K1 bewegte sich; VisualKick V1 armed via RPC 2038 + 2Hz `/kick_ball`-Stream; Soccer Mode vorausgesetzt) |
+| 6 — Live Kick (`power: 6.0`, Ständer) | ✅ (2026-10-05, K1 bewegte sich; VisualKick V1 armed via RPC 2038 + 2Hz `/kick_ball`-Stream; Soccer Mode vorausgesetzt). **[2026-10-12 Migrated]** Kick execution moved from host bridge to on-robot `GoToBallAndKick` node. Bridge sends one `GoToBallAndKickCmd`; node closes loop locally (`utils/vision` → `brain/Kick` stream → vendor controller). 2 Hz relay leg (UDP 6003) retired. Live testing blocked on Phase 0a (head-control node) + 0b (vision on K1). See `kick_poc_status.md` Step 5. |
 
 ## Noch nicht gebaut (Step 4)
 

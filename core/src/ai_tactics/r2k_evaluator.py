@@ -830,10 +830,12 @@ def _demo_face_cmd(bot, yaw=None, relative=None):
 
 def _demo_kick_cmd(bot, kind='vk1'):
     """K1 kick fast-path (calib/demo only). Bare 'kick' → k1 slot (like
-    bare 'turn'). The bridge starts a 2Hz brain/Kick timer stream on
-    /Kev1n/kick_ball until abort, timeout, or a different action.
-    kind='vk1' → VisualKick V1 (power=6.0, goalshot force)
-    kind='abort' → kick stop (RPC 2038 {'start': false} + hold)"""
+    bare 'turn'). The bridge publishes ONE GoToBallAndKickCmd to
+    /{ns}/GoToBallAndKick; the on-robot GoToBallAndKick node
+    (utils/skills/goToBallAndKick.py) handles the vision-driven kick
+    stream, VisualKick arm/abort, and safety timeouts locally.
+    kind='vk1' → goalshot (target=opponent goal, power=auto)
+    kind='abort' → kick stop (GoToBallAndKickCmd.abort=true)"""
     if kind == 'abort':
         cmd = {"action": "hw_kick", "kind": "abort", "id": time.time()}
         note = "kick abort (RPC 2038 stop)"
