@@ -17,6 +17,8 @@ endif()
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/GoToBallAndKickCmd.msg"
+  "msg/HeadControlCmd.msg"
+  "msg/HeadState.msg"
 )
 
 ament_package()

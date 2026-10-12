@@ -41,7 +41,7 @@ import uuid
 import rclpy
 from rclpy.node import Node
 
-from k1_skills_msgs.msg import GoToBallAndKickCmd
+from k1_skills_msgs.msg import GoToBallAndKickCmd, HeadControlCmd
 from vision_interface.msg import Ball as VisionBall
 from brain.msg import Kick
 
@@ -107,6 +107,12 @@ class GoToBallAndKickNode(Node):
         # --- Publishers ---
         self.kick_pub = self.create_publisher(Kick, '/kick_ball', 10)
 
+        # Head control publisher — tells the HeadControl node to track the
+        # ball during approach, and to hold on abort. Local topic (no relay).
+        head_topic = f'/{self.robot_prefix}/HeadControl'
+        self.head_pub = self.create_publisher(
+            HeadControlCmd, head_topic, 10)
+
         if HAS_BOOSTER_MSGS:
             self.rpc_pub = self.create_publisher(
                 RpcReqMsg, '/LocoApiTopicReq', 10)
@@ -155,6 +161,9 @@ class GoToBallAndKickNode(Node):
             f"({self._target_x:.2f}, {self._target_y:.2f}) | "
             f"power: {self._power_cmd:.1f}{' (auto)' if self._power_cmd == 0.0 else ''}"
         )
+
+        # Tell the HeadControl node to track the ball during the approach
+        self._publish_head_cmd(HeadControlCmd.MODE_LOOK_AT_BALL)
 
         # If not already running, start the kick thread
         if not was_active or self._kick_thread is None or \
@@ -288,7 +297,18 @@ class GoToBallAndKickNode(Node):
             self._is_active = False
         if was_active:
             self._abort_visualkick()
+            # Tell the HeadControl node to stop tracking (hold last pose)
+            self._publish_head_cmd(HeadControlCmd.MODE_ABORT)
             self.get_logger().info(f"Kick loop stopped ({reason})")
+
+    # ------------------------------------------------------------------
+    # Publish a HeadControlCmd to the head-control node (local topic)
+    # ------------------------------------------------------------------
+    def _publish_head_cmd(self, mode: int):
+        msg = HeadControlCmd()
+        msg.mode = mode
+        msg.abort = (mode == HeadControlCmd.MODE_ABORT)
+        self.head_pub.publish(msg)
 
 
 def main(args=None):
