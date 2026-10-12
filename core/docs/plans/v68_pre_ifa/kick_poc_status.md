@@ -174,23 +174,28 @@ crosses the relay), eliminating the former 2 Hz network bottleneck.
 ```
 host bridge                       relay pair                    K1 robot
 ─────────                         ───────────                    ────────────
-hw_kick action                                                   head-control node (Phase 0a, TODO)
-  │ publish GoToBallAndKickCmd                                   ├── RPC 2004 → /LocoApiTopicReq (head move)
-  └─► /Kev1n/GoToBallAndKick ───► UDP 6004 ──────────────────►  └── pub /head_pose (geometry_msgs/Pose)
+hw_kick action                                                   head-control node (Phase 0a, BUILT 2026-10-12)
+  │ publish GoToBallAndKickCmd                                   ├── sub /Kev1n/HeadControl (k1_skills_msgs/HeadControlCmd, LOCAL)
+  └─► /Kev1n/GoToBallAndKick ───► UDP 6004 ──────────────────►  ├── sub /booster_soccer/ball (vision_interface/Ball)
+                                                                  ├── pub /head_pose (geometry_msgs/Pose, 30 Hz)
+                                                                  ├── pub /Kev1n/head_state (k1_skills_msgs/HeadState, 10 Hz)
+                                                                  └── RPC 2004 → /LocoApiTopicReq (head move, 10 Hz)
+                                                                          │ /head_pose
+                                                                          ▼
+                                                                  utils/vision node (Phase 0b, C++ TensorRT)
+                                                                  ├── sub /boostercamera/head/rgb + depth
+                                                                  ├── sub /head_pose
+                                                                  └── pub /booster_soccer/ball (vision_interface/Ball)
                                                                           │
-                                                                 utils/vision node (Phase 0b, C++ TensorRT)
-                                                                 ├── sub /boostercamera/head/rgb + depth
-                                                                 ├── sub /head_pose
-                                                                 └── pub /booster_soccer/ball (vision_interface/Ball)
-                                                                          │
-                                                                 GoToBallAndKick node (Phase 1, this step)
-                                                                 ├── sub /GoToBallAndKick (k1_skills_msgs/GoToBallAndKickCmd)
-                                                                 ├── sub /booster_soccer/ball (vision_interface/Ball)
-                                                                 ├── pub /kick_ball (brain/Kick @ max rate, LOCAL)
-                                                                 └── RPC 2038 arm/abort → /LocoApiTopicReq (LOCAL)
+                                                                  GoToBallAndKick node (Phase 1, this step)
+                                                                  ├── sub /GoToBallAndKick (k1_skills_msgs/GoToBallAndKickCmd)
+                                                                  ├── sub /booster_soccer/ball (vision_interface/Ball)
+                                                                  ├── pub /kick_ball (brain/Kick @ max rate, LOCAL)
+                                                                  ├── pub /Kev1n/HeadControl (HeadControlCmd, LOCAL → head-control node)
+                                                                  └── RPC 2038 arm/abort → /LocoApiTopicReq (LOCAL)
                                                                           │
                                                                           ▼
-                                                                 vendor soccer controller (sub /kick_ball)
+                                                                  vendor soccer controller (sub /kick_ball)
 ```
 
 ### What changed
@@ -249,13 +254,16 @@ abort).
 
 | Phase | What | Status |
 |---|---|---|
-| 0a | Head-control node (on K1, publishes `/head_pose` + RPC 2004) | TODO — separate session |
+| 0a | Head-control node (on K1, publishes `/head_pose` + RPC 2004) | **BUILT 2026-10-12** — code + msg + tests complete, not yet deployed live |
 | 0b | `utils/vision` built + running on K1 (TensorRT, systemd unit) | TODO — separate work |
 
-Until Phase 0a + 0b land, the on-robot kick node cannot be tested live
-(no `/booster_soccer/ball` without the vision node, no accurate ball pose
-without `/head_pose`). The host-side code (bridge, relay, evaluator, msg
-package, tests) is complete and fast-tier-verified.
+Phase 0a is now built: `utils/skills/headControl.py` (on-robot node),
+`k1_skills_msgs/HeadControlCmd.msg` + `HeadState.msg`, systemd service
+`head-control.service`, 24 fast-tier tests (`test_head_control.py`).
+The GoToBallAndKick node publishes `MODE_LOOK_AT_BALL` on kick start and
+`MODE_ABORT` on stop. No relay leg needed (both nodes communicate locally
+on the K1). Until Phase 0b lands (vision node on K1), the head-control
+node cannot be tested live (no `/booster_soccer/ball` to track).
 
 ### K1 deployment (after Phase 0)
 
@@ -265,14 +273,20 @@ package, tests) is complete and fast-tier-verified.
   `vision_ws/install/setup.bash` (vision_interface) +
   vendor `brain` `local_setup.bash` (for Kick.msg). Runs
   `python3 goToBallAndKick.py --robot-prefix <Robot_Name>`.
-- `utils/scripts/deploy_skill.sh`: scp the node to
+- `head-control.service` systemd unit (`utils/skills/system/`): same source
+  chain minus the vendor `brain` source (head-control does not use Kick.msg).
+  Runs `python3 headControl.py --robot-prefix <Robot_Name>`.
+- `utils/scripts/deploy_skill.sh`: scp both node scripts to
   `/home/booster/Workspace/skills/`, colcon-build `k1_skills_msgs` in the
-  on-robot `ros2_ws`, install + enable the systemd unit. Prerequisites:
+  on-robot `ros2_ws` (now includes `HeadControlCmd.msg` + `HeadState.msg`),
+  install + enable both systemd services. Prerequisites:
   `deploy_relay.sh` + `deploy_vision.sh` must run first. Flags:
   `--no_auto_start` (install only), `--no_build` (skip colcon if msg
   package already built).
 - Health check: `journalctl -u goto-ball-and-kick -f` →
   "Listening for commands on: /Kev1n/GoToBallAndKick".
+- Health check: `journalctl -u head-control -f` →
+  "Listening for commands on: /Kev1n/HeadControl".
 
 ### Retired
 
@@ -283,7 +297,7 @@ package, tests) is complete and fast-tier-verified.
 
 ## Planned cheat sheet: "Adding a new skill as ROS 2 topic to ROS2K"
 
-The user requested a future cheat sheet with this title, covering the pattern we just walked through — generalized for the NEXT skill addition (head movements are the planned follow-on). It should capture:
+The user requested a future cheat sheet with this title, covering the pattern we just walked through — generalized for the NEXT skill addition. The head-control node (Phase 0a, built 2026-10-12) was the first follow-on and exercised a **variant** of this pattern: local-only (no relay leg), new msg in `k1_skills_msgs`, on-robot node communicating with the kick node via a robot-local topic. It should capture:
 
 1. **Skill contract** — define the ROS 2 message type (existing package or new), the fleet topic `/{prefix}/<skill_topic>`, and the robot-local topic the vendor code consumes.
 2. **Robot-side ground truth first** — `ssh` to the robot, `find` the msg definition under `/opt/booster/booster_agent_data/...`, `cat` it, diff against the repo copy. **Never assume the topic/type exists from a branch ReadMe alone** (the robocup_demo folklore cost us a round trip).
@@ -296,7 +310,16 @@ The user requested a future cheat sheet with this title, covering the pattern we
 9. **Abort path** — every skill needs a documented abort (kick: RPC 2038 `{"start": false}` via the existing Req leg; head: RPC 2004 zero pose or mode switch).
 10. **Naming gotchas** — hostname (`Kevin`) vs topic prefix (`Kev1n`) are independent; fleet topic name mirrors the robot-local topic name (the LocoApiTopicReq convention) to avoid confusion; `local_setup.bash` ≠ `setup.bash` (underlay chaining).
 
-Head movements (the planned follow-on skill) will exercise the same pattern with: message type = vendor head pose msg (TBD — likely `booster_interface` or a soccer-agent msg), fleet topic `/{prefix}/<head_topic>`, robot-local controller = the soccer agent's head controller, abort = RPC 2004 zero pose or mode switch.
+Head movements (Phase 0a, built 2026-10-12) exercised a **local-only
+variant** of the skill pattern: no relay leg (both nodes on the K1), new
+msg `HeadControlCmd` in `k1_skills_msgs`, on-robot node
+`utils/skills/headControl.py` communicates with the kick node via the
+robot-local `/{prefix}/HeadControl` topic. Abort = `MODE_ABORT` (head
+holds last pose — probe-verified 2026-10-07). The head-control node
+publishes `/head_pose` (`geometry_msgs/Pose`) at 30 Hz for the vision
+node and drives RPC 2004 (`RotateHead`) at 10 Hz. K1 head kinematic
+constants (neck offset, camera height, joint limits, sign conventions)
+extracted from `K1_22dof.urdf` + the 2026-10-07 hardware probe.
 
 ## Design history (for the cheat sheet's "lessons" section)
 
@@ -310,7 +333,9 @@ Topic name: started as `/{prefix}/kick_ball`, user changed to `/{prefix}/kick`, 
 
 ## Blockers / next session entry point
 
-1. **Step 4 — Tests + Doku**: fast-tier test (`test_head_face.py` pattern → `test_kick_fastpath.py`), `calibration_cheat_sheet.md` + `vocabulary_cheat_sheet.md` sections, session changelog entry.
-2. **Soccer Mode Pre-Condition**: `k1 kick` requires the K1 to be in Soccer Mode (RPC 2000 `{"mode": 4}`). Currently this must be set manually before the calib session. Future: auto-set in the bridge on first K1 contact, or in `launch_r2k.sh` hardware-gate.
-3. **Abort id-keyed guard**: the `kind='abort'` branch fires RPC 2038 every 20Hz tick (no id-keyed done-set like `vk1`). Cosmetic (RPC 2038 stop is idempotent), but should be guarded for log cleanliness.
-4. **U24/Docker-Publish** separat nachtesten (nicht blockierend — U22-nativ funktioniert; U24/Docker noch nicht vollständig getestet, nicht als nicht-funktionierend eingestuft).
+1. **Step 4 — Tests + Doku**: fast-tier test (`test_kick_fastpath.py` — DONE 2026-10-12), `calibration_cheat_sheet.md` + `vocabulary_cheat_sheet.md` sections (still open), session changelog entry.
+2. **Phase 0a head-control node**: BUILT 2026-10-12 (code + msg + tests). Next: deploy to K1 via `deploy_skill.sh` + live validation (blocked on Phase 0b vision node).
+3. **Phase 0b vision node**: `utils/vision` built + running on K1 (TensorRT, systemd unit) — TODO, separate work. Blocks all live testing.
+4. **Soccer Mode Pre-Condition**: `k1 kick` requires the K1 to be in Soccer Mode (RPC 2000 `{"mode": 4}`). Currently this must be set manually before the calib session. Future: auto-set in the bridge on first K1 contact, or in `launch_r2k.sh` hardware-gate.
+5. **Abort id-keyed guard**: the `kind='abort'` branch fires RPC 2038 every 20Hz tick (no id-keyed done-set like `vk1`). Cosmetic (RPC 2038 stop is idempotent), but should be guarded for log cleanliness.
+6. **U24/Docker-Publish** separat nachtesten (nicht blockierend — U22-nativ funktioniert; U24/Docker noch nicht vollständig getestet, nicht als nicht-funktionierend eingestuft).

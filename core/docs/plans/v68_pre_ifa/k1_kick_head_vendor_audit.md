@@ -112,7 +112,7 @@ step below MUST be logged in `SESSION_CHANGELOG.md` immediately after execution.
 |---|---|
 | Kick execution | (a) `VisualKick` only (vendor-confirmed K1) · (b) firmware **Soccer mode** evaluation (mode 4 — built-in kicking/goalie may replace our kick handling entirely) · (c) no firmware kick; drive-and-push like Yahboom |
 | Chase handling | (a) abort design as planned (`/ball/motion_change` → kChangeMode) — only if chasing is observed · (b) unnecessary if skills self-terminate · (c) avoid autonomous skills entirely (Soccer-mode/gait approach) |
-| Head control | Proceed with the calibration head-turn plan (2004 primary, 2006 jog); tune clamp limits on hardware; verify required mode |
+| Head control | **IMPLEMENTED 2026-10-12** — `utils/skills/headControl.py` (on-robot node). RPC 2004 primary, probe-verified constants (yaw ±1.0, pitch -0.33..+0.86, +yaw=left, +pitch=up, requires kWalking). K1 head kinematic offsets from `K1_22dof.urdf` (trunk→head_pitch = 0.2479 m). Camera height 0.85 m (user-set, TODO: tape-measure verify). Publishes `/head_pose` (geometry_msgs/Pose, 30 Hz) for the vision node. 24 fast-tier tests pass. Deploy via `deploy_skill.sh`. Live testing blocked on Phase 0b (vision node on K1). |
 
 **Until Gate results exist:** all six KB sites carry an UNVERIFIED annotation,
 and no abort code may be written (scrum GATE 0).

@@ -5669,3 +5669,92 @@ can't estimate ball pose → no `/booster_soccer/ball`).
 **Blockers:**
 - Live testing blocked on Phase 0a (head-control node) + 0b (vision on
   K1). All host-side code is complete and fast-tier-verified.
+
+---
+
+## 2026-10-12 — Phase 0a head-control node built (on-robot K1 head controller)
+
+**Goal:** Build the head-control node (Phase 0a from `kick_poc_status.md`)
+that publishes `/head_pose` for the vision node and drives RPC 2004 head
+motion. Initially consumed by the `GoToBallAndKick` node via a local
+robot topic (no relay needed).
+
+**Done:**
+- Extracted K1 head kinematic constants from `K1_22dof.urdf`:
+  trunk→head_pitch_link offset = (0.0056, 0.0, 0.2479) m; camera height
+  above ground = 0.85 m (user-set, TODO: tape-measure verify); URDF
+  pitch joint axis (0,1,0) = nose DOWN — opposite to RPC +pitch = UP,
+  so `/head_pose` quaternion uses `R_z(yaw) * R_y(-pitch)`.
+- Created `HeadControlCmd.msg` (`k1_skills_msgs`) with uint8 mode
+  constants (ABORT/LOOK_AT_BALL/LOOK_AT_POINT/LOOK_AT_GOAL/LOOK_AT_CORNER/
+  RAW_ANGLE). Goal/corner modes are TODO (need field localization).
+- Created `HeadState.msg` (feedback: current mode, angles, ball status).
+- Updated `k1_skills_msgs/CMakeLists.txt` to include both new msgs.
+- Built `utils/skills/headControl.py` — on-robot head-control node:
+  subscribes `/{prefix}/HeadControl` (local) + `/booster_soccer/ball`;
+  publishes `/head_pose` (geometry_msgs/Pose) at 30 Hz; sends RPC 2004
+  at 10 Hz; ball-lost → hold last pose (per user decision + probe-
+  verified K1 behavior). ROS msg imports are conditional (try/except)
+  so pure-Python functions are testable without ROS.
+- Created `utils/skills/system/head-control.service` (systemd unit,
+  same source chain as `goto-ball-and-kick.service` minus vendor brain).
+- Updated `utils/skills/goToBallAndKick.py`: added `HeadControlCmd`
+  publisher — sends `MODE_LOOK_AT_BALL` on kick start, `MODE_ABORT`
+  on kick stop (`goToBallAndKick.py:108-112`, `:298-302`, `:309-314`).
+- Updated `utils/scripts/deploy_skill.sh`: now deploys both skill nodes
+  + both systemd services (8-step flow, was 7).
+- Created `core/src/tests/test_head_control.py`: 24 fast-tier tests
+  (geometry: ball ahead/left/right/behind, closer=steeper, zero-dist;
+  clamping: yaw ±1.0, pitch -0.33..0.86; quaternion: identity at neutral,
+  yaw-only, URDF pitch sign flip, unit magnitude; /head_pose: fixed
+  position = URDF offset, orientation = quaternion, position independent
+  of angles; state machine: abort/ball-lost/visible/point/clamp).
+- Fixed quaternion bug: missing `qx = -sin(yaw/2)*sin(pitch/2)` term
+  (Hamilton product q_z * q_y) — magnitude was <1 for combined rotations.
+- 24/24 new tests pass. Full fast tier: 283 passed, 1 pre-existing
+  failure (`test_k1_head_clamps` — head sign-convention test not updated
+  after 2026-10-07 probe flip, unrelated to this work).
+- Updated docs: `kick_poc_status.md` (architecture diagram, Phase 0a
+  status, K1 deployment section, blockers, cheat-sheet note),
+  `k1_kick_head_vendor_audit.md` (decision gate: IMPLEMENTED),
+  `k1_kick_handover_brief.md` (Gate 6 annotation, file list, blockers).
+
+**Files touched:**
+- core/src/ros2_ws/src/k1_skills_msgs/CMakeLists.txt
+- utils/skills/goToBallAndKick.py
+- utils/scripts/deploy_skill.sh
+- core/docs/plans/v68_pre_ifa/kick_poc_status.md
+- core/docs/plans/v68_pre_ifa/k1_kick_head_vendor_audit.md
+- core/docs/plans/v68_pre_ifa/k1_kick_handover_brief.md
+
+**New files (untracked):**
+- core/src/ros2_ws/src/k1_skills_msgs/msg/HeadControlCmd.msg
+- core/src/ros2_ws/src/k1_skills_msgs/msg/HeadState.msg
+- utils/skills/headControl.py
+- utils/skills/system/head-control.service
+- core/src/tests/test_head_control.py
+
+**Files deleted:**
+- (none)
+
+**Not yet done:**
+- Phase 0b (`utils/vision` built + running on K1 as a systemd unit) —
+  separate work. Blocks all live testing (no `/booster_soccer/ball`
+  without it).
+- K1 deployment: `deploy_skill.sh` updated but not yet run on the K1.
+  Blocked on Phase 0b.
+- `CAMERA_HEIGHT_ABOVE_GROUND = 0.85` — user-set value, needs tape-
+  measure verification on the K1 standing pose.
+- `calibration_cheat_sheet.md` + `vocabulary_cheat_sheet.md` kick/head
+  sections.
+- Pre-existing `test_k1_head_clamps` failure (head sign-convention test
+  not updated after the 2026-10-07 probe flip).
+
+**Next:** Phase 0b — build + deploy the vision node (`utils/vision`) on
+the K1 as a systemd unit. Once both Phase 0a + 0b are deployed, the
+on-robot kick node can be tested live (head tracks ball → vision
+produces `/booster_soccer/ball` → kick node closes the loop).
+
+**Blockers:**
+- Live testing blocked on Phase 0b (vision node on K1). Phase 0a code
+  is complete and fast-tier-verified.

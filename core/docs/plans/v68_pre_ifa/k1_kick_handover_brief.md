@@ -56,12 +56,15 @@ Abort `kick stop` / RPC 2038 `{"start": false}` bereit).
 | 3 — Controller-Subscriber auf `/kick_ball` | ✅ (2 bare-DDS Vendor-Subscriber) |
 | 4 — Host sieht `/Kev1n/kick_ball` | ✅ (2026-10-01, nativer U22) |
 | 5 — End-to-End Round-Trip (Terminal A→B) | ✅ (2026-10-01, nativer U22, 4/5 Nachrichten; U24/Docker noch nicht vollständig getestet) |
-| 6 — Live Kick (`power: 6.0`, Ständer) | ✅ (2026-10-05, K1 bewegte sich; VisualKick V1 armed via RPC 2038 + 2Hz `/kick_ball`-Stream; Soccer Mode vorausgesetzt). **[2026-10-12 Migrated]** Kick execution moved from host bridge to on-robot `GoToBallAndKick` node. Bridge sends one `GoToBallAndKickCmd`; node closes loop locally (`utils/vision` → `brain/Kick` stream → vendor controller). 2 Hz relay leg (UDP 6003) retired. Live testing blocked on Phase 0a (head-control node) + 0b (vision on K1). See `kick_poc_status.md` Step 5. |
+| 6 — Live Kick (`power: 6.0`, Ständer) | ✅ (2026-10-05, K1 bewegte sich; VisualKick V1 armed via RPC 2038 + 2Hz `/kick_ball`-Stream; Soccer Mode vorausgesetzt). **[2026-10-12 Migrated]** Kick execution moved from host bridge to on-robot `GoToBallAndKick` node. Bridge sends one `GoToBallAndKickCmd`; node closes loop locally (`utils/vision` → `brain/Kick` stream → vendor controller). 2 Hz relay leg (UDP 6003) retired. **[2026-10-12 Phase 0a BUILT]** Head-control node (`utils/skills/headControl.py`) built — publishes `/head_pose` for vision, drives RPC 2004, receives `HeadControlCmd` locally from kick node. 24 fast-tier tests pass. Live testing blocked on Phase 0b (vision node on K1). See `kick_poc_status.md` Step 5. |
 
-## Noch nicht gebaut (Step 4)
+## Noch nicht gebaut
 
-- **Step 4 — Tests + Doku:** Fast-Tier-Test, Cheat-Sheet-Sektion,
-  Vokabular-Eintrag.
+- **Phase 0b — Vision node on K1** (`utils/vision`, TensorRT, systemd unit):
+  TODO, separate work. Blocks all live testing (no `/booster_soccer/ball`
+  without it).
+- **Step 4 — Tests + Doku:** Fast-Tier-Test (`test_kick_fastpath.py` — DONE
+  2026-10-12), Cheat-Sheet-Sektion + Vokabular-Eintrag (still open).
 
 ## Dateien für die Übergabe
 
@@ -74,12 +77,26 @@ Abort `kick stop` / RPC 2038 `{"start": false}` bereit).
 - `docs/plans/v68_pre_ifa/post_field_test_plan.md` — Phase 2.5 (K0–K4,
   ab Zeile 94)
 
-**Code (gebaut, uncommittiert auf main):**
+**Code (gebaut, uncommittiert auf `handover/k1-kick-20260928`):**
 - `utils/ros2_relay/external_relay.py` — kick_callback + brain/Kick-Import
 - `utils/ros2_relay/internal_relay.py` — UDP 6003 → `/kick_ball`
 - `utils/ros2_relay/system/external-relay.service` — local_setup.bash
 - `utils/ros2_relay/system/internal-relay.service` — dito
 - `utils/ros2_relay/README.md` — kick_ball dokumentiert
+
+**Phase 0a — Head-Control Node (gebaut 2026-10-12):**
+- `utils/skills/headControl.py` — on-robot head-control node (sub HeadControlCmd,
+  sub /booster_soccer/ball, pub /head_pose 30 Hz, RPC 2004 at 10 Hz)
+- `utils/skills/system/head-control.service` — systemd unit
+- `core/src/ros2_ws/src/k1_skills_msgs/msg/HeadControlCmd.msg` — command msg
+  (MODE_ABORT/LOOK_AT_BALL/LOOK_AT_POINT/LOOK_AT_GOAL/LOOK_AT_CORNER/RAW_ANGLE)
+- `core/src/ros2_ws/src/k1_skills_msgs/msg/HeadState.msg` — feedback msg
+- `core/src/ros2_ws/src/k1_skills_msgs/CMakeLists.txt` — added both new msgs
+- `utils/skills/goToBallAndKick.py` — added HeadControlCmd publisher
+  (MODE_LOOK_AT_BALL on kick start, MODE_ABORT on stop)
+- `utils/scripts/deploy_skill.sh` — now deploys both skill nodes + services
+- `core/src/tests/test_head_control.py` — 24 fast-tier tests (geometry,
+  clamping, quaternion, /head_pose composition, state machine)
 
 **SDK-Header (für Step 2):**
 - `src/booster/b1_loco_api.hpp` — API-Codes, RobotModes
