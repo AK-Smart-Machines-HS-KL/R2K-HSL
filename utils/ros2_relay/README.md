@@ -1,141 +1,111 @@
-README, incl. Deployment on booster
+# ROS 2 Relay
 
-This util will install and activate  a ROS2 
-relay function to isolate each bots topic into its own namespace.
+ROS 2 relay pair that isolates each K1 robot's topics into a fleet-facing namespace (`/<prefix>/...`) and bridges them to robot-local topics via UDP. Runs entirely on the K1 as two systemd services.
 
-IMPORTANT: if you are to steer the K1 bots with ros2k core id (ollama_bridge), check the bots entries in core/src/relay/hardware_mirror.json:
-Using Kev1n as running sample:
-   "k1_bot": {"hardware_type": "k1", "topic": "/Kev1n/LocoApiTopicReq", "mirror_of": "blue_2"}
-  }
+## Files
 
-NOTE:once we move the LLM into the K1 bots, this relay will render useless.
+| File | Description |
+|---|---|
+| `deploy_relay.sh` | Deploys the relay pair to a K1 robot. Copies Python nodes + systemd units, substitutes the robot name prefix, installs services, and optionally enables auto-start on boot. Usage: `./deploy_relay.sh [OPTIONS] <Robot_IP> <Robot_Name>`. Options: `--no_auto_start` (install only). |
+| `start_relays.sh` | Manual launch via SSH + nohup (no systemd). For debugging only — do not use alongside the systemd services (port conflict). Usage: `./start_relays.sh <Robot_IP> <Robot_Name>`. |
+| `stop_relays.sh` | Kills manually started relay processes. Usage: `./stop_relays.sh <Robot_IP>`. |
+| `external_relay.py` | External relay node (fleet-facing side). Subscribes host-side `/<prefix>/...` topics, serializes messages, sends via UDP to the internal relay. Publishes responses/odom received from the internal relay back to the fleet namespace. |
+| `internal_relay.py` | Internal relay node (robot-local side). Receives UDP datagrams from the external relay, deserializes, and publishes to robot-local topics (`/LocoApiTopicReq`, `/GoToBallAndKick`). Subscribes robot-local response/odom topics and sends them back via UDP. |
+| `system/external-relay.service` | systemd unit for the external relay. |
+| `system/internal-relay.service` | systemd unit for the internal relay. |
+| `system/99-relay-restart.sh` | NetworkManager dispatcher script — restarts both relay services when wlan0 joins the maker4 network. Fixes FastDDS interface capture at process startup. |
 
-This is a loosely coupled set of python code. Main purposes:
-* Runnning olllama bridge on host requires K1 listening 
-* this code will list specific ros2 topics for DOMAIN 0
-* Eg: K1<robot name>/<rLoCoAPITopicReq/>, <robot name>/GoToBallAndKick, ~~<robot name>/Odometer_States~~
-  **[CORRECTION 2026-09-04 — vendor audit §5, k1_kick_head_vendor_audit.md]** the
-  odometer leg is a NON-FUNCTIONAL placeholder: Booster exposes odom only as the
-  SDK-internal DDS channel `rt/odometer_state` (booster_interface/Odometer), never
-  as a plain ROS 2 topic — the internal relay subscribes a topic that does not
-  exist on the robot. No data has ever been observed (zero logged sessions).
-  Verified working: only LocoApiTopicReq/Resp. ROS-standard path for the future:
-  `rt/odom` (nav_msgs/Odometry) via the ROS bridge, fw >= v1.7.1.0 — probe pending.
-* **GoToBallAndKick** (K1 kick migration, 2026-10-12):
-  `k1_skills_msgs/GoToBallAndKickCmd` on `/<prefix>/GoToBallAndKick` (fleet-facing).
-  The external relay forwards via UDP 6004 to the internal relay, which publishes
-  the robot-local `/GoToBallAndKick` topic consumed by the on-robot
-  `GoToBallAndKick` node (`utils/skills/goToBallAndKick.py`). That node closes the
-  loop locally: subscribes `/booster_soccer/ball` (vision_interface/Ball, from the
-  `utils/vision` perception node), publishes `brain/Kick` to the robot-local
-  `/kick_ball` at the system limit (no rate cap — the stream is robot-internal,
-  never crosses the relay), and arms/aborts VisualKick via RPC 2038 on
-  `/LocoApiTopicReq`. Both relay services source `ros2_ws/install/setup.bash`
-  (our workspace overlay with `k1_skills_msgs`) on top of the vendor
-  `BoosterRos2` + `BoosterRos2Interface` installs. The vendor `brain` package is
-  NOT sourced by the relay anymore (the relay no longer imports brain/Kick — only
-  the on-robot kick node does, via its own service unit).
-  Msg: `core/src/ros2_ws/src/k1_skills_msgs/msg/GoToBallAndKickCmd.msg`
-  (target_x, target_y, power, is_goalshot, abort — power=0.0 = node auto-computes).
-  Host-side abort: `GoToBallAndKickCmd.abort=true` (the node sends RPC 2038 stop).
-  Probe matrix: see `core/docs/plans/v68_pre_ifa/k1_kick_head_vendor_audit.md` §3.
-  Retired: the former `brain/Kick` relay leg (UDP 6003, `/<prefix>/kick_ball`)
-  was removed — the kick stream is now robot-local, eliminating the 2 Hz network
-  bottleneck.
-* refresh rate:
-**  Installation**
-0. Start network "maker4", nao12345
-- PC maker4 provides the network wlan 
-- K1 power on , will connect to the net, default mode will suffice
-0. deploy_relay.sh <Robot_IP> <Robot_Name>
-(The Setup & Installation Script)
+## Deployment
 
-This is your primary tool. It copies all necessary files to the robot, configures the system-daemon background services, dynamically updates the robot's ROS2 namespace prefix (robot name) , and optionally sets the relay to launch automatically every time the robot powers on
+### Prerequisites
 
-Parameters (Positional Arguments)
+- K1 powered on, connected to the maker4 (or any other network) network (wlan AP hosted by the dev PC)
+- SSH access to the robot (`booster@<Robot_IP>`)
 
-You must provide these two arguments in this exact order at the end of your command:
+### Standard deployment
 
-    <Robot_IP>: The current network IP address of the robot (e.g., 10.42.0.102). This is required so the script knows where to SSH into.
+```bash
+./deploy_relay.sh 10.42.0.122 Kev1n
+```
 
-    <Robot_Name>: The unique namespace you want to assign to this specific robot (e.g., bot1, unitree_05, alpha). This string will be injected into the external-relay.service file to prefix the outgoing ROS 2 topics (creating /bot1/LocoApiTopicReq, etc.).
+Deploys to the given IP, prefixes all fleet topics with `/Kev1n/`, and enables auto-start on boot.
+Names the Bot for another name change Kev1n to \<robot_Name\>
 
-Options (Flags)
+### No auto-start (for testing)
 
-You can place these flags before the positional arguments to change how the script behaves:
+```bash
+./deploy_relay.sh --no_auto_start 10.42.0.122 Kev1n
+```
 
-    -h or --help: Prints a quick-reference guide in your terminal showing how to use the script, then exits without doing anything.
+Installs and configures the services but does not enable them. Start manually:
 
-    --no_auto_start: By default, the script enables the systemd services to start on boot. If you use this flag, it skips that step. The services will be installed and configured, but you will have to start them manually via SSH (sudo systemctl start internal-relay.service). This is highly useful for testing a new robot configuration before committing to it permanently.
+```bash
+ssh booster@10.42.0.122 sudo systemctl start internal-relay external-relay
+```
 
-Examples
+### Verification
 
-    Standard Full Deployment:
-    Bash
+```bash
+# On the host (maker4 PC):
+ros2 topic list | grep Kev1n
+# Expect: /Kev1n/LocoApiTopicReq, /Kev1n/LocoApiTopicResp, /Kev1n/GoToBallAndKick
+```
 
-    ./deploy_relay.sh 10.42.0.122 Kev1n
-    password: 123456
+## Relayed Topics
 
-    (Deploys to 10.42.0.122, prefixes topics with /Kev1n/, and sets the bridge to run on boot).
-****************************
-Shared connection to 10.42.0.122 closed.
-Cleaning up SSH connection...
-Exit request sent.
-========================================================
-Deployment Complete! The relays are now running.
-========================================================
+### LocoApiTopicReq / LocoApiTopicResp
 
-NOTE: deploy_relay.sh also installs a NetworkManager dispatcher script
-(/etc/NetworkManager/dispatcher.d/99-relay-restart.sh) that automatically
-restarts both relay services when wlan0 joins the maker4 network (10.42.x.x).
-This fixes the issue where topics don't leave the bot if it boots in a
-different network and joins maker4 later — FastDDS captures the interface
-list at process startup, so the relays must restart to re-bind to wlan0.
+| Direction | Fleet Topic | Robot-Local Topic | Type | UDP Port |
+|---|---|---|---|---|
+| Host → Robot | `/<prefix>/LocoApiTopicReq` | `/LocoApiTopicReq` | `booster_msgs/RpcReqMsg` | 6000 |
+| Robot → Host | `/<prefix>/LocoApiTopicResp` | `/LocoApiTopicResp` | `booster_msgs/RpcRespMsg` | 6001 |
 
-****************************
-    Deploy for Testing (No Auto-Start):
-    Bash
+Carries all K1 low-level RPC calls (Move, ChangeMode, RotateHead, VisualKick, etc.). The bridge publishes `RpcReqMsg` with `api_id` in the JSON header and parameters in the JSON body.
 
-    ./deploy_relay.sh --no_auto_start 10.42.0.122 Kev1n
+### GoToBallAndKick
 
-    (Deploys the files and configures them for /bot_test/, but does NOT tell the robot to launch them automatically on the next reboot).
+| Direction | Fleet Topic | Robot-Local Topic | Type | UDP Port |
+|---|---|---|---|---|
+| Host → Robot | `/<prefix>/GoToBallAndKick` | `/GoToBallAndKick` | `k1_skills_msgs/GoToBallAndKickCmd` | 6004 |
 
-2. start_relays.sh (The Manual Launch Script)
+High-level kick command from the host bridge to the on-robot `GoToBallAndKick` node (`utils/skills/goToBallAndKick.py`). The node closes the loop locally (vision → brain/Kick stream → vendor controller).
 
-This script is purely for manual, temporary execution (usually for debugging). It connects via SSH and runs the Python nodes in the background using nohup. It does not use systemd.
+### Odometer
 
-(Note: If you have already run deploy_relay.sh and the systemd services are active, do not run this script, as the ports will conflict).
-Parameters (Positional Arguments)
+| Direction | Fleet Topic | Robot-Local Topic | Type | UDP Port |
+|---|---|---|---|---|
+| Robot → Host | `/<prefix>/odometer_state` | `/odometer_state` | `booster_interface/Odometer` | 6002 |
 
-    <Robot_IP>: The IP address of the robot.
+Relays the K1's wheel odometry (x/y/theta) to the fleet namespace. Requires `booster_interface` to be colcon-built and sourced on the robot — the topic is silent if the message type is not built (no subscriber can attach). See `core/docs/plans/v68_pre_ifa/k1_kick_head_vendor_audit.md` section 5.
 
-    <Robot_Name>: The namespace prefix for the external relay.
+## Modules
 
-Examples
+### external_relay.py
 
-    Start the relays manually:
-    Bash
+Fleet-facing relay node. Runs on the K1, subscribes `/<prefix>/...` topics from the host, and forwards them via UDP to the internal relay. Also receives responses/odom from the internal relay via UDP and publishes them back to the fleet namespace.
 
-    ./start_relays.sh 10.42.0.122 Kev1n
+**Subscriptions:** `/<prefix>/LocoApiTopicReq`, `/<prefix>/GoToBallAndKick`
+**Publishers:** `/<prefix>/LocoApiTopicResp`, `/<prefix>/odometer_state`
+**UDP send:** port 6000 (Req), port 6004 (GoToBallAndKick)
+**UDP recv:** port 6001 (Resp), port 6002 (Odometer)
 
-    (Connects, sets the environment variables on robot to get relays active, starts the Python scripts in the background, and drops internal_relay.log and external_relay.log in the robot's workspace).
-    
-Check for "Kev1n"in ros2 topic list
-3. stop_relays.sh <IP address>
-(The Manual Kill Script)
+Source chain (systemd): `/opt/ros/humble` + `BoosterRos2` + `BoosterRos2Interface` + `ros2_ws/install` (k1_skills_msgs).
 
-This script is the exact counter-part to start_relays.sh. It logs into the robot and forcefully kills any running Python processes named internal_relay.py or external_relay.py.
-Parameters (Positional Arguments)
+### internal_relay.py
 
-    <Robot_IP>: The IP address of the robot. (It does not need the <Robot_Name> because it just searches for the script names).
+Robot-local relay node. Receives UDP datagrams from the external relay, deserializes, and publishes to robot-local topics. Subscribes robot-local response/odom topics and sends them back via UDP to the external relay.
 
-Examples
+**Publishers:** `/LocoApiTopicReq`, `/GoToBallAndKick`
+**Subscriptions:** `/LocoApiTopicResp`, `/odometer_state`
+**UDP recv:** port 6000 (Req), port 6004 (GoToBallAndKick)
+**UDP send:** port 6001 (Resp), port 6002 (Odometer)
 
-    Stop the manually started relays:bridge
-    Bash
+Source chain (systemd): same as external relay.
 
-    ./stop_relays.sh 10.42.0.122
+## Integration with ROS2K
 
-    (Silently kills the background processes on that robot).
+For K1 control via the ROS2K bridge, the robot's relay entry in `core/src/relay/hardware_mirror.json` must match the prefix deployed here:
 
-A quick tip for your workflow: If you decide to stick with the systemd approach (which is highly recommended for a stable fleet), you can safely delete start_relays.sh and stop_relays.sh to prevent accidental conflicts.
+```json
+"k1_bot": {"hardware_type": "k1", "topic": "/Kev1n/LocoApiTopicReq", "mirror_of": "blue_2"}
+```
