@@ -47,11 +47,11 @@ except ImportError:
     HeadState = None
 
 try:
-    from vision_interface.msg import Ball as VisionBall
+    from vision_interface.msg import Detections
     HAS_VISION_INTERFACE = True
 except ImportError:
     HAS_VISION_INTERFACE = False
-    VisionBall = None
+    Detections = None
 
 try:
     from booster_msgs.msg import RpcReqMsg
@@ -79,16 +79,21 @@ CAMERA_HEIGHT_ABOVE_GROUND = 0.85    # m
 
 # --- K1 head limits (probe-verified 2026-10-07, head_cmds.py) ---
 # Source: docs/plans/v68_pre_ifa/k1_kick_head_vendor_audit.md section 2.2
+# Limits are firmware values (RPC frame), independent of mode.
 K1_HEAD_YAW_LIMIT_RAD = 1.0          # mechanical stop (vendor spec 1.03)
 K1_HEAD_PITCH_MIN_RAD = -0.33        # vendor spec -19 deg
 K1_HEAD_PITCH_MAX_RAD = 0.86         # vendor spec +49 deg
-K1_SIGN_YAW = 1.0                    # verified: +yaw (RPC) = head LEFT
-K1_SIGN_PITCH = 1.0                  # verified: +pitch (RPC) = head UP
+K1_SIGN_YAW = 1.0                    # verified: +yaw (RPC) = head LEFT (both modes)
+K1_SIGN_PITCH = -1.0                 # Soccer mode: +pitch (RPC) = head DOWN
+                                      # (kWalking mode: +pitch = UP per 2026-10-07
+                                      #  probe; sign flips between modes — this
+                                      #  node operates in Soccer mode for kicks)
 
 # --- URDF pitch sign flip (for /head_pose quaternion) ---
-# URDF pitch joint axis (0,1,0): +rotation = nose DOWN (opposite to RPC
-# +pitch = UP). /head_pose orientation = R_z(rpc_yaw) * R_y(-rpc_pitch).
-URDF_PITCH_SIGN_FLIP = -1.0
+# _cur_pitch is stored in RPC frame. URDF pitch joint axis (0,1,0) = +rotation
+# = nose DOWN. In Soccer mode, RPC +pitch = DOWN = URDF +pitch (same sign).
+# /head_pose orientation = R_z(rpc_yaw) * R_y(rpc_pitch).
+URDF_PITCH_SIGN_FLIP = 1.0
 
 # --- Publishing rates ---
 HEAD_POSE_PUB_HZ = 30.0              # /head_pose for vision node
@@ -204,8 +209,8 @@ class HeadControlNode(Node):
         self.get_logger().info(f"Listening for commands on: {cmd_topic}")
 
         self.vision_sub = self.create_subscription(
-            VisionBall, '/booster_soccer/ball',
-            self._ball_callback, 10)
+            Detections, '/booster_soccer/detection',
+            self._detection_callback, 10)
 
         # --- Publishers ---
         self.head_pose_pub = self.create_publisher(
@@ -232,16 +237,35 @@ class HeadControlNode(Node):
             1.0 / HEAD_STATE_PUB_HZ, self._publish_head_state)
 
     # ------------------------------------------------------------------
-    # Ball callback — update ball position (thread-safe)
+    # Detection callback — extract ball from detections, update state
     # ------------------------------------------------------------------
-    def _ball_callback(self, msg: VisionBall):
-        if msg.confidence < BALL_CONFIDENCE_MIN:
+    def _detection_callback(self, msg: Detections):
+        ball = self._extract_ball(msg)
+        if ball is None:
+            return
+        bx, by, conf = ball
+        if conf < BALL_CONFIDENCE_MIN:
             return
         with self._lock:
-            self._ball_x = float(msg.x)
-            self._ball_y = float(msg.y)
+            self._ball_x = bx
+            self._ball_y = by
             self._ball_t = time.time()
             self._ball_visible = True
+
+    @staticmethod
+    def _extract_ball(msg: Detections):
+        """Find the Ball in a Detections message and return (x, y, confidence).
+
+        Uses position_projection (ground-plane intersection via head pose)
+        as the ball's robot-relative (x, y). Confidence is normalized from
+        the detection's 0-100 scale to 0-1. Returns None if no Ball found
+        or position_projection is empty."""
+        for obj in msg.detected_objects:
+            if obj.label == 'Ball' and len(obj.position_projection) >= 2:
+                return (float(obj.position_projection[0]),
+                        float(obj.position_projection[1]),
+                        float(obj.confidence) / 100.0)
+        return None
 
     # ------------------------------------------------------------------
     # Command callback — set mode or abort
@@ -302,7 +326,10 @@ class HeadControlNode(Node):
             target = self._compute_target_angles_unlocked()
 
         if target is not None:
-            yaw, pitch = clamp_head_angles(target[0], target[1])
+            # Convert model-frame angles (from compute_look_angles) to RPC frame
+            yaw, pitch = clamp_head_angles(
+                target[0] * K1_SIGN_YAW,
+                target[1] * K1_SIGN_PITCH)
             with self._lock:
                 self._cur_yaw = yaw
                 self._cur_pitch = pitch
