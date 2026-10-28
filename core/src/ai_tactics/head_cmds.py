@@ -9,8 +9,10 @@ Empirical hardware contract (2026-09-05 lab session, Yahboom#2 "pro" gimbal):
   (verified: --once silent, 5x @2Hz moved the servo).
 - cmd_vel has NO firmware watchdog -> every motion must end with an explicit zero.
 - K1 head: RPC api_id 2004 {"pitch","yaw"} in radians, vendor clamps
-  yaw 1.03 / pitch -0.33..+0.86 (docs/plans/v68_pre_ifa/k1_kick_head_vendor_audit.md 2.2).
-  K1 sign conventions + required RobotMode UNVERIFIED — tune on hardware (lab gate).
+  yaw ±1.0 (mechanical stop, probe 2026-10-07) / pitch -0.33..+0.86
+  (docs/plans/v68_pre_ifa/k1_kick_head_vendor_audit.md 2.2).
+  K1 sign conventions VERIFIED 2026-10-07: +yaw=left, +pitch=up.
+  Head commands require RobotMode::kWalking (mode 2); kPrepare rejects.
 
 Model-facing convention (this module): pan_deg/tilt_deg are offsets from the
 neutral head pose, +pan = camera turns to its LEFT, +tilt = camera UP.
@@ -109,11 +111,17 @@ def body_bob_mps(t, mps=BODY_BOB_MPS, freq_hz=GESTURE_FREQ_HZ,
 
 
 # --- K1 head (RPC 2004, radians; vendor audit 2.2) ---
-K1_HEAD_YAW_LIMIT_RAD = 1.03     # vendor spec 59 deg
-K1_HEAD_PITCH_MIN_RAD = -0.33    # vendor spec -19 deg
-K1_HEAD_PITCH_MAX_RAD = 0.86     # vendor spec +49 deg
-K1_SIGN_YAW = 1.0                # UNVERIFIED: +yaw = left assumed (REP-103)
-K1_SIGN_PITCH = -1.0             # UNVERIFIED: +pitch = down assumed (larger + range)
+# Verified 2026-10-07 hardware probe (Kev1n, fw v1.8.0.9):
+#   - +yaw (RPC) turns head LEFT  -> K1_SIGN_YAW = +1.0 (REP-103 left-positive)
+#   - +pitch (RPC) moves head UP  -> K1_SIGN_PITCH = +1.0 (was -1.0 pre-probe)
+#   - Mechanical stops at yaw +-1.0 rad (vendor spec +-1.03 — clamped tighter)
+#   - Head commands require RobotMode::kWalking (mode 2); kPrepare rejects
+#   - On failsafe (RPC 2000 clear_buffer), head HOLDS last pose (no return-to-neutral)
+K1_HEAD_YAW_LIMIT_RAD = 1.0      # mechanical stop (probe 2026-10-07; vendor spec 1.03)
+K1_HEAD_PITCH_MIN_RAD = -0.33    # vendor spec -19 deg (no mechanical stop observed)
+K1_HEAD_PITCH_MAX_RAD = 0.86     # vendor spec +49 deg (no mechanical stop observed)
+K1_SIGN_YAW = 1.0                # verified: +yaw (RPC) = head LEFT (probe 2026-10-07)
+K1_SIGN_PITCH = 1.0              # verified: +pitch (RPC) = head UP (probe 2026-10-07)
 
 # --- Face (body turn-in-place) ---
 FACE_ARRIVAL_TOL_RAD = 0.1       # ~6 deg — stop turning when within this

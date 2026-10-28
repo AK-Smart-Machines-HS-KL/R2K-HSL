@@ -1,0 +1,341 @@
+# K1 Kick POC — Status & Todos
+
+> Session 2026-09-25. Kick channel through the relay pair, typed
+> `brain/Kick`, bridging host `/{prefix}/kick_ball` to the robot-local
+> `/kick_ball` consumed by Booster's vendor soccer agent
+> (`com.boosterobotics.soccer`). Predecessor: `k1_kick_head_vendor_audit.md`
+> (GATE 0 probe protocol, RPC matrix). Companion for future skill additions:
+> a cheat sheet "Adding a new skill as ROS 2 topic to ROS2K" is planned.
+
+## Architecture (verified end-to-end on the relay leg)
+
+```
+host bridge (NOT yet built)        K1 robot
+──────────────────────            ────────────────────────────────────────
+                                   soccer agent (com.boosterobotics.soccer)
+                                     ├── subscriber /kick_ball (brain/Kick)
+                                     └── vendor kick controller
+                                   ▲
+  /Kev1n/kick_ball (brain/Kick)    │ robot-local /kick_ball (brain/Kick)
+  │   │                            │
+  │   │ DDS over maker4            │ UDP 6003 (serialized brain/Kick)
+  │   ▼                            │
+  │  external_relay.py ──────────► internal_relay.py
+  │  (sub /Kev1n/kick_ball)        (pub /kick_ball)
+  │  FASTRTPS profile cleared      FastDDS profile (robot-local airgap)
+  └── host bridge will publish here (Step 2, not yet built)
+```
+
+Key facts (all verified on hardware 2026-09-25 unless noted):
+
+| Item | Value | Source |
+|---|---|---|
+| Message type | `brain/msg/Kick` — Header + x, y, dir, goal_x, goal_y, robot_theta_to_field, power (float64 all) | repo `core/src/ros2_ws/src/brain/msg/Kick.msg` ≡ K1 `/opt/booster/booster_agent_data/data/agents/extract/com.boosterobotics.soccer/agent/brain/share/brain/msg/Kick.msg` (byte-identical incl. `disired` typo — shared provenance) |
+| Fleet topic | `/{prefix}/kick_ball` (e.g. `/Kev1n/kick_ball`) | external relay subscription |
+| Robot-local topic | `/kick_ball` | internal relay publisher; matches vendor controller's expected topic |
+| UDP port | 6003 (new; 6000=Req, 6001=Resp, 6002=Odom) | both relay files, PORT_KICK |
+| Robot brain source | `/opt/booster/booster_agent_data/data/agents/extract/com.boosterobotics.soccer/agent/local_setup.bash` | verified via `sudo find . -iname Kick.msg` on the K1 (2026-09-25) — this is the **vendor** soccer agent, not a `robocup_demo` checkout (which is reference material only) |
+| Controller subscribers | 2 (node name `_CREATED_BY_BARE_DDS_APP_`, BEST_EFFORT QoS — bare-DDS vendor code, not ROS 2 nodes) | `ros2 topic info -v /kick_ball` on the K1, 2026-09-25 |
+| Publisher QoS | RELIABLE / VOLATILE (our internal relay) | compatible with the BEST_EFFORT subscribers (RELIABLE pub ≥ BEST_EFFORT sub; reverse would fail) |
+| Robot ROS distro | humble (`/opt/ros/humble`) | deploy_vision.sh + relay services |
+| SSH user on the K1 | `booster` | `deploy_relay.sh` config |
+| K1 current IP | `192.168.0.69` (home/lab subnet — differs from the README's `10.42.0.x` maker4 examples) | user-supplied |
+| Robot hostname | `Kevin` (note: not `Kev1n` — systemd unit names use `Kev1n`, the hostname is `Kevin`) | journalctl output `Sep 25 ... Kevin` |
+| Deployed relay files | `external_relay.py`, `internal_relay.py` at `/home/booster/Workspace/ros2_relay/` | `deploy_relay.sh` scp step |
+| Systemd units | `internal-relay.service`, `external-relay.service` (both `enabled`, `active`) | journalctl post-deploy |
+
+## Step 1 — Relay extension: DONE ✅
+
+Files modified (uncommitted, on `main`):
+
+- `utils/ros2_relay/external_relay.py` — `from brain.msg import Kick`; subscribes `/{prefix}/kick_ball`; `kick_callback` forwards `serialize_message(msg)` to UDP 6003 (pure pass-through, exact Req-leg pattern; no RPC translation).
+- `utils/ros2_relay/internal_relay.py` — `from brain.msg import Kick`; UDP 6003 listener → `deserialize_message(data, Kick)` → publishes robot-local `/kick_ball`. No `KICK_API_MAP`/JSON parsing (that was the earlier discarded design — see "Design history" below).
+- `utils/ros2_relay/system/external-relay.service` — added `source /opt/booster/booster_agent_data/data/agents/extract/com.boosterobotics.soccer/agent/local_setup.bash` after the BoosterRos2 + BoosterRos2Interface sources.
+- `utils/ros2_relay/system/internal-relay.service` — same source line.
+- `utils/ros2_relay/README.md` — kick_ball topic documented (vendor soccer agent as brain/controller source; robocup_demo explicitly noted as reference-only).
+
+Deployed to the K1 at 192.168.0.69 via `./deploy_relay.sh 192.168.0.69 Kev1n`. Both services `active` and logged `Relay Active` lines (the RCLError traceback in the journal is the OLD instance's teardown noise — double `rclpy.shutdown()` in the `finally` block; cosmetic, pre-existing pattern, not caused by our change).
+
+## Validation results (2026-09-25; Gates 4+5 2026-10-01; Gate 6 2026-10-05)
+
+| Gate | Check | Result |
+|---|---|---|
+| 1 | Service health (journalctl) | PASS — both `active`; `Relay Active` lines present; brain import succeeded (the log line only prints after `from brain.msg import Kick` resolves at module load) |
+| 2 | Kick.msg type identity (robot vs repo) | PASS — byte-identical, including the `disired` vendor typo on both sides → DDS typehash match guaranteed for the host↔robot leg |
+| 3 | Kick controller present on `/kick_ball` | PASS — 2 subscribers (vendor soccer agent, bare-DDS participants); our internal relay is the 1 publisher |
+| 4 | Host-side fleet topic visible | PASS (2026-10-01) — `ros2 topic list` auf nativem U22 zeigt `/Kev1n/kick_ball`; `ros2 topic info` bestätigt 1 Subscription (external_relay) |
+| 5 | End-to-end chain round-trip (host pub → robot echo) | PASS (2026-10-01) — 4/5 `--times 5` Nachrichten empfangen auf `ros2 topic echo /kick_ball` auf dem K1; ursprünglicher Fehlschlag war ein Publish aus dem Docker-Container (`docker exec core_gazebo`) — DDS-Env-Mismatch. Nativer U22-Publish funktioniert; U24/Docker noch nicht vollständig getestet (nicht als nicht-funktionierend eingestufen) |
+| 6 | Live kick (power 6.0, K1 on stand) | PASS (2026-10-05) — K1 führte Kick-Bewegung aus nach `k1 kick` via calib_cli. **Drei Bedingungen nötig:** (1) Soccer Mode aktiv via RPC 2000 `{"mode": 4}`, (2) VisualKick V1 armed via RPC 2038 `{"start": true, "version": 0}` (einmalig pro Kick-Kommando, Bridge sendet diesen Trigger jetzt automatisch), (3) 2Hz `brain/Kick`-Stream auf `/kick_ball` mit `x=1.0, y=0.0, power=6.0`. `kick stop` → RPC 2038 `{"start": false}` + Hold. Vendor-Kick-Path wurde zusätzlich via `GoToBallAndKick.py` als Standalone validiert. |
+
+> [!note] brain-Source auf dem K1
+> Für manuelle SSH-Sessions auf dem K1: vor `ros2 topic echo /kick_ball`
+> `source /opt/booster/booster_agent_data/data/agents/extract/com.boosterobotics.soccer/agent/local_setup.bash`
+> ausführen — sonst kann der `brain/msg/Kick`-Typ nicht aufgelöst werden. In den
+> Systemd-Units (`internal-relay.service`) steht diese Source-Zeile bereits.
+
+## Open issues
+
+### A. End-to-end chain test produced nothing on the robot echo (Gate 5) — RESOLVED (2026-10-01)
+
+Symptom (2026-09-25): host published one `brain/Kick` on `/Kev1n/kick_ball` from inside `docker exec core_gazebo`; the robot's `ros2 topic echo /kick_ball` showed nothing.
+
+**Root cause:** DDS-Env-Mismatch zwischen dem Docker-Container und der Relay-Fleet-Seite (ROS_DOMAIN_ID / rmw-Profile). Der Publish aus dem Container erreichte die external_relay-Subscription nicht.
+
+**Auflösung (2026-10-01):** Publish von nativem U22 (nicht Docker) — `ros2 topic pub --times 5 /Kev1n/kick_ball brain/msg/Kick '{...}'` — lieferte 4/5 Nachrichten auf dem K1-Echo. Gate 4 (`ros2 topic list` auf U22) und Gate 5 sind damit grün. U24/Docker ist noch nicht vollständig getestet und wird **nicht** als nicht-funktionierend eingestuft (separater Test später möglich).
+
+**Manual für künftige Round-Trip-Tests:**
+- Host (nativ U22, ros2_ws gesourced): `ros2 topic pub --times 5 /Kev1n/kick_ball brain/msg/Kick '{x: 0.0, y: 0.0, dir: 0.0, goal_x: 5.0, goal_y: 0.0, robot_theta_to_field: 0.0, power: 0.0}'`
+- K1 (SSH, brain-Source siehe Gate-Tabelle-Notiz): `ros2 topic echo /kick_ball`
+
+### B. Cosmetic RCLError traceback on relay teardown
+
+The old relay instance's `finally: rclpy.shutdown()` double-calls shutdown and throws `RCLError: rcl_shutdown already called`. Pre-existing pattern (axiom 7 / watchdog teardown noise). Hygiene fix for a future pass: guard with `if rclpy.ok(): rclpy.shutdown()` in both relay `main()` finally blocks. Not a blocker; noted for the cheat sheet's "redeploy hygiene" section.
+
+### C. Hostname vs unit name
+
+The K1's hostname is `Kevin` (journalctl `Sep 25 ... Kevin systemd...`); the systemd unit + topic prefix use `Kev1n`. Not a problem (they're independent strings) but worth documenting in the cheat sheet so future skill additions don't confuse the two.
+
+## Step 2 — Bridge: DONE ✅ (2026-10-05, updated 2026-10-07)
+
+Implemented in `core/src/ai_tactics/ollama_sandbox_bridge.py` (calib/demo path only — match mode keeps the `{"mode": 1}` placeholder until GATE 0 probe results land):
+
+- **Import** `brain.msg.Kick` + `HAS_BRAIN_KICK` flag (graceful fallback if not built).
+- **Constants** (parameterized for quick tuning): `K1_KICK_POWER=6.0`, `K1_KICK_GOAL_X=5.0`, `K1_KICK_GOAL_Y=0.0`, `K1_KICK_MAX_DURATION_S=8.0`, `K1_KICK_PUB_HZ=2.0`.
+- **`_ensure_kick_pub(hw_name, hw_info)`** — lazy `brain/Kick` publisher on `<ns>/kick_ball`, ns derived from the K1 relay topic like `_ensure_odom_watch` (`rsplit('/', 1)[0]` → `/Kev1n`).
+- **`_stop_kick_timer(hw_name, reason)`** — helper: cancel timer + clean up state (`_kick_timers`, `_kick_params`, `_kick_start_t`, `_kick_ids`) + log.
+- **Dispatch branch `action == 'hw_kick'`** (distinct from match-mode `action == 'kick'`):
+  - `kind='vk1'` → **three-step sequence**:
+    1. **VisualKick V1 arm** (one-shot): RPC 2038 `{"start": true, "version": 0}` via `LocoApiTopicReq` — the vendor firmware needs this trigger to activate the visual-kick skill. Without it, `/kick_ball` messages are received but no motion happens (verified live 2026-10-05).
+    2. **2Hz timer** that publishes `Kick` msg continuously (vendor controller expects ~2Hz stream — a single message yields only a half-step). POC fields: `x=1.0, y=0.0, dir=0, goal_x=5.0, goal_y=0.0, robot_theta_to_field=0.0, power=K1_KICK_POWER`.
+    3. **Re-arm guard** (id-keyed): if a timer is already running for the same `id`, skip (prevents 20Hz dispatch loop from canceling+recreating the timer every tick — the callback would never fire).
+  - `kind='abort'` → timer stop + RPC 2038 `{"start": false}` via existing `LocoApiTopicReq` leg + zero-twist hold (safety: stop everything).
+  - **Safety timeout** (`K1_KICK_MAX_DURATION_S=8.0`): auto-abort + hold after timeout.
+  - **Timer cleanup on other actions**: any non-`hw_kick` action for a bot with an active kick timer stops the timer (safety).
+  - **`stop_all_hardware()`**: stops all kick timers on full hardware stop (Gazebo pause / watchdog).
+- **`TARGET_EXTRA_KEYS`** extended with `'kind'` (was stripped by `read_llm_strategy`, breaking the `vk1`/`abort` routing).
+- **Calib allowlist** (line ~1216): `hw_kick` added to `('goto', 'timedmove', 'hold', 'face', 'head', 'seq')` — without it, `hw_kick` was silently skipped in `--calib` mode (`bot_idx=None` gate).
+- Match mode untouched (GATE 0: mode-1 placeholder stays until probe results clear).
+- 316 fast-tier tests pass (`pytest tests/ --skip-slow`).
+
+### Bugs found & fixed during live validation (2026-10-05)
+1. **`kind` field stripped** by `read_llm_strategy` → added `'kind'` to `TARGET_EXTRA_KEYS`.
+2. **`hw_kick` not in calib allowlist** → `bot_idx=None` gate silently skipped it → added `'hw_kick'` to the allowlist.
+3. **Timer recreated every 20Hz tick** (re-arm guard missing) → added `_kick_ids` dict + id-keyed guard: skip if timer already running for same id.
+4. **VisualKick not armed** → `/kick_ball` messages received but no motion. Fix: RPC 2038 `{"start": true, "version": 0}` sent once before the 2Hz stream starts.
+
+## Step 3 — Evaluator + calib CLI: DONE ✅ (2026-10-05)
+
+### Evaluator (`core/src/ai_tactics/r2k_evaluator.py`)
+- Added `DEMO_KICK_VERBS = ("kick", "kick stop")` + extended `DEMO_CONTROL_VERBS`.
+- Updated `DEMO_INSTANT_WORD_RE` to include `kick` (so `"face west, then kick"` gets split, not compiled).
+- Added `_demo_kick_cmd(bot, kind='vk1')` handler: `kind='vk1'` → `hw_kick` assignment with fresh id; `kind='abort'` → `hw_kick` abort assignment.
+- Kick routing in `_handle_compound_task` (after face/turn/rotate handlers): bare `kick`/`kick stop` → `DEMO_K1_ALIASES[0]` (k1 slot, like bare `turn`); explicit prefix → that bot.
+
+### CLI (`core/tools/calib_cli.py`)
+- Added `KICK_COMMANDS = ("kick", "kick stop")` + extended `FAST_COMMANDS` + updated `INSTANT_WORD_RE`.
+- Kick handler in `_handle_task` (after face/turn/rotate handlers): calib-only gate, instant feedback, safety hint ("robot must be on STAND"), dead-slot warnings:
+  - Bare `kick` in calib → "⚠ calib: bare 'kick' targets K1 — prefix y1/y2 to drive the Yahbooms (Yahboom has no kick)."
+  - `y1 kick` / `y2 kick` → "⚠ {bot} has no kick hardware — bridge will warn 'not K1'."
+- Sample commands: `k1 kick`, `k1 kick stop` added to `SAMPLE_COMMANDS`.
+
+### Routing summary
+| Input | Evaluator | Bridge |
+|---|---|---|
+| `kick` (bare) | → k1 slot, `kind='vk1'` | 2Hz timer on `/Kev1n/kick_ball` |
+| `kick stop` (bare) | → k1 slot, `kind='abort'` | Timer stop + RPC 2038 + hold |
+| `k1 kick` | → k1 slot, `kind='vk1'` | 2Hz timer |
+| `y1 kick` | → y1 slot, `kind='vk1'` | Bridge warns "not K1" (no kick publisher) |
+| `kick` in demo (non-calib) | Evaluator rejects via `CALIB` guard | — |
+
+316 fast-tier tests pass (`pytest tests/ --skip-slow`).
+
+## Step 4 — Tests + docs: PARTIALLY DONE (2026-10-12)
+
+- ✅ Fast tier: `core/src/tests/test_kick_fastpath.py` (5 tests — evaluator
+  verb → hw_kick cmd, vk1/abort routing, waypoint clearing, compound-task
+  routing). 320 fast-tier tests pass (`pytest tests/ --skip-slow`).
+- ⬜ `core/docs/calibration_cheat_sheet.md`: kick command section (verbs,
+  probe matrix pointer, safety: `kick stop` + `GoToBallAndKickCmd.abort=true`,
+  stand/clearance preconditions).
+- ⬜ `core/docs/vocabulary_cheat_sheet.md`: CLI verbs → parsing layers entry
+  for `kick`/`kick stop`.
+- ⬜ Session changelog entry (per AGENTS.md protocol) at session end.
+
+## Step 5 — Host→robot migration: DONE ✅ (2026-10-12)
+
+The kick execution migrated from the host bridge to an on-robot node. The
+bridge now publishes a single high-level `GoToBallAndKickCmd`; the on-robot
+`GoToBallAndKick` node closes the loop locally using `utils/vision` ball
+data. The high-frequency `brain/Kick` stream stays robot-local (never
+crosses the relay), eliminating the former 2 Hz network bottleneck.
+
+### Architecture (after migration)
+
+```
+host bridge                       relay pair                    K1 robot
+─────────                         ───────────                    ────────────
+hw_kick action                                                   head-control node (Phase 0a, BUILT 2026-10-12)
+  │ publish GoToBallAndKickCmd                                   ├── sub /Kev1n/HeadControl (k1_skills_msgs/HeadControlCmd, LOCAL)
+  └─► /Kev1n/GoToBallAndKick ───► UDP 6004 ──────────────────►  ├── sub /booster_soccer/ball (vision_interface/Ball)
+                                                                  ├── pub /head_pose (geometry_msgs/Pose, 30 Hz)
+                                                                  ├── pub /Kev1n/head_state (k1_skills_msgs/HeadState, 10 Hz)
+                                                                  └── RPC 2004 → /LocoApiTopicReq (head move, 10 Hz)
+                                                                          │ /head_pose
+                                                                          ▼
+                                                                  utils/vision node (Phase 0b, C++ TensorRT)
+                                                                  ├── sub /boostercamera/head/rgb + depth
+                                                                  ├── sub /head_pose
+                                                                  └── pub /booster_soccer/ball (vision_interface/Ball)
+                                                                          │
+                                                                  GoToBallAndKick node (Phase 1, this step)
+                                                                  ├── sub /GoToBallAndKick (k1_skills_msgs/GoToBallAndKickCmd)
+                                                                  ├── sub /booster_soccer/ball (vision_interface/Ball)
+                                                                  ├── pub /kick_ball (brain/Kick @ max rate, LOCAL)
+                                                                  ├── pub /Kev1n/HeadControl (HeadControlCmd, LOCAL → head-control node)
+                                                                  └── RPC 2038 arm/abort → /LocoApiTopicReq (LOCAL)
+                                                                          │
+                                                                          ▼
+                                                                  vendor soccer controller (sub /kick_ball)
+```
+
+### What changed
+
+**New msg package — `k1_skills_msgs`**
+(`core/src/ros2_ws/src/k1_skills_msgs/`): contains
+`GoToBallAndKickCmd.msg` (target_x, target_y, power, is_goalshot, abort).
+The vendor `brain` package stays byte-identical on the K1 — our msg
+lives in a separate package sourced from the ros2_ws workspace overlay.
+`power=0.0` → the on-robot node auto-computes power from distance +
+is_goalshot (goalshot: 6.0 if dist > 6 m else 1.5; pass: min(dist*0.8, 4.0)).
+
+**On-robot node — `utils/skills/goToBallAndKick.py`** (promoted from POC):
+- Subscribes `/{prefix}/GoToBallAndKick` (k1_skills_msgs/GoToBallAndKickCmd)
+  + `/booster_soccer/ball` (vision_interface/Ball, from `utils/vision`).
+- Publishes `brain/Kick` to robot-local `/kick_ball` in a tight thread loop
+  (no rate cap — `time.sleep(0)`, runs to the system limit; expected several
+  hundred Hz on local DDS).
+- Arms VisualKick V1 via RPC 2038 on first ball detection; aborts via RPC
+  2038 `{"start": false}` on cmd.abort, safety timeout (8 s), or ball-lost
+  (2 s no vision).
+- **Removed from POC:** `DetectionMsgs` subscription
+  (`/yolo_detection_server/detection_results`), RPC 3000 YOLO activation
+  (`/VisionApiTopicReq`) — the `utils/vision` node is self-contained
+  (TensorRT/ONNX inference, no external service to arm).
+
+**Relay — `utils/ros2_relay/`**:
+- Removed: UDP 6003 / `kick_ball` leg (brain/Kick) from both relay files +
+  the `brain` source line from both systemd service files.
+- Added: UDP 6004 / `GoToBallAndKick` leg (k1_skills_msgs/GoToBallAndKickCmd)
+  in both relay files. Systemd services now source
+  `/home/booster/Workspace/ros2_ws/install/setup.bash` (our workspace
+  overlay with `k1_skills_msgs`) instead of the vendor `brain` agent install.
+
+**Bridge — `core/src/ai_tactics/ollama_sandbox_bridge.py`**:
+- Removed: `K1_KICK_POWER`, `K1_KICK_PUB_HZ`, `K1_KICK_MAX_DURATION_S`,
+  `_kick_timers`, `_kick_params`, `_kick_start_t`, `_kick_ids`, `_kick_pubs`,
+  `_ensure_kick_pub`, `_stop_kick_timer`, the 2 Hz timer callback, the RPC
+  2038 arm/abort code, the `brain/Kick` import + `HAS_BRAIN_KICK` flag.
+- Added: `k1_skills_msgs.GoToBallAndKickCmd` import + `HAS_GOTO_KICK_CMD`
+  flag, `_ensure_goto_kick_pub`, `_goto_kick_pubs`, `_goto_kick_active`,
+  `_goto_kick_ids`.
+- `action == 'hw_kick'` is now a one-shot publish: `kind='vk1'` →
+  `GoToBallAndKickCmd(target=goal, power=0, is_goalshot=true, abort=false)`;
+  `kind='abort'` → `GoToBallAndKickCmd(abort=true)`. Re-arm guard by id
+  (same id = skip — the on-robot node keeps streaming until abort/timeout).
+- `stop_all_hardware()` + non-hw_kick actions send `abort=true` for any
+  active kick.
+
+**Evaluator — `core/src/ai_tactics/r2k_evaluator.py`**: docstring updated
+to reflect the new architecture (one-shot GoToBallAndKickCmd, not a 2 Hz
+timer stream). Routing logic unchanged (`kick` → k1 slot, `kick stop` →
+abort).
+
+### Prerequisites (Phase 0, separate work — block live testing)
+
+| Phase | What | Status |
+|---|---|---|
+| 0a | Head-control node (on K1, publishes `/head_pose` + RPC 2004) | **BUILT 2026-10-12** — code + msg + tests complete, not yet deployed live |
+| 0b | `utils/vision` built + running on K1 (TensorRT, systemd unit) | TODO — separate work |
+
+Phase 0a is now built: `utils/skills/headControl.py` (on-robot node),
+`k1_skills_msgs/HeadControlCmd.msg` + `HeadState.msg`, systemd service
+`head-control.service`, 24 fast-tier tests (`test_head_control.py`).
+The GoToBallAndKick node publishes `MODE_LOOK_AT_BALL` on kick start and
+`MODE_ABORT` on stop. No relay leg needed (both nodes communicate locally
+on the K1). Until Phase 0b lands (vision node on K1), the head-control
+node cannot be tested live (no `/booster_soccer/ball` to track).
+
+### K1 deployment (after Phase 0)
+
+- `goto-ball-and-kick.service` systemd unit (`utils/skills/system/`): sources
+  `/opt/ros/humble/setup.bash` + `BoosterRos2` + `BoosterRos2Interface` +
+  `ros2_ws/install/setup.bash` (k1_skills_msgs) +
+  `vision_ws/install/setup.bash` (vision_interface) +
+  vendor `brain` `local_setup.bash` (for Kick.msg). Runs
+  `python3 goToBallAndKick.py --robot-prefix <Robot_Name>`.
+- `head-control.service` systemd unit (`utils/skills/system/`): same source
+  chain minus the vendor `brain` source (head-control does not use Kick.msg).
+  Runs `python3 headControl.py --robot-prefix <Robot_Name>`.
+- `utils/scripts/deploy_skill.sh`: scp both node scripts to
+  `/home/booster/Workspace/skills/`, colcon-build `k1_skills_msgs` in the
+  on-robot `ros2_ws` (now includes `HeadControlCmd.msg` + `HeadState.msg`),
+  install + enable both systemd services. Prerequisites:
+  `deploy_relay.sh` + `deploy_vision.sh` must run first. Flags:
+  `--no_auto_start` (install only), `--no_build` (skip colcon if msg
+  package already built).
+- Health check: `journalctl -u goto-ball-and-kick -f` →
+  "Listening for commands on: /Kev1n/GoToBallAndKick".
+- Health check: `journalctl -u head-control -f` →
+  "Listening for commands on: /Kev1n/HeadControl".
+
+### Retired
+
+- UDP 6003 / `kick_ball` relay leg — the kick stream is robot-local now.
+- The 2 Hz network bottleneck — the stream runs at the system limit locally.
+- The host bridge's VisualKick arm (RPC 2038) — the on-robot node arms on
+  first ball detection.
+
+## Planned cheat sheet: "Adding a new skill as ROS 2 topic to ROS2K"
+
+The user requested a future cheat sheet with this title, covering the pattern we just walked through — generalized for the NEXT skill addition. The head-control node (Phase 0a, built 2026-10-12) was the first follow-on and exercised a **variant** of this pattern: local-only (no relay leg), new msg in `k1_skills_msgs`, on-robot node communicating with the kick node via a robot-local topic. It should capture:
+
+1. **Skill contract** — define the ROS 2 message type (existing package or new), the fleet topic `/{prefix}/<skill_topic>`, and the robot-local topic the vendor code consumes.
+2. **Robot-side ground truth first** — `ssh` to the robot, `find` the msg definition under `/opt/booster/booster_agent_data/...`, `cat` it, diff against the repo copy. **Never assume the topic/type exists from a branch ReadMe alone** (the robocup_demo folklore cost us a round trip).
+3. **Relay extension** — add a UDP port + a subscription (external) and a publisher (internal) in the relay pair; pure pass-through via `serialize_message`/`deserialize_message`, no business logic in the relay.
+4. **Robot env chain in the systemd services** — add the `local_setup.bash` source line that provides the msg package; verify the chain imports in an interactive SSH session BEFORE deploying (the `ros2: command not found` trap: non-interactive SSH skips `.bashrc`; `local_setup.bash` never chains the underlay — source `/opt/ros/<distro>/setup.bash` + vendor setups first).
+5. **Deploy** — `./deploy_relay.sh <IP> <prefix>`; wait ~45s (ExecStartPre sleeps); `journalctl` health check; the RCLError-on-restart traceback is cosmetic (old instance teardown).
+6. **Validation ladder** — service health → msg type identity → controller subscriber present → host topic visible → end-to-end round-trip (pub host / echo robot) → live skill test (operator decision, safety preconditions).
+7. **Host-side bridge wiring** — lazy publisher per k1 bot, id-keyed one-shot dispatch action with a distinct name from any match-mode action, calib/demo-gated until the probe gates clear.
+8. **Evaluator + CLI mirror** — fast-path verbs in both files (CLI mirrors evaluator rules), dead-slot warnings when the target hw isn't in the relay.
+9. **Abort path** — every skill needs a documented abort (kick: RPC 2038 `{"start": false}` via the existing Req leg; head: RPC 2004 zero pose or mode switch).
+10. **Naming gotchas** — hostname (`Kevin`) vs topic prefix (`Kev1n`) are independent; fleet topic name mirrors the robot-local topic name (the LocoApiTopicReq convention) to avoid confusion; `local_setup.bash` ≠ `setup.bash` (underlay chaining).
+
+Head movements (Phase 0a, built 2026-10-12) exercised a **local-only
+variant** of the skill pattern: no relay leg (both nodes on the K1), new
+msg `HeadControlCmd` in `k1_skills_msgs`, on-robot node
+`utils/skills/headControl.py` communicates with the kick node via the
+robot-local `/{prefix}/HeadControl` topic. Abort = `MODE_ABORT` (head
+holds last pose — probe-verified 2026-10-07). The head-control node
+publishes `/head_pose` (`geometry_msgs/Pose`) at 30 Hz for the vision
+node and drives RPC 2004 (`RotateHead`) at 10 Hz. K1 head kinematic
+constants (neck offset, camera height, joint limits, sign conventions)
+extracted from `K1_22dof.urdf` + the 2026-10-07 hardware probe.
+
+## Design history (for the cheat sheet's "lessons" section)
+
+The kick channel went through three designs this session, each correcting a verification gap:
+
+1. **std_msgs/String + JSON api-name map in the internal relay** (vk1/vk2/vk_stop/shoot → RPC 2038/2024). Rejected: user corrected to a custom msg.
+2. **A new `kick_ball.msg`** in the brain package. Rejected: no such file exists in any branch (verified across 40 refs) — the user clarified it was the EXISTING `Kick.msg` all along. Lesson: the prior `feature/skill/GoToBallAndKick` branch's `goToBallAndKick.py` already publishes `brain/Kick` to robot-local `/kick_ball` — that's the canonical contract; we match it, not invent one.
+3. **Pure `brain/Kick` pass-through** (final design) — the relay carries the same type the vendor controller already consumes; no RPC translation in the relay; the soccer agent IS the kick executor. This made the robot-side deployment trivial (brain already on the K1 via the vendor soccer agent — zero colcon, zero on-robot build) and pushed the "which RPC does the actual kick" question into the vendor controller, which is exactly where GATE 0 wanted the probe to land.
+
+Topic name: started as `/{prefix}/kick_ball`, user changed to `/{prefix}/kick`, then back to `/{prefix}/kick_ball` to mirror the LocoApiTopicReq convention (fleet `/Kev1n/kick_ball` ↔ robot-local `/kick_ball`).
+
+## Blockers / next session entry point
+
+1. **Step 4 — Tests + Doku**: fast-tier test (`test_kick_fastpath.py` — DONE 2026-10-12), `calibration_cheat_sheet.md` + `vocabulary_cheat_sheet.md` sections (still open), session changelog entry.
+2. **Phase 0a head-control node**: BUILT 2026-10-12 (code + msg + tests). Next: deploy to K1 via `deploy_skill.sh` + live validation (blocked on Phase 0b vision node).
+3. **Phase 0b vision node**: `utils/vision` built + running on K1 (TensorRT, systemd unit) — TODO, separate work. Blocks all live testing.
+4. **Soccer Mode Pre-Condition**: `k1 kick` requires the K1 to be in Soccer Mode (RPC 2000 `{"mode": 4}`). Currently this must be set manually before the calib session. Future: auto-set in the bridge on first K1 contact, or in `launch_r2k.sh` hardware-gate.
+5. **Abort id-keyed guard**: the `kind='abort'` branch fires RPC 2038 every 20Hz tick (no id-keyed done-set like `vk1`). Cosmetic (RPC 2038 stop is idempotent), but should be guarded for log cleanliness.
+6. **U24/Docker-Publish** separat nachtesten (nicht blockierend — U22-nativ funktioniert; U24/Docker noch nicht vollständig getestet, nicht als nicht-funktionierend eingestuft).

@@ -1,0 +1,26 @@
+[Unit]
+Description=K1 GoToBallAndKick skill node (<Robot_Name>)
+After=network-online.target internal-relay.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=booster
+WorkingDirectory=/home/booster/Workspace/skills
+
+ExecStartPre=/bin/sleep 25
+
+# Source chain:
+#   /opt/ros/humble             — ROS 2 underlay
+#   BoosterRos2                 — vendor booster_msgs (RpcReqMsg)
+#   BoosterRos2Interface        — vendor booster_interface (Odometer, relay)
+#   ros2_ws/install             — our k1_skills_msgs (GoToBallAndKickCmd)
+#   vision_ws/install           — vision_interface (Ball) from deploy_vision.sh
+#   soccer agent local_setup    — vendor brain (Kick.msg)
+ExecStart=/bin/bash -c "source /opt/ros/humble/setup.bash && source /opt/booster/BoosterRos2/install/local_setup.bash && source /opt/booster/BoosterRos2Interface/install/setup.bash && source /home/booster/Workspace/ros2_ws/install/setup.bash && source /home/booster/Workspace/vision_ws/install/setup.bash && source /opt/booster/booster_agent_data/data/agents/extract/com.boosterobotics.soccer/agent/local_setup.bash && /usr/bin/python3 goToBallAndKick.py --robot-prefix <Robot_Name>"
+
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

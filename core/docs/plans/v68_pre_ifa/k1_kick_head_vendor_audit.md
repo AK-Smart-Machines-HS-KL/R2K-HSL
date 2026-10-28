@@ -15,7 +15,7 @@ Six ROS2K KB/docs sites state (v6.4 era, no source):
 
 Sites: `4_EDGE_HARDWARE_SIM2REAL.md` §V6.4 (+ capability matrix),
 `8_C3_SOCCER_KNOWLEDGE.md` §6 (kick matrix + chase problem),
-`ROS2K_GEM_FAQ.md` Q28, `LESSONS_LEARNED.md`, `scrum_tasks.md` (K1 story),
+`ROS2K_GEM_FAQ.md` Q28, `LESSONS_LEARNED.md`, `docs/outdated/scrum_tasks.md` (K1 story, archived 2026-09-15),
 `gui_v67_discussion.md`.
 
 **Audit result (2026-08-28):** the claim exists ONLY inside our own files.
@@ -69,6 +69,18 @@ K1 joint indices: `kHeadYaw=0`, `kHeadPitch=1` (2 head DoF). **No angle limits
 documented** — clamp constants in bridge code must be tuned on hardware.
 Required `RobotMode` for head control is undocumented — probe on hardware.
 
+**[PROBE COMPLETE 2026-10-07]** Hardware probe run on Kev1n (fw v1.8.0.9):
+- **Sign conventions VERIFIED:** `+yaw` (RPC) → head turns LEFT; `+pitch` (RPC) → head UP.
+  `head_cmds.py` `K1_SIGN_YAW = +1.0`, `K1_SIGN_PITCH = +1.0` (was `-1.0` pre-probe, flipped).
+- **Mechanical stops:** yaw clamps tightened to ±1.0 rad (vendor spec ±1.03 —
+  physical stop hits at 1.0). Pitch limits -0.33..+0.86 unchanged (no stop observed).
+- **Required mode:** `kWalking` (mode 2) only — `kPrepare` (mode 1) rejects
+  `RotateHead`. Bridge must ensure K1 is in walking mode before head commands.
+- **Teardown:** on failsafe (RPC 2000 `clear_buffer`/`lock_drive`), head
+  HOLDS last pose (does not return to neutral). Vision-loss handling: head
+  holds — no sweep risk.
+- Probe script: `utils/scripts/probe_k1_head.py`.
+
 ### 2.3 What stands (not affected by the audit)
 
 - `Move(vx, vy, vyaw)` (2001) + `ChangeMode` (2000): K1-supported, ≥ v1.0.0,
@@ -100,7 +112,7 @@ step below MUST be logged in `SESSION_CHANGELOG.md` immediately after execution.
 |---|---|
 | Kick execution | (a) `VisualKick` only (vendor-confirmed K1) · (b) firmware **Soccer mode** evaluation (mode 4 — built-in kicking/goalie may replace our kick handling entirely) · (c) no firmware kick; drive-and-push like Yahboom |
 | Chase handling | (a) abort design as planned (`/ball/motion_change` → kChangeMode) — only if chasing is observed · (b) unnecessary if skills self-terminate · (c) avoid autonomous skills entirely (Soccer-mode/gait approach) |
-| Head control | Proceed with the calibration head-turn plan (2004 primary, 2006 jog); tune clamp limits on hardware; verify required mode |
+| Head control | **IMPLEMENTED 2026-10-12** — `utils/skills/headControl.py` (on-robot node). RPC 2004 primary, probe-verified constants (yaw ±1.0, pitch -0.33..+0.86, +yaw=left, +pitch=up, requires kWalking). K1 head kinematic offsets from `K1_22dof.urdf` (trunk→head_pitch = 0.2479 m). Camera height 0.85 m (user-set, TODO: tape-measure verify). Publishes `/head_pose` (geometry_msgs/Pose, 30 Hz) for the vision node. 24 fast-tier tests pass. Deploy via `deploy_skill.sh`. Live testing blocked on Phase 0b (vision node on K1). |
 
 **Until Gate results exist:** all six KB sites carry an UNVERIFIED annotation,
 and no abort code may be written (scrum GATE 0).

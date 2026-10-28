@@ -27,6 +27,14 @@ try:
 except ImportError:
     HAS_BOOSTER_ODOM = False
 
+
+#instead GotoBallAndKickMsg
+try:
+    from k1_skills_msgs.msg import GoToBallAndKickCmd
+    HAS_GOTO_KICK_CMD = True
+except ImportError:
+    HAS_GOTO_KICK_CMD = False
+
 # === Calib mode (direct hardware addressing, no mirror_of resolution) ===
 # Mode merge (2026-09-08): calib = the Gazebo-free field stack — the
 # hardware dispatch runs on a wall-clock timer (state_cb never dispatches
@@ -41,6 +49,15 @@ CALIB = os.getenv('R2K_CALIB') == '1'
 # deliberately excludes k1 (executor hallucinates assignments for visible bots).
 K1_ODOM_DRIFT_M = 0.25          # warn when K1 strays this far from its sim twin
 K1_DRIFT_WARN_DEBOUNCE_S = 1.0  # min seconds between drift warnings
+
+### The kick stream + VisualKick arm/abort now live in the on-robot
+### GoToBallAndKick node (utils/skills/goToBallAndKick.py). The bridge
+### just publishes ONE GoToBallAndKickCmd to /{ns}/GoToBallAndKick and
+### the node handles the rest (vision ball data, high-frequency brain/Kick
+### stream to /kick_ball, RPC 2038 arm/abort, safety timeouts).
+### See core/docs/plans/v68_pre_ifa/kick_poc_status.md Step 5.
+K1_KICK_GOAL_X = 5.0             # default aim: opponent goal from origin
+K1_KICK_GOAL_Y = 0.0
 
 # === Yahboom calib (open-loop timed drive) ===
 # Encoder odom unreliable on real floors (slip) — calibration drives by TIME,
@@ -330,6 +347,14 @@ class HalBridge(Node):
         self.ball_pos = None
         self.hardware_mapping = {}
         self.last_kick_time = {}
+	
+	
+	### The kick stream + VisualKick arm/abort now run on the K1 in the
+	### GoToBallAndKick node. The bridge keeps only a lazy publisher per
+	### K1 bot for the one-shot GoToBallAndKickCmd.
+        self._goto_kick_pubs = {}     # {hw_name: Publisher} — lazy, per K1 bot
+        self._goto_kick_active = {}   # {hw_name: bool} — for stop_all_hardware abort
+        self._goto_kick_ids = {}      # {hw_name: id} — re-arm guard (same id = skip)
 
         # --- Demo head control state (calibration mode only) ---
         # Gesture runtime keyed by mirrored bot: {"id", "gesture", "t0"}
@@ -448,6 +473,17 @@ class HalBridge(Node):
         self._seq_state.clear()
         self._body_gesture.clear()
         self._goto_state.clear()
+        
+        ### only one kicker should be active at all times so no need to stop multiple kicks ###
+        # Abort any active kick via GoToBallAndKickCmd (the on-robot node
+        # handles RPC 2038 stop + stream termination). Safety: full hardware stop.
+        for hw_name in list(self._goto_kick_active.keys()):
+            pub = self._goto_kick_pubs.get(hw_name)
+            if pub:
+                abort_msg = GoToBallAndKickCmd()
+                abort_msg.abort = True
+                pub.publish(abort_msg)
+            self._goto_kick_active.pop(hw_name, None)
         for hw_name, hw_info in self.hardware_mapping.items():
             hw_type = hw_info.get('hardware_type', 'virtual').lower()
             if hw_name not in self.pubs: continue
@@ -467,7 +503,7 @@ class HalBridge(Node):
     # Extra keys forwarded from strategy JSON to the per-bot target
     # (demo Face/Head actions carry no x/y and would otherwise be dropped)
     TARGET_EXTRA_KEYS = ('yaw', 'relative_angle', 'pan_deg', 'tilt_deg',
-                         'gesture', 'cycles', 'id', 'steps',
+                         'gesture', 'cycles', 'id', 'steps', 'kind',
                          'vx', 'vyaw', 'duration_s')
 
     def read_llm_strategy(self):
@@ -721,6 +757,22 @@ class HalBridge(Node):
             self._y_odom_subs[hw_name] = sub  # keep reference alive
             self._y_odom[hw_name] = {'x': 0.0, 'y': 0.0, 'theta': 0.0, 't': 0.0}
             self.get_logger().info(f"📍 Yahboom odom subscription active for {hw_name} on {ns}/odom_raw (rehearsal)")
+
+
+	### switch to Skill based GoToBallAndKick topic ###
+    def _ensure_goto_kick_pub(self, hw_name, hw_info):
+        """Lazy GoToBallAndKickCmd publisher on <ns>/GoToBallAndKick for K1.
+        ns derived from the K1 relay topic like _ensure_odom_watch
+        (rsplit('/', 1)[0] -> '/Kev1n')."""
+        if hw_name in self._goto_kick_pubs:
+            return
+        hw_type = hw_info.get('hardware_type', 'virtual').lower()
+        if hw_type != 'k1' or not HAS_GOTO_KICK_CMD:
+            return
+        ns = hw_info.get('topic', f'/{hw_name}/cmd_vel').rsplit('/', 1)[0]
+        pub = self.create_publisher(GoToBallAndKickCmd, f'{ns}/GoToBallAndKick', 10)
+        self._goto_kick_pubs[hw_name] = pub
+        self.get_logger().info(f"🦵 K1 GoToBallAndKick publisher active for {hw_name} on {ns}/GoToBallAndKick")
 
     @staticmethod
     def _odom_from_nav(m):
@@ -1164,7 +1216,8 @@ class HalBridge(Node):
                 if bot_idx is None:
                     if not (CALIB and target_action in ('goto', 'timedmove',
                                                         'hold', 'face',
-                                                        'head', 'seq')):
+                                                        'head', 'seq',
+                                                        'hw_kick')):
                         continue
                     cx, cy, cyaw = 0.0, 0.0, 0.0
                 else:
@@ -1185,6 +1238,20 @@ class HalBridge(Node):
                     dist_to_ball = float('inf')
                 action = target.get('action', '').lower()
                 is_attacking = False
+                
+		### Kick stream + VisualKick arm/abort now handled by the
+		### GoToBallAndKick node on the K1. The bridge sends only a
+		### one-shot GoToBallAndKickCmd. On a different action, send
+		### an abort so the on-robot node stops the stream + RPC 2038.
+                if action != 'hw_kick' and self._goto_kick_active.get(hw_name):
+                    pub = self._goto_kick_pubs.get(hw_name)
+                    if pub:
+                        abort_msg = GoToBallAndKickCmd()
+                        abort_msg.abort = True
+                        pub.publish(abort_msg)
+                    self._goto_kick_active.pop(hw_name, None)
+                    self.get_logger().info(
+                        f"🦵 [{hw_name}] kick abort sent (new action: {action})")
 
                 # Sequence execution: the cursor synthesizes the effective
                 # per-tick target from the current step (bridge owns yaw,
@@ -1225,7 +1292,67 @@ class HalBridge(Node):
                     # Active brake: publish zero velocity to stop the bot
                     # (not just skip -- skipping lets the bot coast on its
                     # last velocity command, which is unsafe on hardware)
+                    if self._goto_kick_active.get(hw_name):
+                        pub = self._goto_kick_pubs.get(hw_name)
+                        if pub:
+                            abort_msg = GoToBallAndKickCmd()
+                            abort_msg.abort = True
+                            pub.publish(abort_msg)
+                        self._goto_kick_active.pop(hw_name, None)
                     self._publish_motion(hw_name, hw_type, 0.0, 0.0)
+                    continue
+
+                if action == 'hw_kick':
+                    # K1 kick (calib/demo only): publish ONE GoToBallAndKickCmd
+                    # to /{ns}/GoToBallAndKick. The on-robot GoToBallAndKick
+                    # node (utils/skills/goToBallAndKick.py) handles the rest:
+                    # vision ball data (/booster_soccer/ball), high-frequency
+                    # brain/Kick stream to /kick_ball, VisualKick V1 arm/abort
+                    # via RPC 2038, safety timeouts. The kick stream stays
+                    # robot-local (never crosses the relay). Match-mode 'kick'
+                    # (line ~1546) keeps the {"mode": 1} placeholder until
+                    # GATE 0 probe results land.
+                    kind = target.get('kind', 'vk1')   # 'vk1' | 'abort'
+                    g_id = target.get('id')
+
+                    self._ensure_goto_kick_pub(hw_name, hw_info)
+                    pub = self._goto_kick_pubs.get(hw_name)
+                    if not pub:
+                        self.get_logger().warn(
+                            f"🦵 [{hw_name}] hw_kick refused — no GoToBallAndKick "
+                            f"publisher (not K1 or k1_skills_msgs unavailable)")
+                        self._publish_motion(hw_name, hw_type, 0.0, 0.0)
+                        continue
+
+                    # Re-arm guard: if a kick is already active for the SAME
+                    # id, the strategy file just persists — don't re-publish
+                    # (the on-robot node keeps streaming until abort/timeout).
+                    if kind == 'vk1' and \
+                       self._goto_kick_active.get(hw_name) and \
+                       self._goto_kick_ids.get(hw_name) == g_id:
+                        continue
+
+                    cmd_msg = GoToBallAndKickCmd()
+                    if kind == 'abort':
+                        cmd_msg.abort = True
+                        self._goto_kick_active.pop(hw_name, None)
+                        self._goto_kick_ids.pop(hw_name, None)
+                        self.get_logger().info(
+                            f"🦵 [{hw_name}] kick ABORT sent "
+                            f"(GoToBallAndKickCmd.abort=true)")
+                    else:
+                        cmd_msg.target_x = K1_KICK_GOAL_X
+                        cmd_msg.target_y = K1_KICK_GOAL_Y
+                        cmd_msg.power = 0.0        # node auto-computes
+                        cmd_msg.is_goalshot = True
+                        cmd_msg.abort = False
+                        self._goto_kick_active[hw_name] = True
+                        self._goto_kick_ids[hw_name] = g_id
+                        self.get_logger().info(
+                            f"🦵 [{hw_name}] kick CMD sent "
+                            f"(target=({K1_KICK_GOAL_X},{K1_KICK_GOAL_Y}), "
+                            f"goalshot, power=auto)")
+                    pub.publish(cmd_msg)
                     continue
 
                 if action == 'timedmove':
