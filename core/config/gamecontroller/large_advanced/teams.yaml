@@ -1,0 +1,30 @@
+# Competition teams for "large_advanced" — participating team numbers.
+# Snapshot of upstream config/large_advanced/teams.yaml (2026-11-04,
+# https://github.com/RoboCup-HumanoidSoccerLeague/GameController) with
+# our entry appended: "- 50  # R-ZWEI KICKERS".
+# Copy to <config-dir>/large_advanced/teams.yaml after --install-config.
+- 0  # Invisibles
+- 43  # Bahia Robotics Team
+- 46  # BigHeroX
+- 29  # CAU Mountain&Sea
+- 47  # DUT Future
+- 25  # HERoEHS
+- 14  # HTWK Robots
+- 39  # I-Teen
+- 53  # KURA
+- 54  # PCMS-HRG
+- 16  # Pumas
+- 21  # RO:BIT
+- 55  # Robo-Erectus
+- 56  # RobôCIn
+- 19  # SPQR Team
+- 59  # Talos Humanoid Robots
+- 60  # Tech United
+- 31  # Tsinghua Hephaestus
+- 32  # UT AustinVilla
+- 61  # WarthogRobotics
+- 62  # Water
+- 63  # WHU United
+- 64  # ZETIN
+- 70  # B-Team
+- 50  # R-ZWEI KICKERS (us — added)

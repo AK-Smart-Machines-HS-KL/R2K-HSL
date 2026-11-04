@@ -8,6 +8,7 @@ Setup for one K1 fleet on a single WiFi network with fixed bot IPs
 ```
 core/config/field_profiles/
   lab.env                 # our lab network (committed)
+  lab_hsl.env             # HSL team-subnet lab profile: 192.168.50.0/24, team 50 (see hsl_gamecontroller.md)
   venue_draft.env         # mystery TEMPLATE for competition sites (committed)
   venue_<city><year>.env  # real venue file — GITIGNORED (carries the wifi password)
 utils/wifi/
@@ -101,5 +102,6 @@ Never commit a real venue file — git only tracks `lab.env` and `venue_draft.en
 ## Out of scope here (later sessions)
 
 Laptop `launch_r2k.sh` hotspot removal · team UDP-broadcast channel + ROS 2
-bridging · GameController · micro-ROS agent relocation · `ROS_LOCALHOST_ONLY=1`
-(arrives with cross-robot ROS work).
+bridging · GameController game-state integration into ROS 2 (network setup
+for the standalone GC is DONE — see `hsl_gamecontroller.md`) · micro-ROS
+agent relocation · `ROS_LOCALHOST_ONLY=1` (arrives with cross-robot ROS work).
