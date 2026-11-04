@@ -16,6 +16,11 @@ utils/wifi/
   wifi_check.sh           # K1: validate rules + connectivity before a match
 ```
 
+On each K1, provisioning installs everything under
+`/home/booster/Workspace/r2k_wifi/` (persistent across reboots, mirrors
+the `ros2_relay` deploy convention): `set_field_wifi.sh`, `wifi_check.sh`,
+and the active `<profile>.env` (chmod 600 — it carries `FIELD_PASS`).
+
 ## Profile fields
 
 | Field | Meaning |
@@ -35,14 +40,28 @@ profile has a non-empty `FIELD_DEBUG_IP`.
 
 ```bash
 # First flash of ONE bot (bot reachable at its current IP, e.g. maker4 DHCP):
-utils/wifi/setup_K1_Network.sh --bot 2 10.42.0.102
+utils/wifi/setup_K1_Network.sh --bot 2 10.42.0.102 --exclusive
 
 # Reconfigure ALL bots to a new venue (targets = profile statics):
-utils/wifi/setup_K1_Network.sh --profile venue_lima26 --all
+utils/wifi/setup_K1_Network.sh --profile venue_lima26 --all --exclusive
 
-# Lock the K1 to ONLY this network (no drift to old APs):
-utils/wifi/setup_K1_Network.sh --profile lab --bot 3 192.168.4.103 --exclusive
+# Install only, no activation, no reachability wait:
+utils/wifi/setup_K1_Network.sh --profile lab --bot 3 192.168.0.103 --skip-up
 ```
+
+Activation is ASYNC by default: the remote installer schedules
+`nmcli con up field` via `nohup` with a 2s grace delay, so the SSH session
+closes cleanly BEFORE the K1's wifi link flaps (the K1 cannot be
+rebooted over SSH — manufacturer hardware limitation — so activation
+must happen in place). Afterwards the laptop pings the bot's new static
+IP for up to 60s (5s flap grace + 55s ping window) and reports
+reachable / not reachable. Activation output lands in
+`/tmp/r2k_activate.log` on the K1.
+
+`--exclusive` is strongly recommended: without it, a failed `field`
+activation can leave a competitor profile (autoconnect=yes, e.g. one
+named after the SSID) holding the same IP, and the reachability wait
+reports a false positive. The script warns when run without it.
 
 Sudo password on the K1: env `BOT_SUDO_PASS` (default `123456`).
 The active profile name is stored in `core/config/field_profiles/.current_profile`.
@@ -50,9 +69,12 @@ The active profile name is stored in `core/config/field_profiles/.current_profil
 ## Validate
 
 ```bash
-ssh booster@192.168.4.102   # password 123456
-sudo bash <path-to>/wifi_check.sh <path-to>/field_profiles/lab.env --bot 2 --ping-peers
+ssh booster@192.168.0.102   # password 123456
+sudo bash /home/booster/Workspace/r2k_wifi/wifi_check.sh \
+    /home/booster/Workspace/r2k_wifi/lab.env --bot 2 --ping-peers
 ```
+
+(`wifi_check.sh` is already on the K1 — pushed by `setup_K1_Network.sh`.)
 
 Checks: active profile + SSID, managed mode (no ad-hoc, §3.9.3), static IP
 matches the assignment, no default route, powersave off, permanent MAC, no
@@ -63,8 +85,8 @@ rule gate.
 
 1. `cp core/config/field_profiles/venue_draft.env core/config/field_profiles/venue_<city><year>.env`
 2. Fill every `_FILL_` from the organizer announcement (SSID, encryption, IP range, bot octets).
-3. `setup_K1_Network.sh --profile venue_<city><year> --all`
-4. `wifi_check.sh` on each bot, `--ping-peers`.
+3. `setup_K1_Network.sh --profile venue_<city><year> --all --exclusive`
+4. `wifi_check.sh` on each bot (`/home/booster/Workspace/r2k_wifi/`), `--ping-peers`.
 
 Never commit a real venue file — git only tracks `lab.env` and `venue_draft.env`.
 

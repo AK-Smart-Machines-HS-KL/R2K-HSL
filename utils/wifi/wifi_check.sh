@@ -58,7 +58,7 @@ fi
 # ---------------------------------------------------------------------
 if ! command -v nmcli >/dev/null 2>&1; then echo "  FAIL  nmcli not found"; exit 1; fi
 
-ACT=$(nmcli -t -f NAME,DEVICE connection show --active | grep ':wifi' | head -1 || true)
+ACT=$(nmcli -t -f NAME,TYPE,DEVICE connection show --active | grep ':802-11-wireless:' | head -1 || true)
 ACT_NAME="${ACT%%:*}"
 ACT_IFC="${ACT##*:}"
 if [ "$ACT_NAME" = "field" ] && [ -n "$ACT_IFC" ]; then

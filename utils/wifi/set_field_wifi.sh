@@ -10,30 +10,47 @@
 #
 # Usage (on the K1):
 #   sudo bash set_field_wifi.sh <profile.env> --bot <N> [--exclusive]
+#                          [--async-up | --skip-up]
 #
 #   <profile.env>   one of core/config/field_profiles/*.env
 #   --bot N         which bot (selects FIELD_IP_N for the static IP)
 #   --exclusive     set connection.autoconnect=no on ALL other wifi
 #                   profiles -> the K1 joins ONLY this network
+#   --async-up      schedule the activation (nohup + grace delay) so an
+#                   SSH session riding the current wifi link closes
+#                   cleanly BEFORE the link flaps (remote default)
+#   --skip-up       install the profile but do not activate it
 # =====================================================================
 set -u
 
-usage() { sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 1; }
+# Named constants (tuning without code archaeology)
+ASYNC_GRACE_S=2        # async activation: delay before 'nmcli con up' so the SSH channel closes first
+CON_UP_TIMEOUT_S=30    # nmcli activation timeout (sync-mode backstop)
+
+usage() { sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'; exit 1; }
 
 PROFILE_PATH=""
 BOT=""
 EXCLUSIVE=false
+ASYNC_UP=false
+SKIP_UP=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --bot)        BOT="$2"; shift 2 ;;
         --exclusive)  EXCLUSIVE=true; shift ;;
+        --async-up)   ASYNC_UP=true; shift ;;
+        --skip-up)    SKIP_UP=true; shift ;;
         -h|--help)    usage ;;
         *) if [ -z "$PROFILE_PATH" ]; then PROFILE_PATH="$1"; shift; else echo "Unknown arg: $1"; usage; fi ;;
     esac
 done
 
 [ -n "$PROFILE_PATH" ] && [ -n "$BOT" ] || { echo "ERROR: need <profile.env> and --bot N"; usage; }
+if [ "$ASYNC_UP" = true ] && [ "$SKIP_UP" = true ]; then
+    echo "ERROR: --async-up and --skip-up are mutually exclusive."
+    exit 1
+fi
 
 # ---------------------------------------------------------------------
 # 0. Load profile
@@ -109,6 +126,10 @@ echo "Bot ${BOT} -> static IP: ${BOT_IP}/${FIELD_SUBNET}"
 echo "-> Removing stale 'field' profile (if any)..."
 nmcli con delete field >/dev/null 2>&1 || true
 
+# Security args go into 'con add' directly: secrets attached at creation
+# are stored system-owned (password-flags=0). A post-add 'con mod' can
+# leave them agent-owned (password-flags=1), which makes non-interactive
+# 'nmcli con up' fail with "Secrets were required, but not provided".
 CREATION_ARGS=(
     type wifi con-name field ifname "$IFC" ssid "$FIELD_SSID"
     802-11-wireless.powersave 2
@@ -117,21 +138,19 @@ CREATION_ARGS=(
     ipv4.method manual ipv4.addresses "${BOT_IP}/${FIELD_SUBNET}"
     ipv4.never-default yes
 )
+if [ "$FIELD_SECURITY" != "open" ]; then
+    CREATION_ARGS+=(
+        802-11-wireless-security.key-mgmt "$FIELD_SECURITY"
+        802-11-wireless-security.psk "$FIELD_PASS"
+    )
+else
+    CREATION_ARGS+=( 802-11-wireless-security.key-mgmt none )
+fi
 
-echo "-> Creating 'field' profile (SSID: $FIELD_SSID)..."
+echo "-> Creating 'field' profile (SSID: $FIELD_SSID, security: $FIELD_SECURITY)..."
 if ! nmcli con add "${CREATION_ARGS[@]}"; then
     echo "ERROR: nmcli con add failed."
     exit 1
-fi
-
-if [ "$FIELD_SECURITY" != "open" ]; then
-    echo "-> Setting wifi security ($FIELD_SECURITY)..."
-    nmcli con mod field 802-11-wireless-security.key-mgmt "$FIELD_SECURITY"
-    if [ -n "${FIELD_PASS}" ]; then
-        nmcli con mod field 802-11-wireless-security.psk "$FIELD_PASS"
-    fi
-else
-    nmcli con mod field 802-11-wireless-security.key-mgmt none
 fi
 
 if [ -n "${FIELD_GATEWAY:-}" ]; then
@@ -159,13 +178,27 @@ fi
 
 # ---------------------------------------------------------------------
 # 5. Bring it up + print end state
+#    --skip-up: install only. --async-up: schedule the activation with a
+#    grace delay so an SSH session riding the current wifi link closes
+#    cleanly BEFORE the link flaps. Default: synchronous activation.
 # ---------------------------------------------------------------------
-echo "-> Activating 'field' profile (may fail if SSID out of range — not fatal)..."
-if nmcli con up field; then
-    echo "   Connected."
+if [ "$SKIP_UP" = true ]; then
+    echo "-> Activation skipped (--skip-up). Profile is installed;"
+    echo "   the K1 will auto-connect when the network appears (autoconnect=yes)."
+elif [ "$ASYNC_UP" = true ]; then
+    echo "-> Scheduling 'field' activation (async — wifi link will flap in ~${ASYNC_GRACE_S}s)..."
+    nohup sh -c "sleep ${ASYNC_GRACE_S}; nmcli con up field --timeout ${CON_UP_TIMEOUT_S}" \
+        >/tmp/r2k_activate.log 2>&1 < /dev/null &
+    echo "   Activation scheduled; this SSH session can close cleanly now."
+    echo "   Activation log on the K1: /tmp/r2k_activate.log"
 else
-    echo "   WARN: could not activate now (SSID out of range?). Profile is installed;"
-    echo "         the K1 will auto-connect when the network appears."
+    echo "-> Activating 'field' profile (may fail if SSID out of range — not fatal)..."
+    if nmcli con up field --timeout "${CON_UP_TIMEOUT_S}"; then
+        echo "   Connected."
+    else
+        echo "   WARN: could not activate now (SSID out of range?). Profile is installed;"
+        echo "         the K1 will auto-connect when the network appears."
+    fi
 fi
 
 echo "--------------------------------------------------------------"
