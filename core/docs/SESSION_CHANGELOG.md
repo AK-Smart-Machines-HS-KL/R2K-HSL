@@ -3,6 +3,191 @@
 > For full history (2026-07-13 to 2026-08-02), see `SESSION_CHANGELOG_archive.md`.
 > Compressed on 2026-08-05. Key findings are in the power files and `LESSONS_LEARNED.md`.
 
+## 2026-11-04 — K1 wifi provisioning: async activation + reachability wait (SSH link-flap hang fixed)
+
+**Goal:** Fix the K1 wifi provisioning scripts after the first real
+provisioning runs: three live bugs (nmcli quoting, bash bad substitution,
+active-wifi detection), then the structural problem — `nmcli con up`
+killed the SSH session it ran over (the K1's wifi link flaps when the
+active connection switches), hanging `setup_K1_Network.sh`. The K1
+cannot be rebooted over SSH (manufacturer hardware limitation: only a
+hard power-off shuts it down cleanly), so activation had to happen in
+place.
+
+**Done:**
+- **Live-debugged provisioning bugs across four real runs** (user-driven
+  testing against a K1):
+  1. `nmcli con add` "invalid property" error — `ipv4.addresses` was
+     quoted as ONE array element; property name and value are now
+     separate words: `ipv4.method manual ipv4.addresses "${BOT_IP}/${FIELD_SUBNET}"`.
+  2. `setup_K1_Network.sh` "bad substitution" — `${FIELD_IP_${BOT}}` is
+     nested parameter expansion (unsupported in bash); replaced with the
+     indirect-expansion idiom (`IP_VAR="FIELD_IP_${BOT}"; ...${!IP_VAR}`)
+     already used elsewhere in the same file.
+  3. `wifi_check.sh` reported "active wifi: none" plus a cascade of
+     FAILs while the bot was clearly online — the detector selected
+     `-f NAME,DEVICE` (no TYPE field) and grep'd for `:wifi`, but
+     nmcli's wifi connection type is `802-11-wireless`; fixed to
+     `-f NAME,TYPE,DEVICE | grep ':802-11-wireless:'` (`wifi_check.sh:61`).
+  4. "Secrets were required, but not provided" on activation — a psk
+     attached via post-add `nmcli con mod` can end up agent-owned
+     (password-flags=1), which non-interactive activation cannot read;
+     security args are now folded into `nmcli con add` directly so the
+     secret is stored system-owned (headless-safe).
+- **Async activation + reachability wait (main redesign):**
+  `set_field_wifi.sh` gains `--async-up` — schedules `nmcli con up field`
+  via `nohup` with a 2s grace delay so the SSH channel closes cleanly
+  BEFORE the link flaps (activation log: `/tmp/r2k_activate.log`) — and
+  `--skip-up`; the default synchronous mode now carries `--timeout 30`
+  as a hang backstop. `setup_K1_Network.sh` passes `--async-up` by
+  default, then pings the bot's new static IP for up to 60s (5s flap
+  grace + 55s ping window, deadline-based) and reports reachable /
+  NOT REACHABLE in the summary. Warns when run without `--exclusive`
+  (a competitor wifi profile with autoconnect=yes can hold the same IP,
+  making the ping a false positive). Tuning constants at file top:
+  `ASYNC_GRACE_S`, `CON_UP_TIMEOUT_S` (set_field_wifi.sh) and
+  `POST_FLAP_GRACE_S`, `REACH_TIMEOUT_S` (setup_K1_Network.sh).
+- **SSH keepalive hardening:** every ssh/scp call in
+  `setup_K1_Network.sh` now runs with `ServerAliveInterval=2
+  ServerAliveCountMax=3 ConnectTimeout=10` — a dead link fails in ~6s
+  instead of hanging for the TCP timeout.
+- **Persistent remote folder:** provisioning installs to
+  `/home/booster/Workspace/r2k_wifi/` on the K1 (mirrors the
+  `deploy_relay.sh` ros2_relay convention) instead of flat
+  `/tmp/r2k_*` files: `set_field_wifi.sh`, `wifi_check.sh` (never pushed
+  before), and the profile under its real name, chmod 600 (carries
+  FIELD_PASS). Survives reboots, so validation is possible at any time.
+- **lab.env corrected for the real lab network:** FIELD_PREFIX
+  192.168.4 → 192.168.0 (user, mid-session); stale FIELD_BCAST
+  192.168.4.255 → 192.168.0.255 (this session, `lab.env:36`). Bot N
+  now resolves to 192.168.0.10N.
+- **Docs:** `core/docs/field_network.md` updated — K1-side folder
+  layout, async activation workflow, `--skip-up`/`--exclusive`
+  semantics, validation paths via the persistent folder.
+- **Verified without hardware:** `bash -n` on all three scripts;
+  `--help` output clean (usage sed ranges renumbered to match the new
+  headers); flag parsing tested (async/skip mutual exclusion, the
+  no-`--exclusive` warn fires only in async mode); profile expansion
+  (bot 4 → 192.168.0.104) and wait-window arithmetic checked.
+
+**Files touched:**
+- core/config/field_profiles/lab.env
+- core/docs/field_network.md
+- utils/wifi/set_field_wifi.sh
+- utils/wifi/setup_K1_Network.sh
+- utils/wifi/wifi_check.sh
+
+**Files deleted:**
+- (none)
+
+**Not yet done:**
+- Hardware re-test of the full async workflow: provision bot 4 → link
+  flaps by itself → [5/5] ping wait reports reachable → on-K1
+  `wifi_check.sh` all-PASS. The `wifi_check.sh` copy currently on bot 4
+  predates the detection fix until the next provisioning run pushes it.
+- On-K1 validation of the active-wifi detection fix against real
+  NetworkManager output.
+- The K1's duplicate NM profile literally named `R2k_Lab` (auto-created
+  by a GUI connect) should be deleted on each bot; `--exclusive` only
+  disables its autoconnect, `wifi_check.sh` will keep warning about it
+  until then.
+- Multi-bot deployment validation script — deferred by the user to a
+  separate session (the ping-only reachability wait is in place as the
+  building block).
+
+**Next:**
+- From the laptop: `./utils/wifi/setup_K1_Network.sh --bot 4 192.168.0.104
+  --exclusive`, confirm the reachability wait reports OK, then SSH in
+  and run `sudo bash /home/booster/Workspace/r2k_wifi/wifi_check.sh
+  /home/booster/Workspace/r2k_wifi/lab.env --bot 4 --ping-peers`.
+
+**Blockers:**
+- None (laptop is on the lab subnet; bot 4 reachable at 192.168.0.104).
+
+---
+<!-- Branch: feature/network_setup | Modified: 5 | New: 3 | Deleted: 0 -->
+<!-- Last commits:
+  1fb7a46 small corrections to actual lab network
+  0e03257 update gitignore
+  4fec34e quick test for wifi setup
+-->
+
+## 2026-11-04 — HSL GameController lab network setup (team 50)
+
+**Goal:** Network configuration to run the official RoboCup HSL
+GameController (`RoboCup-HumanoidSoccerLeague/GameController`) against
+the K1 fleet in the lab, mimicking the venue team subnet
+`192.168.50.0/24` (team 50 = R-ZWEI KICKERS). Scope: standalone GC on a
+team laptop — no ROS 2 integration.
+
+**Done:**
+- **GC researched from the official repo:** UDP channels (control
+  broadcast 3838 out at 2 Hz, status unicast 3939 in at 0.5–2 Hz, team
+  messages 10000+team = 10050 broadcast, monitor ports 3636/3838/3940),
+  single-interface binding (launcher "Network Interface" or persistent
+  `args` file), config-dir layout (`--install-config`, `--show-paths`,
+  global `teams.yaml` + per-competition `teams.yaml`/`params.yaml`),
+  launcher Broadcast/Multicast semantics (both OFF for real-game mode).
+- **Team-number discovery:** team 50 is ALREADY registered upstream as
+  "R-ZWEI KICKERS" in the global `teams.yaml`, but missing from ALL six
+  competition lists (verified via the GitHub API, 2026-11-04). The only
+  GC config edit needed: add `- 50  # R-ZWEI KICKERS` to the
+  competition's `teams.yaml`.
+- **New profile `lab_hsl.env`:** `FIELD_PREFIX=192.168.50`, player
+  number as last octet (`FIELD_IP_N=N`), `FIELD_BCAST=192.168.50.255`,
+  `FIELD_DEBUG_IP` deliberately EMPTY (user decision: each team PC sets
+  its own static address in its own NetworkManager — multiple PCs share
+  the profile; at a real match it must stay empty anyway, §3.9).
+- **New doc `core/docs/hsl_gamecontroller.md`:** HSL network model
+  (192.168.<team>.<robot>/24), ports table, mermaid channel diagram,
+  Phases 1–5 workflow (provision with `--skip-up`, AP subnet swap,
+  per-PC static IP, K1 hard power-cycle + `wifi_check.sh`, GC
+  install/config), ufw rules, verification checklist (tcpdump 3838, GC
+  return counters, 10050 team traffic), venue carry-over notes.
+- **New samples `core/config/gamecontroller/`:** `README.md` (config-dir
+  mechanism, what to edit, jersey-color note) +
+  `large_advanced/teams.yaml` (upstream snapshot 2026-11-04 with team
+  50 appended, ready to copy after `--install-config`).
+- **`field_network.md`:** `lab_hsl.env` listed in Files; out-of-scope
+  line updated (standalone-GC network setup DONE — see
+  `hsl_gamecontroller.md`; ROS 2 game-state integration still later).
+- **Verified:** profile sources cleanly (bot N → `192.168.50.N`,
+  BCAST correct, DEBUG_IP empty), YAML parses (25 team entries, 50
+  present), rule gates unaffected (`VENUE=lab` + empty DEBUG_IP).
+
+**Files touched:**
+- core/config/field_profiles/lab_hsl.env (new)
+- core/config/gamecontroller/README.md (new)
+- core/config/gamecontroller/large_advanced/teams.yaml (new)
+- core/docs/hsl_gamecontroller.md (new)
+- core/docs/field_network.md
+
+**Files deleted:**
+- (none)
+
+**Not yet done:**
+- Hardware execution of Phases 1–5 (provision `--skip-up`, AP swap to
+  `192.168.50.0/24`, K1 power-cycles, `wifi_check.sh`, GC run) — needs a
+  lab session with the bots and the router.
+- Which competition (small/middle/large × foundation/advanced) the team
+  actually plays in — `large_advanced` snapshot is the example; apply
+  the same one-line edit to the real competition's `teams.yaml`.
+- Vendor `game_controller_node` smoke test on the K1 (does it listen on
+  3838 and return on 3939?) — never exercised so far.
+- Jersey-color narrowing in the global `teams.yaml` once the actual
+  jerseys are fixed.
+
+**Next:**
+- Run Phases 1–5 in the lab; verify with the checklist in
+  `hsl_gamecontroller.md` (tcpdump on 3838 shows 2 Hz broadcasts, GC UI
+  shows robot status returns, 10050 shows team traffic).
+
+**Blockers:**
+- None.
+
+---
+<!-- Branch: feature/network_setup | Modified: 10 | New: 7 | Deleted: 0 -->
+
 ## 2026-09-12/14 — Match-slot fix → regression gate → branch/commit/push → overview v2
 
 **Goal:** Diagnose the immobile blue bots → ship + verify the fix → the full
