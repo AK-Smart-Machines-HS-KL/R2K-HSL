@@ -114,7 +114,7 @@ CREATION_ARGS=(
     802-11-wireless.powersave 2
     802-11-wireless.cloned-mac-address permanent
     802-11-wireless.mtu 0
-    ipv4.method manual "ipv4.addresses ${BOT_IP}/${FIELD_SUBNET}"
+    ipv4.method manual ipv4.addresses "${BOT_IP}/${FIELD_SUBNET}"
     ipv4.never-default yes
 )
 

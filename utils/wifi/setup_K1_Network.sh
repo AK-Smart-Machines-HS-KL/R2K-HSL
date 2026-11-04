@@ -166,7 +166,8 @@ for BOT in "${BOT_LIST[@]}"; do
     REMOTE_FLAGS="--bot ${BOT} ${EXCLUSIVE} ${SKIP_UP}"
     if ssh -S "$SSH_SOCKET" "${ROBOT_USER}@${BOT_ADDR}" \
         "printf '%s\n' '${BOT_SUDO_PASS}' | sudo -S bash /tmp/r2k_set_field_wifi.sh /tmp/r2k_field_profile.env ${REMOTE_FLAGS}"; then
-        REMOTE_IP="${FIELD_PREFIX}.${FIELD_IP_${BOT}}"
+        IP_VAR="FIELD_IP_${BOT}"
+        REMOTE_IP="${FIELD_PREFIX}.${!IP_VAR}"
         RESULT_LINES+=("bot $BOT: OK  -> wifi '$FIELD_SSID' static ${REMOTE_IP}/${FIELD_SUBNET}")
     else
         RESULT_LINES+=("bot $BOT ($BOT_ADDR): REMOTE SETUP FAILED")
