@@ -3,6 +3,108 @@
 > For full history (2026-07-13 to 2026-08-02), see `SESSION_CHANGELOG_archive.md`.
 > Compressed on 2026-08-05. Key findings are in the power files and `LESSONS_LEARNED.md`.
 
+## 2026-11-09 — ROS2K GameController receiver module (receive + presence)
+
+**Goal:** Implement the ROS2K-side module that talks the official HSL
+GameController protocol — receive the 2 Hz control broadcast and announce
+robot presence via return packets. This is the "out of scope / later" item
+from the 2026-11-04 GC network-setup session, now scoped down to receive +
+presence only: the team-message channel (UDP 10050) and feeding the decoded
+state into `referee_node.py` stay future work.
+
+**Done:**
+- **Protocol codec (pure stdlib):** `core/src/game_controller_node.py`
+  decodes `RoboCupGameControlData` (header `RGme`, struct version 20,
+  158-byte little-endian: 18-byte header + 2×70-byte `TeamInfo` with
+  `MAX_NUM_PLAYERS=20` `RobotInfo` of 3 bytes each) and serializes
+  `RoboCupGameControlReturnData` (header `RGrt`, version 4, 32 bytes).
+  Decoder validates magic/version/size and raises `GCDecodeError` on
+  mismatch (`game_controller_node.py:88`). Verified against the upstream
+  header `game_controller_msgs/headers/RoboCupGameControlData.h`.
+- **Receiver node:** binds `0.0.0.0:3838` (`SO_REUSEADDR`+`SO_BROADCAST`,
+  accepts unicast too → smoke-testable on loopback without hardware).
+  Presence announcer thread sends return packets at 2 Hz (rules band
+  0.5–2 Hz) to port 3939 on the GC address learned from the last
+  `recvfrom`; stops returning after `GC_STALE_TIMEOUT_S=5` of GC silence.
+  Minimal presence payload (`fallen=0`, `pose=(0,0,0)`, `ballAge=-1`);
+  real pose from `Worldstate.json` deferred.
+- **ROS 2 publishing (guarded):** publishes `gc_msgs/GCState` on
+  `/gc/game_state` (QoS `BEST_EFFORT`, `ROS_DOMAIN_ID=0`) for the later
+  referee integration. `rclpy`/`gc_msgs` are behind a `HAS_RCLPY` guard
+  (mirrors the bridge's `HAS_BOOSTER_MSGS` pattern) so the node also runs
+  headless (decode + return + console) before the K1 colcon build is done.
+  Logs deduplicated state transitions and this robot's own penalty changes.
+- **New msg package `gc_msgs`:** `core/src/ros2_ws/src/gc_msgs/` with
+  `GCState.msg` (packet_number, players_per_team, competition_type,
+  stopped, game_phase, state, set_play, first_half, kicking_team,
+  secs_remaining, secondary_time, team_number[2], score[2],
+  message_budget[2], penalty, secs_till_unpenalised). Builds clean:
+  `colcon build --packages-select gc_msgs` (humble).
+- **K1 deploy helper:** `utils/gc/deploy_to_k1.sh` pushes `gc_msgs` + the
+  node to a K1 over SSH, pre-flight-checks the K1 ROS 2 distro /
+  `rclpy` / `colcon`, remote-builds `gc_msgs`, launches the node via
+  `nohup` with `--team 50 --player N`, `--stop` to halt it. Follows the
+  `setup_K1_Network.sh` / `deploy_relay.sh` SSH provisioning convention.
+- **Tests (fast tier, 16, all green, no ROS/Gazebo):**
+  `core/src/tests/test_game_controller.py` — hand-crafted byte blobs
+  exercise the decoder (all fields, player penalties, message-budget
+  uint16, bad magic/version/size rejection, fixed 158-byte size), the
+  return-packet codec (header/version/round-trip/presence defaults), the
+  announcer (returns to the GC address, quiet when GC stale), own-entry
+  lookup, and an end-to-end headless receive→announce loop over loopback
+  UDP. Full fast tier: 330 passed, 323 skipped, 1 pre-existing unrelated
+  failure (`test_chart_specs` ensemble run-count).
+- **Tier-1 loopback self-test:** `utils/gc/loopback_smoke.sh` starts the
+  node on loopback, injects crafted `RoboCupGameControlData` packets to
+  UDP 3838, captures `RGrt` presence returns on UDP 3939, and asserts the
+  four Tier-1 acceptance checks (PRESENCE @ 2 Hz, TRANSITION dedupe,
+  GARBAGE drop+survive, STALE silence after `GC_STALE_TIMEOUT_S`). Verified
+  green and stable across repeated runs (no port races via cleanup trap).
+  No ROS 2 / Gazebo / hardware required.
+- **Docs:** `hsl_gamecontroller.md` "Out of scope" replaced with a
+  "ROS2K GC receiver module" section (architecture, run/deploy commands,
+  test summary, remaining scope); `field_network.md` out-of-scope line
+  updated (receiver/presence DONE, referee feeding still later).
+
+**Files touched:**
+- core/docs/field_network.md
+- core/docs/hsl_gamecontroller.md
+
+**New files (untracked):**
+- core/src/game_controller_node.py
+- core/src/ros2_ws/src/gc_msgs/CMakeLists.txt
+- core/src/ros2_ws/src/gc_msgs/msg/GCState.msg
+- core/src/ros2_ws/src/gc_msgs/package.xml
+- core/src/tests/test_game_controller.py
+- utils/gc/deploy_to_k1.sh
+- utils/gc/loopback_smoke.sh
+
+**Files deleted:**
+- (none)
+
+**Not yet done:**
+- Hardware execution: deploy to a K1, run the real GC on the team laptop
+  (192.168.50.100), verify with the `hsl_gamecontroller.md` checklist
+  (tcpdump 3838, GC UI player status counters go green, node log shows
+  state transitions). Needs a lab session.
+- K1 ROS 2 environment verification (distro, rclpy, colcon presence) —
+  the deploy helper pre-flight aborts cleanly if any are missing; unknown
+  until first run.
+- Port-3838 ownership on the K1: the vendor `game_controller_node` may
+  already bind 3838 — must decide which owns the port per robot (stop the
+  vendor one before launching ours, or run ours as the sole GC consumer).
+
+**Next:**
+- Lab session: `utils/gc/deploy_to_k1.sh 192.168.50.N N` against one K1,
+  run the GC, confirm presence + state decode end-to-end.
+
+**Blockers:**
+- None (code-side); lab access + a K1 with a known ROS 2 environment
+  needed for the hardware verification.
+
+---
+<!-- Branch: feature/GCReceiver | Modified: 2 | New: 6 | Deleted: 0 -->
+
 ## 2026-11-04 — K1 wifi provisioning: async activation + reachability wait (SSH link-flap hang fixed)
 
 **Goal:** Fix the K1 wifi provisioning scripts after the first real

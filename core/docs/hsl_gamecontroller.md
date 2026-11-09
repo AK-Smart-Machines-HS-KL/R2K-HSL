@@ -192,9 +192,90 @@ carries over from this lab setup:
 - Team PCs get their venue addresses from the organizers' assignment —
   again set per PC, never in the shared profile.
 
-## Out of scope here
+## ROS2K GC receiver module
 
-Feeding GC game state into ROS 2 (a `game_controller` subscriber node
-publishing to `referee_node.py` / the bridge), the team
-UDP-broadcast channel bridging, and `ROS_LOCALHOST_ONLY=1` for
-cross-robot DDS — see `field_network.md`.
+`core/src/game_controller_node.py` is the ROS2K-side adapter that talks the
+HSL GC protocol. Scope of this module (session 2026-11-09): **receive the GC
+control broadcast and announce robot presence** — the team-message channel
+(UDP 10050) and feeding the decoded state into `referee_node.py` / the bridge
+remain future work.
+
+### What it does
+
+- **Receives** the 2 Hz control broadcast (`RoboCupGameControlData`, struct
+  version 20, 158-byte little-endian) on UDP `3838` (bound `0.0.0.0`,
+  `SO_REUSEADDR` + `SO_BROADCAST`; accepts unicast too, so it can be smoke-
+  tested on a laptop loopback without hardware).
+- **Announces presence** to the GC by sending `RoboCupGameControlReturnData`
+  (header `RGrt`, version 4) return packets at 2 Hz (rules band: 0.5–2 Hz)
+  via UDP unicast to port `3939` on the address the last control packet came
+  from. The payload is the minimal presence set: `fallen=0`, `pose=(0,0,0)`,
+  `ballAge=-1` (real pose/ball from `Worldstate.json` is a later
+  enhancement). The sender thread stops returning after
+  `GC_STALE_TIMEOUT_S` (5 s) with no GC packet, so a vanished GC does not get
+  spurious presence.
+- **Publishes** the decoded state as `gc_msgs/GCState` on `/gc/game_state`
+  (QoS `BEST_EFFORT`, `ROS_DOMAIN_ID=0`) for the later referee integration.
+  `rclpy` / `gc_msgs` are imported behind a guard (`HAS_RCLPY`, mirroring the
+  bridge's `HAS_BOOSTER_MSGS` pattern), so the node also runs **headless**
+  (decode + return packets + console logging) before the K1 colcon build is
+  done.
+- **Logs** state transitions (`INITIAL→READY→SET→PLAYING→…`), set-play /
+  game-phase changes, and this robot's own penalty changes (deduplicated).
+
+`GCState.msg` (`core/src/ros2_ws/src/gc_msgs/`) carries: `packet_number`,
+`players_per_team`, `competition_type`, `stopped`, `game_phase`, `state`,
+`set_play`, `first_half`, `kicking_team`, `secs_remaining`,
+`secondary_time`, `team_number[2]`, `score[2]`, `message_budget[2]`, and the
+receiving player's own `penalty` / `secs_till_unpenalised`.
+
+### Run
+
+One instance per robot, with that robot's 1-based player number:
+
+```bash
+# Laptop smoke (after building gc_msgs): the node also runs headless if
+# rclpy is unavailable — drop the source lines to just decode + return.
+source /opt/ros/humble/setup.bash
+source core/src/ros2_ws/install/setup.bash
+python3 core/src/game_controller_node.py --team 50 --player 1
+# (--port-in 3838 --port-out 3939 are the defaults; --help lists all flags.)
+```
+
+Deploy to a K1 with the helper (pushes `gc_msgs` + the node, remote colcon
+build, launches in the background, pre-flight-checks the K1 ROS 2 distro /
+rclpy / colcon):
+
+```bash
+utils/gc/deploy_to_k1.sh 192.168.50.4 4          # team 50, player 4
+utils/gc/deploy_to_k1.sh --stop 192.168.50.4     # stop the node on the K1
+```
+
+### Tests
+
+`core/src/tests/test_game_controller.py` (fast tier, 16 tests, no ROS/GC
+needed): hand-crafted `RoboCupGameControlData` byte blobs exercise the
+decoder (all fields, player penalties, message-budget uint16, bad
+magic/version/size rejection, fixed 158-byte size), the return-packet codec
+(header/version/round-trip/presence defaults), the presence announcer
+(returns to the GC address, goes quiet when the GC is stale), the own-entry
+lookup, and an end-to-end headless receive→announce loop over loopback UDP.
+
+`utils/gc/loopback_smoke.sh` — Tier-1 self-test that starts the node on
+loopback, injects crafted control packets to UDP 3838, and captures the
+`RGrt` presence returns on UDP 3939. Verifies the four acceptance checks:
+PRESENCE (emits RGrt @ 2 Hz after a packet), TRANSITION (state-change log
+deduped), GARBAGE (malformed packet dropped, node stays alive), STALE
+(announcer silent after `GC_STALE_TIMEOUT_S`). No ROS 2 / Gazebo / hardware
+required; the node runs headless if rclpy/gc_msgs are unavailable.
+
+    utils/gc/loopback_smoke.sh
+
+### Out of scope here (later sessions)
+
+- Team-message channel (UDP 10050) bridging.
+- Feeding `/gc/game_state` into `referee_node.py` / the bridge (mapping GC
+  states into the existing match-state machine).
+- Real pose/ball in the return payload (from `Worldstate.json`).
+- Replacing the vendor `game_controller_node` on the K1 — the two must not
+  both bind `3838`; decide which owns the port per robot.

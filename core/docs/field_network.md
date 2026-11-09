@@ -102,6 +102,8 @@ Never commit a real venue file — git only tracks `lab.env` and `venue_draft.en
 ## Out of scope here (later sessions)
 
 Laptop `launch_r2k.sh` hotspot removal · team UDP-broadcast channel + ROS 2
-bridging · GameController game-state integration into ROS 2 (network setup
-for the standalone GC is DONE — see `hsl_gamecontroller.md`) · micro-ROS
+bridging · GameController game-state integration into ROS 2 — receiver/presence
+module DONE (`core/src/game_controller_node.py` + `gc_msgs`, see
+`hsl_gamecontroller.md` §"ROS2K GC receiver module"); feeding the decoded
+state into `referee_node.py` / the bridge is still later · micro-ROS
 agent relocation · `ROS_LOCALHOST_ONLY=1` (arrives with cross-robot ROS work).
