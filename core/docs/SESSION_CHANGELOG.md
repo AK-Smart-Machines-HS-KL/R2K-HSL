@@ -3,6 +3,52 @@
 > For full history (2026-07-13 to 2026-08-02), see `SESSION_CHANGELOG_archive.md`.
 > Compressed on 2026-08-05. Key findings are in the power files and `LESSONS_LEARNED.md`.
 
+## 2026-11-10 — K1 firmware IP conflict: 192.168.0.101 is firmware-reserved (lab renumbering bot 1)
+
+**Goal:** Capture a hardware-diagnosed network constraint that bricks a
+K1 when its wifi connection is configured with `192.168.0.101`, and
+remove that address from all profiles/docs that assigned it to bot 1.
+
+**Done:**
+- **Firmware constraint (user-verified on real K1s):** the K1 reserves
+  `192.168.0.101` for internal use by its own firmware. Setting a
+  wifi/NM connection to that address prevents the K1 internal firmware
+  from starting (hard power-off is the only recovery path on a K1).
+  Isolation: a bot with the wifi static `192.168.0.104` runs fine — so
+  only `.101` is reserved, NOT the whole `192.168.0.0/24`.
+- **`lab` profile renumbered (bot 1 only):**
+  `core/config/field_profiles/lab.env` — `FIELD_IP_1` `.101 → .111`
+  with a HAZARD comment; bots 2–6 keep their `.102–.106` statics
+  (provisioned and verified working — no unnecessary re-provisioning).
+- **GC lab doc corrected:** `core/docs/hsl_gamecontroller.md` Phase 1 —
+  added a firmware-constraint warning block; the provisioning loop now
+  covers bots 2–6 at their real `.10N` temp addresses, with an explicit
+  bot-1 line using `.111`, instead of a `.10N` loop that handed `.101`
+  to bot 1.
+
+**Files touched:**
+- core/config/field_profiles/lab.env
+- core/docs/hsl_gamecontroller.md
+
+**Not yet done:**
+- The bot that was given `192.168.0.101` may still carry the offending
+  NM profile — verify after the next boot that the firmware starts and,
+  if the profile persists (SSH reachable), delete/renumber it to
+  `.111` and re-run `setup_K1_Network.sh --bot 1`.
+- GC hardware lab session (`deploy_to_k1.sh` + real GC) still pending —
+  unchanged from the 2026-11-09 entry.
+
+**Next:**
+- On the affected bot: power-cycle, confirm internal firmware comes up;
+  if a NM profile with `192.168.0.101` auto-connects, fix it to
+  `.111`/lab_hsl before any further GC testing.
+
+**Blockers:**
+- None code-side; affected bot's state unknown until next power-on.
+
+---
+<!-- Branch: feature/GCReceiver | Modified: 2 | New: 0 | Deleted: 0 -->
+
 ## 2026-11-09 — ROS2K GameController receiver module (receive + presence)
 
 **Goal:** Implement the ROS2K-side module that talks the official HSL

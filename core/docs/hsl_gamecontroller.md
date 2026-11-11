@@ -65,19 +65,33 @@ activation path.
 
 ### Phase 1 — install the HSL profile on every bot, NO activation
 
-AP still on `192.168.0.x`, bots reachable at `192.168.0.10N`:
+> **K1 firmware constraint (verified 2026-11-10):** the K1 reserves
+> `192.168.0.101` for internal use by its own firmware. Configuring a
+> wifi/NM connection with that address prevents the internal firmware
+> from starting (hard power-off is the only recovery). Other
+> `192.168.0.x` addresses are safe (a bot at `192.168.0.104` runs
+> fine). Consequences applied: bot 1's temp address is `.111`, and
+> bot 1's static in the `lab` profile moved `.101 → .111`
+> (`core/config/field_profiles/lab.env`). Never assign `.101` to any
+> K1-facing connection.
+
+AP still on `192.168.0.x`, bots reachable at their current statics:
+bots 2–6 at `192.168.0.102–106`, bot 1 at `192.168.0.111` (NOT `.101`
+— see the firmware constraint below).
 
 ```bash
-for N in 1 2 3 4 5 6; do
+for N in 2 3 4 5 6; do
   ./utils/wifi/setup_K1_Network.sh --bot $N 192.168.0.10$N --exclusive --skip-up --profile lab_hsl
 done
+# bot 1: .101 is taken by the K1's internal firmware — use .111
+./utils/wifi/setup_K1_Network.sh --bot 1 192.168.0.111 --exclusive --skip-up --profile lab_hsl
 ```
 
 `--skip-up` replaces each bot's `field` profile with the
 `192.168.50.<N>` static but does not activate it — the bots stay
-reachable at `192.168.0.10N` (the SSID-named profile holds the link;
-`--exclusive` sets it `autoconnect=no` so it will not compete after the
-swap). Spot-check one bot:
+reachable at their temp addresses (the SSID-named profile holds the
+link; `--exclusive` sets it `autoconnect=no` so it will not compete
+after the swap). Spot-check one bot:
 
 ```bash
 ssh booster@192.168.0.104 'nmcli -g ipv4.addresses con show field'
