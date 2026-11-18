@@ -39,6 +39,14 @@ core/src/ai_tactics/active_scenario.json
 core/src/ai_tactics/active_relay.json
 core/src/strategy/strat_*.txt
 
+# K1 field wifi profiles: only 'lab' + 'venue_draft' TEMPLATE are committed.
+# Real venue files (venue_<city><year>.env) carry the site wifi password
+# and stay local. .current_profile is a runtime pointer.
+core/config/field_profiles/*
+!core/config/field_profiles/lab.env
+!core/config/field_profiles/venue_draft.env
+core/config/field_profiles/.current_profile
+
 # Phase 1 instrumentation logs
 core/src/logs/
 
